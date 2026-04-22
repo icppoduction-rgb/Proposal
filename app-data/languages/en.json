@@ -1,0 +1,527 @@
+{
+  "app": {
+    "loading": "Initializing workspace"
+  },
+  "common": {
+    "na": "n/a",
+    "email": "Email",
+    "password": "Password",
+    "logout": "Logout",
+    "role": {
+      "admin": "Administrator",
+      "analyst": "Analyst"
+    },
+    "artifactStatus": {
+      "candidate": "Candidate",
+      "promoted": "In production",
+      "deprecated": "Deprecated"
+    },
+    "jobStatus": {
+      "pending": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "sourceType": {
+      "host": "Host",
+      "network": "Network"
+    },
+    "validationStatus": {
+      "pending": "Pending validation",
+      "validated": "Validated",
+      "failed": "Validation failed"
+    },
+    "activeState": {
+      "active": "Active",
+      "inactive": "Inactive"
+    }
+  },
+  "nav": {
+    "overview": "Overview",
+    "dataUpload": "Data upload",
+    "dataManagement": "Data management",
+    "autoTraining": "Auto training",
+    "training": "Training",
+    "models": "Models",
+    "inference": "Inference",
+    "explanations": "Explanations",
+    "logs": "Logs",
+    "users": "Users"
+  },
+  "layout": {
+    "headers": {
+      "overview": {
+        "title": "Behaviour-Driven Exfiltration Detection",
+        "subtitle": "Control data flows, training, model publishing, and analytic explanations from a single workspace."
+      },
+      "dataUpload": {
+        "title": "Data Upload",
+        "subtitle": "Load raw files from local folders, track transfer progress, and edit contents before dataset registration."
+      },
+      "dataManagement": {
+        "title": "Data Management",
+        "subtitle": "Bind already uploaded raw files to managed dataset records, select feature families, and keep the registry consistent."
+      },
+      "autoTraining": {
+        "title": "Automatic preparation and training",
+        "subtitle": "Upload archives, automatically prepare a dataset, and run the full model training flow without manual data assembly."
+      },
+      "training": {
+        "title": "Sequential Model Training",
+        "subtitle": "Link normalized datasets with feature schemas, review sequence settings, and launch hybrid training inside a single operating contour."
+      },
+      "models": {
+        "title": "Model Artifact Publishing",
+        "subtitle": "Review artifacts, compare status and metrics, and promote the required model into an operational state."
+      },
+      "inference": {
+        "title": "Published Model Evaluation",
+        "subtitle": "Submit compact feature bundles, track jobs, and review results in one interface."
+      },
+      "explanations": {
+        "title": "SHAP Explanation Generation",
+        "subtitle": "Link published models with detection results and receive ranked feature contributions."
+      },
+      "logs": {
+        "title": "Structured Application Logs",
+        "subtitle": "Inspect JSONL logs, filter operational events, and review failures without opening raw files."
+      },
+      "users": {
+        "title": "Platform Accounts",
+        "subtitle": "Create and review local administrator and analyst accounts."
+      }
+    }
+  },
+  "login": {
+    "error": "Unable to sign in",
+    "submit": "Enter workspace",
+    "language": {
+      "en": "EN",
+      "ru": "RU"
+    }
+  },
+  "dashboard": {
+    "state": {
+      "title": "Operational status",
+      "subtitle": "Key platform entities and the current state of active processes in a single view."
+    },
+    "overview": {
+      "title": "Operational overview",
+      "subtitle": "Current control-panel inventory"
+    },
+    "trainingFeed": {
+      "title": "Training feed",
+      "subtitle": "Track candidate models before promotion",
+      "empty": "No training runs yet."
+    },
+    "metricLabels": {
+      "datasets": "Datasets",
+      "training": "Training",
+      "models": "Models",
+      "inference": "Inference",
+      "explanations": "Explanations"
+    },
+    "runTitle": "Run {id}",
+    "datasetSchema": "Dataset {datasetId} | Schema {schemaId}"
+  },
+  "datasets": {
+    "upload": {
+      "title": "Upload data",
+      "subtitle": "Load raw files from a local directory into the platform workspace.",
+      "folderLabel": "Dataset folder",
+      "folderPlaceholder": "Choose a local folder with datasets",
+      "selectFolder": "Choose folder",
+      "submit": "Upload datasets",
+      "selectionSummary": "{root} | {count} files | {size}",
+      "progress": "Uploaded {uploaded} of {total} ({percent}%)",
+      "currentFile": "Current file: {file}",
+      "emptyFiles": "The selected folder does not contain supported raw files.",
+      "unsupportedSkipped": "Skipped unsupported files: {count}",
+      "success": "Datasets uploaded: {count}",
+      "folderRequired": "Select a folder before upload",
+      "directoryPickerUnsupported": "Directory picker is not supported in this browser.",
+      "errors": {
+        "sessionFileMissing": "Upload session is missing file metadata: {file}"
+      }
+    },
+    "rawFiles": {
+      "title": "Uploaded data",
+      "subtitle": "Review uploaded raw files, edit them when needed, and keep them consistent with dataset registrations.",
+      "loading": "Loading uploaded files...",
+      "empty": "No uploaded files yet.",
+      "columns": {
+        "id": "ID",
+        "name": "Name",
+        "size": "Size",
+        "actions": "Actions"
+      },
+      "actions": {
+        "edit": "Edit",
+        "delete": "Delete",
+        "deleteAll": "Delete all"
+      },
+      "messages": {
+        "deleted": "File deleted: {name}",
+        "deletedAll": "All raw files deleted"
+      },
+      "deleteDialog": {
+        "title": "Delete file",
+        "description": "Delete file {name}? This action removes the database record and the file from storage.",
+        "cancel": "Cancel",
+        "confirm": "Delete"
+      },
+      "deleteAllDialog": {
+        "title": "Delete all files",
+        "description": "Delete all raw files and clear /app/app-data/raw?"
+      }
+    },
+    "register": {
+      "title": "Dataset registration",
+      "subtitle": "Register a dataset by linking it to an already uploaded raw file."
+    },
+    "list": {
+      "title": "Datasets",
+      "subtitle": "Registered datasets linked to uploaded files.",
+      "loading": "Loading...",
+      "empty": "No registered datasets yet.",
+      "columns": {
+        "id": "ID",
+        "name": "Name",
+        "filePath": "File path",
+        "createdAt": "Created at",
+        "actions": "Actions"
+      },
+      "actions": {
+        "delete": "Delete",
+        "deleteAll": "Clear all"
+      },
+      "messages": {
+        "deleted": "Dataset deleted: {name}",
+        "deletedAll": "All dataset records deleted"
+      },
+      "deleteDialog": {
+        "title": "Delete dataset",
+        "description": "Delete dataset {name}? Only the registry record will be removed.",
+        "cancel": "Cancel",
+        "confirm": "Delete"
+      },
+      "deleteAllDialog": {
+        "title": "Clear all datasets",
+        "description": "Delete all dataset records? This action requires confirmation."
+      }
+    },
+    "messages": {
+      "registered": "Dataset registered",
+      "validationQueued": "Validation job queued: {id}"
+    },
+    "form": {
+      "nameLabel": "Name",
+      "sourceTypeLabel": "Source type",
+      "fileNameLabel": "Uploaded file",
+      "fileSelectPlaceholder": "Select a previously uploaded file",
+      "requiredColumnsLabel": "Required columns",
+      "featureFamiliesLabel": "Feature families",
+      "submit": "Register dataset",
+      "description": "Contract-based registration without an uploaded file",
+      "inspectSummary": "Format: {format} | profile: {profile} | schemas: {schemas}",
+      "targetColumns": "Target columns: {columns}",
+      "noFiles": "Upload files in the data loading module before registering a dataset.",
+      "featureSetEmpty": "No feature families are available for the selected file yet.",
+      "featureSetHint": "Select one or more feature families.",
+      "validation": {
+        "required": "This field is required"
+      }
+    },
+    "actions": {
+      "validate": "Validate and normalize"
+    },
+    "editor": {
+      "title": "Raw data editor",
+      "readOnly": "This file is preview-only and cannot be saved back.",
+      "loading": "Loading editor data...",
+      "pagination": "Page {page} of {total} | Rows {rows}",
+      "sheetLabel": "Sheet",
+      "deleteRows": "Delete rows ({count})",
+      "deleteColumn": "Delete column",
+      "empty": "No rows available for the current page.",
+      "previous": "Previous",
+      "next": "Next",
+      "cancel": "Cancel",
+      "save": "Save",
+      "messages": {
+        "saved": "Saved changes for {name}"
+      }
+    }
+  },
+  "autoTraining": {
+    "upload": {
+      "title": "Archive upload",
+      "subtitle": "Upload archives from a local folder. Only archive formats are accepted; all other files are ignored.",
+      "folderLabel": "Archive folder",
+      "folderPlaceholder": "Choose a local folder with archives for automatic training",
+      "selectFolder": "Choose folder",
+      "submit": "Upload archives",
+      "uploading": "Uploading...",
+      "selectionSummary": "{root} | {count} files | {size}",
+      "progress": "Uploaded {uploaded} of {total} ({percent}%)",
+      "currentFile": "Current archive: {file}",
+      "emptyFiles": "The selected folder does not contain supported archives.",
+      "unsupportedSkipped": "Skipped unsupported files: {count}",
+      "success": "Archives uploaded: {count}",
+      "folderRequired": "Select a folder with archives before upload",
+      "directoryPickerUnsupported": "Directory selection is not supported in this browser.",
+      "errors": {
+        "sessionFileMissing": "Upload session is missing archive metadata: {file}"
+      }
+    },
+    "archives": {
+      "title": "Uploaded archives",
+      "subtitle": "Manage the archives that will be used for automatic dataset preparation.",
+      "loading": "Loading uploaded archives...",
+      "empty": "No uploaded archives yet.",
+      "columns": {
+        "id": "ID",
+        "name": "Name",
+        "size": "Size",
+        "createdAt": "Uploaded at",
+        "actions": "Actions"
+      },
+      "actions": {
+        "delete": "Delete",
+        "deleteAll": "Delete all"
+      },
+      "messages": {
+        "deleted": "Archive deleted: {name}",
+        "deletedAll": "All archives deleted"
+      },
+      "deleteDialog": {
+        "title": "Delete archive",
+        "description": "Delete archive {name}? The database record and the stored file will be removed.",
+        "cancel": "Cancel",
+        "confirm": "Delete"
+      },
+      "deleteAllDialog": {
+        "title": "Delete all archives",
+        "description": "Delete all archives from the automatic training module?"
+      }
+    },
+    "jobs": {
+      "title": "Automatic training runs",
+      "subtitle": "Track archive extraction, normalization, and model training in one list.",
+      "loading": "Loading automatic training runs...",
+      "empty": "No automatic training runs yet.",
+      "jobTitle": "Auto training {id}",
+      "jobMeta": "Source: {sourceType} | Archives: {archives}",
+      "currentStep": "Current step: {step}",
+      "actions": {
+        "start": "Start training",
+        "starting": "Starting..."
+      },
+      "messages": {
+        "started": "Automatic training started: {id}"
+      },
+      "fields": {
+        "createdAt": "Created at",
+        "datasetId": "Dataset ID",
+        "trainingRuns": "Training run ID"
+      },
+      "steps": {
+        "queued": "Queued",
+        "extracting_archives": "Extracting archives",
+        "normalizing_archives": "Normalizing and preparing the dataset",
+        "building_feature_schema": "Selecting a feature schema",
+        "training_models": "Training models",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    }
+  },
+  "training": {
+    "newRun": {
+      "title": "New training run",
+      "subtitle": "Hybrid training of sequential models with late fusion"
+    },
+    "history": {
+      "title": "Training history",
+      "subtitle": "Candidate models remain separated until promotion"
+    },
+    "messages": {
+      "queued": "Training queued: {id}",
+      "datasetRequired": "Select a dataset before starting training.",
+      "featureSchemaRequired": "Select a feature schema before starting training.",
+      "datasetUnavailable": "The selected dataset is no longer available.",
+      "datasetValidationRequired": "Dataset must be validated before training."
+    },
+    "form": {
+      "datasetLabel": "Dataset",
+      "featureSchemaLabel": "Feature schema",
+      "sequenceLengthLabel": "Sequence length",
+      "sequenceStrideLabel": "Sequence stride",
+      "submit": "Queue training"
+    },
+    "runTitle": "Run {id}",
+    "datasetSchema": "Dataset {datasetId} | Schema {schemaId}"
+  },
+  "models": {
+    "title": "Publishing control",
+    "subtitle": "Candidate and production-ready artifacts",
+    "messages": {
+      "promoted": "Model {modelName} promoted"
+    },
+    "actions": {
+      "promote": "Promote"
+    }
+  },
+  "inference": {
+    "request": {
+      "title": "Run inference",
+      "subtitle": "Only published models are available for inference"
+    },
+    "results": {
+      "title": "Inference results",
+      "subtitle": "Results appear automatically after the job completes",
+      "empty": "No inference results yet.",
+      "label": "{entityId} | label {label}",
+      "score": "Score {score}"
+    },
+    "messages": {
+      "queued": "Inference job queued: {id}"
+    },
+    "form": {
+      "modelLabel": "Published model",
+      "payloadLabel": "Feature payload",
+      "submit": "Queue job"
+    }
+  },
+  "explanations": {
+    "request": {
+      "title": "Request SHAP explanation",
+      "subtitle": "Component-level explanation of a model decision for an individual event"
+    },
+    "details": {
+      "title": "Explanation details",
+      "subtitle": "Primary positive and negative SHAP contributions",
+      "positiveTitle": "Positive contribution",
+      "negativeTitle": "Negative contribution",
+      "empty": "Explanation result is not available yet."
+    },
+    "messages": {
+      "queued": "Explanation job queued: {id}"
+    },
+    "form": {
+      "modelArtifactLabel": "Model artifact",
+      "detectionResultLabel": "Detection result",
+      "scoreOption": "{entityId} | score {score}",
+      "submit": "Generate explanation"
+    }
+  },
+  "logs": {
+    "filters": {
+      "title": "Log filters",
+      "subtitle": "Filter records by service, time window, level, function, message, and full-text search.",
+      "apply": "Apply filters",
+      "reset": "Reset",
+      "allServices": "All services",
+      "allLevels": "All levels"
+    },
+    "list": {
+      "title": "Log stream",
+      "subtitle": "Visible {visible} records | invalid rows {invalid}",
+      "loading": "Loading logs...",
+      "loadingMore": "Loading more...",
+      "loadMore": "Load more",
+      "visibleSummary": "Visible records: {count}",
+      "endOfStream": "End of log stream reached.",
+      "details": "Details",
+      "empty": "No log records matched the current filters.",
+      "invalid": "Invalid JSON"
+    },
+    "details": {
+      "title": "Log entry details"
+    },
+    "fields": {
+      "timestamp": "Timestamp",
+      "service": "Service",
+      "level": "Level",
+      "function": "Function",
+      "message": "Message",
+      "request": "Request context",
+      "context": "Additional context",
+      "error": "Error",
+      "rawLine": "Raw line",
+      "search": "Search",
+      "dateFrom": "Date from",
+      "dateTo": "Date to",
+      "timeFrom": "Time from",
+      "timeTo": "Time to",
+      "sort": "Sort order"
+    },
+    "sort": {
+      "asc": "Oldest first",
+      "desc": "Newest first"
+    },
+    "pagination": {
+      "summary": "Cursor pagination is active"
+    }
+  },
+  "users": {
+    "form": {
+      "title": "New user",
+      "subtitle": "Local access management via JWT and RBAC",
+      "editTitle": "Edit user",
+      "editSubtitle": "Update account attributes, role, password, and active status",
+      "fullNameLabel": "Full name",
+      "roleLabel": "Role",
+      "isActiveLabel": "Active user",
+      "passwordHint": "Minimum password length: {count} characters",
+      "submit": "Create user",
+      "update": "Update user",
+      "cancelEdit": "Cancel"
+    },
+    "list": {
+      "title": "Current users",
+      "subtitle": "Administrator and analyst accounts stored in PostgreSQL",
+      "loading": "Loading users...",
+      "empty": "No users found.",
+      "columns": {
+        "name": "Name",
+        "role": "Role",
+        "sessionStatus": "Session status",
+        "actions": "Actions"
+      }
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "validation": {
+      "emailRequired": "Email is required",
+      "passwordRequired": "Password is required",
+      "passwordMinLength": "Password must contain at least {count} characters"
+    },
+    "deleteDialog": {
+      "title": "Delete user",
+      "description": "Delete user {email}? This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "messages": {
+      "created": "User {email} created",
+      "updated": "User {email} updated",
+      "deleted": "User {email} deleted",
+      "accessDenied": "This page is available to administrators only."
+    }
+  },
+  "api": {
+    "errors": {
+      "internalServerError": "Internal server error",
+      "unauthorized": "Authorization is required",
+      "forbidden": "Access denied",
+      "notFound": "Resource not found",
+      "badRequest": "Invalid request",
+      "request": "Request failed",
+      "requestWithStatus": "Request failed: {status}"
+    }
+  }
+}

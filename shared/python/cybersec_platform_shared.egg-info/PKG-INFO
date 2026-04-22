@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: cybersec-platform-shared
+Version: 0.1.0
+Summary: Shared contracts and ML logic for behaviour-driven data exfiltration detection platform.
+Requires-Python: >=3.11
+Requires-Dist: pydantic<3.0,>=2.7
+Requires-Dist: pydantic-settings<3.0,>=2.2
+Requires-Dist: email-validator<3.0,>=2.1
+Requires-Dist: sqlalchemy<3.0,>=2.0
+Requires-Dist: asyncpg<1.0,>=0.29
+Requires-Dist: psycopg[binary]<4.0,>=3.1
+Requires-Dist: alembic<2.0,>=1.13
+Requires-Dist: celery<6.0,>=5.4
+Requires-Dist: redis<6.0,>=5.0
+Requires-Dist: httpx<1.0,>=0.27
+Provides-Extra: parser
+Requires-Dist: pandas<3.0,>=2.2; extra == "parser"
+Requires-Dist: openpyxl<4.0,>=3.1; extra == "parser"
+Requires-Dist: pyarrow<18.0,>=16.1; extra == "parser"
+Requires-Dist: dpkt<2.0,>=1.9; extra == "parser"
+Provides-Extra: inference
+Requires-Dist: joblib<2.0,>=1.4; extra == "inference"
+Requires-Dist: numpy<3.0,>=1.26; extra == "inference"
+Requires-Dist: pandas<3.0,>=2.2; extra == "inference"
+Requires-Dist: scikit-learn<2.0,>=1.5; extra == "inference"
+Requires-Dist: torch<3.0,>=2.3; extra == "inference"
+Requires-Dist: xgboost<3.0,>=2.1; extra == "inference"
+Provides-Extra: training
+Requires-Dist: joblib<2.0,>=1.4; extra == "training"
+Requires-Dist: numpy<3.0,>=1.26; extra == "training"
+Requires-Dist: pandas<3.0,>=2.2; extra == "training"
+Requires-Dist: scikit-learn<2.0,>=1.5; extra == "training"
+Requires-Dist: shap<1.0,>=0.46; extra == "training"
+Requires-Dist: torch<3.0,>=2.3; extra == "training"
+Requires-Dist: xgboost<3.0,>=2.1; extra == "training"
