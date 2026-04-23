@@ -13,23 +13,23 @@ def _login(client):
     return response.json()["access_token"]
 
 
-def _create_training_run() -> tuple[str, str]:
+def _create_training_run(*, suffix: str = "") -> tuple[str, str]:
     engine = get_sync_engine()
     with Session(engine) as session:
         dataset = Dataset(
-            name="Dataset",
+            name=f"Dataset{suffix}",
             source_type="network",
             manifest={"required_columns": ["feature_a"], "feature_families": ["network_flow"]},
-            storage_path="test-data/raw/dataset.csv",
-            normalized_path="test-data/normalized/dataset.csv",
+            storage_path=f"test-data/raw/dataset{suffix}.csv",
+            normalized_path=f"test-data/normalized/dataset{suffix}.csv",
             validation_status=ValidationStatus.VALIDATED.value,
         )
         schema = FeatureSchema(
-            name="schema",
+            name=f"schema{suffix}",
             version="1.0.0",
             source_type="network",
             definition={
-                "name": "schema",
+                "name": f"schema{suffix}",
                 "version": "1.0.0",
                 "source_type": "network",
                 "required_columns": ["feature_a"],
@@ -131,6 +131,50 @@ def test_promote_model_deprecates_only_other_promoted_artifacts(client):
     assert _read_model_status(old_promoted_id) == ArtifactStatus.DEPRECATED.value
     assert _read_model_status(candidate_same_type_id) == ArtifactStatus.CANDIDATE.value
     assert _read_model_status(other_type_id) == ArtifactStatus.PROMOTED.value
+
+
+def test_promote_model_does_not_deprecate_other_dataset_lineage(client):
+    token = _login(client)
+    training_run_id, _ = _create_training_run(suffix="-a")
+    other_training_run_id, _ = _create_training_run(suffix="-b")
+    models_dir = Path.cwd() / "test-data" / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    shared_old_path = models_dir / "shared-old.joblib"
+    shared_old_path.write_text("shared-old", encoding="utf-8")
+    shared_target_path = models_dir / "shared-target.joblib"
+    shared_target_path.write_text("shared-target", encoding="utf-8")
+    other_dataset_path = models_dir / "other-dataset.joblib"
+    other_dataset_path.write_text("other-dataset", encoding="utf-8")
+
+    same_dataset_promoted_id = _create_model_artifact(
+        training_run_id=training_run_id,
+        model_name="rf-old",
+        model_type="random_forest",
+        status=ArtifactStatus.PROMOTED.value,
+        artifact_path=str(shared_old_path),
+    )
+    other_dataset_promoted_id = _create_model_artifact(
+        training_run_id=other_training_run_id,
+        model_name="rf-other-dataset",
+        model_type="random_forest",
+        status=ArtifactStatus.PROMOTED.value,
+        artifact_path=str(other_dataset_path),
+    )
+    target_id = _create_model_artifact(
+        training_run_id=training_run_id,
+        model_name="rf-new",
+        model_type="random_forest",
+        status=ArtifactStatus.CANDIDATE.value,
+        artifact_path=str(shared_target_path),
+    )
+
+    response = client.post(f"/api/models/{target_id}/promote", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert _read_model_status(target_id) == ArtifactStatus.PROMOTED.value
+    assert _read_model_status(same_dataset_promoted_id) == ArtifactStatus.DEPRECATED.value
+    assert _read_model_status(other_dataset_promoted_id) == ArtifactStatus.PROMOTED.value
 
 
 def test_download_model_returns_404_when_artifact_file_is_missing(client):

@@ -228,3 +228,54 @@ class TaskRecord(Base):
     detail: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class OutboxMessage(Base):
+    __tablename__ = "outbox_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    topic: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    queue_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    headers: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    task_record_id: Mapped[str | None] = mapped_column(ForeignKey("task_records.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False, index=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    task_record: Mapped[TaskRecord | None] = relationship()
+
+
+class InboxMessage(Base):
+    __tablename__ = "inbox_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    consumer_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    message_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    topic: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="processed", nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("consumer_name", "message_id", name="uq_inbox_consumer_message"),)
+
+
+class JobCheckpoint(Base):
+    __tablename__ = "job_checkpoints"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    job_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    checkpoint_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("job_name", "job_id", "checkpoint_key", name="uq_job_checkpoint"),)

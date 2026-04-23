@@ -17,4 +17,6 @@ celery_app.conf.update(
     timezone="UTC",
     task_track_started=True,
     worker_prefetch_multiplier=1,
+    task_create_missing_queues=True,
+    task_default_exchange_type="direct",
 )

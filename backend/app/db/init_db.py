@@ -1,21 +1,22 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.security import get_password_hash
 from cybersec_platform.contracts.api import FeatureFamily, RoleName, SourceType
-from cybersec_platform.db import Base, FeatureSchema, Role, User, get_engine
+from cybersec_platform.db import FeatureSchema, Role, User
 from cybersec_platform.db.session import ensure_database_exists, get_settings
 
 
 async def init_db() -> None:
     ensure_database_exists()
-    engine = get_engine()
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-        await connection.run_sync(_ensure_runtime_columns)
+    _run_migrations()
 
 
 def _ensure_runtime_columns(connection) -> None:
@@ -33,6 +34,14 @@ def _ensure_runtime_columns(connection) -> None:
         connection.exec_driver_sql(statement)
     if "normalization_summary" not in existing_columns:
         connection.exec_driver_sql("UPDATE datasets SET normalization_summary = '{}' WHERE normalization_summary IS NULL")
+
+
+def _run_migrations() -> None:
+    root_dir = Path(__file__).resolve().parents[3]
+    backend_dir = root_dir / "backend"
+    config = Config(str(root_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    command.upgrade(config, "head")
 
 
 async def seed_defaults(session: AsyncSession) -> None:

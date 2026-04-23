@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from urllib.parse import quote
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url
@@ -18,7 +20,13 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./cybersec.db"
     sync_database_url: str = "sqlite:///./cybersec.db"
     redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/0"
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    rabbitmq_user: str = "guest"
+    rabbitmq_password: str = "guest"
+    rabbitmq_vhost: str = "/"
+    rabbitmq_url: str | None = None
+    celery_broker_url: str | None = None
     celery_result_backend: str = "redis://localhost:6379/1"
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"
@@ -33,6 +41,10 @@ class Settings(BaseSettings):
     archive_data_path: str = "./app-data/archives"
     parsed_data_path: str = "./app-data/parsed"
     normalized_data_path: str = "./app-data/normalized"
+    staging_database_url: str | None = None
+    staging_sync_database_url: str | None = None
+    normalized_database_url: str | None = None
+    normalized_sync_database_url: str | None = None
     models_path: str = "./app-data/models"
     reports_path: str = "./app-data/reports"
     explanations_path: str = "./app-data/explanations"
@@ -42,6 +54,30 @@ class Settings(BaseSettings):
     language_ru_path: str = "./app-data/languages/ru.json"
     default_admin_email: str = "admin@example.com"
     default_admin_password: str = "admin123456"
+    outbox_poll_interval_ms: int = 5000
+    outbox_publish_batch_size: int = 10
+    outbox_max_attempts: int = 10
+
+    @model_validator(mode="after")
+    def apply_runtime_defaults(self) -> "Settings":
+        if not self.rabbitmq_url:
+            quoted_user = quote(self.rabbitmq_user, safe="")
+            quoted_password = quote(self.rabbitmq_password, safe="")
+            quoted_vhost = quote(self.rabbitmq_vhost, safe="/")
+            self.rabbitmq_url = (
+                f"amqp://{quoted_user}:{quoted_password}@{self.rabbitmq_host}:{self.rabbitmq_port}/{quoted_vhost}"
+            )
+        if not self.celery_broker_url:
+            self.celery_broker_url = self.rabbitmq_url
+        if not self.staging_database_url:
+            self.staging_database_url = self.database_url
+        if not self.staging_sync_database_url:
+            self.staging_sync_database_url = self.sync_database_url
+        if not self.normalized_database_url:
+            self.normalized_database_url = self.database_url
+        if not self.normalized_sync_database_url:
+            self.normalized_sync_database_url = self.sync_database_url
+        return self
 
 
 @lru_cache

@@ -19,6 +19,7 @@ from cybersec_platform.db import (
     ExplanationJob,
     ExplanationResult,
     FeatureSchema,
+    InboxMessage,
     InferenceJob,
     ModelArtifact,
     TaskRecord,
@@ -57,6 +58,73 @@ async def _get_latest_task_record(session, object_type: str, object_id: str) -> 
         .order_by(TaskRecord.created_at.desc(), TaskRecord.id.desc())
     )
     return result.scalars().first()
+
+
+def _extract_task_headers(task) -> dict[str, str]:
+    request = getattr(task, "request", None)
+    raw_headers = getattr(request, "headers", None) or {}
+    headers = {str(key): str(value) for key, value in dict(raw_headers).items() if value is not None}
+    request_id = getattr(request, "id", None)
+    if request_id and "message_id" not in headers:
+        headers["message_id"] = str(request_id)
+    return headers
+
+
+async def _has_processed_message(session, *, consumer_name: str, message_id: str | None) -> bool:
+    if not message_id:
+        return False
+    result = await session.execute(
+        select(InboxMessage).where(InboxMessage.consumer_name == consumer_name, InboxMessage.message_id == message_id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _store_processed_message(
+    session,
+    *,
+    consumer_name: str,
+    message_id: str | None,
+    topic: str,
+    payload: dict,
+    detail: dict,
+) -> None:
+    if not message_id:
+        return
+    session.add(
+        InboxMessage(
+            consumer_name=consumer_name,
+            message_id=message_id,
+            topic=topic,
+            status="processed",
+            payload=payload,
+            detail=detail,
+        )
+    )
+
+
+async def _list_model_artifacts(session, training_run_id: str) -> list[ModelArtifact]:
+    result = await session.execute(
+        select(ModelArtifact)
+        .where(ModelArtifact.training_run_id == training_run_id)
+        .order_by(ModelArtifact.created_at.asc(), ModelArtifact.id.asc())
+    )
+    return result.scalars().all()
+
+
+async def _list_detection_results(session, inference_job_id: str) -> list[DetectionResult]:
+    result = await session.execute(
+        select(DetectionResult)
+        .where(DetectionResult.inference_job_id == inference_job_id)
+        .order_by(DetectionResult.created_at.asc(), DetectionResult.id.asc())
+    )
+    return result.scalars().all()
+
+
+async def _get_explanation_result(session, explanation_job_id: str) -> ExplanationResult | None:
+    result = await session.execute(
+        select(ExplanationResult).where(ExplanationResult.explanation_job_id == explanation_job_id)
+    )
+    return result.scalar_one_or_none()
 
 
 def _run_async(coroutine):
@@ -113,12 +181,19 @@ async def _refresh_auto_training_progress(
 
 
 @observed("run_training")
-async def _run_training(training_run_id: str) -> None:
+async def _run_training(
+    training_run_id: str,
+    *,
+    task_headers: dict[str, str] | None = None,
+    task_name: str = "training.run_training",
+) -> None:
     """EN: Execute the hybrid training pipeline and persist resulting artifacts.
     RU: Выполняет гибридный training pipeline и сохраняет итоговые артефакты.
     """
 
     store = ArtifactStore()
+    headers = task_headers or {}
+    message_id = headers.get("message_id")
     with request_context({"type": "task", "service": "training-service", "training_run_id": training_run_id}):
         async with async_session_factory() as session:
             run = await session.get(TrainingRun, training_run_id)
@@ -129,6 +204,45 @@ async def _run_training(training_run_id: str) -> None:
             schema = await session.get(FeatureSchema, run.feature_schema_id)
             task_record = await _get_latest_task_record(session, "training_run", training_run_id)
             task_record_id = task_record.id if task_record else None
+            if await _has_processed_message(session, consumer_name=task_name, message_id=message_id):
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "Training run duplicate delivery skipped",
+                    function="_run_training",
+                    training_run_id=training_run_id,
+                    message_id=message_id,
+                )
+                return
+            existing_artifacts = await _list_model_artifacts(session, training_run_id)
+            if run.status == JobStatus.COMPLETED.value and existing_artifacts:
+                artifact_ids = [artifact.id for artifact in existing_artifacts]
+                if task_record:
+                    task_record.status = JobStatus.COMPLETED.value
+                    task_record.detail = {
+                        **(task_record.detail or {}),
+                        "artifact_ids": artifact_ids,
+                        "metrics": run.metrics,
+                        "duplicate_delivery": True,
+                    }
+                await _store_processed_message(
+                    session,
+                    consumer_name=task_name,
+                    message_id=message_id,
+                    topic=task_name,
+                    payload={"training_run_id": training_run_id},
+                    detail={"artifact_ids": artifact_ids, "duplicate_delivery": True},
+                )
+                await session.commit()
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "Training run already completed, reused persisted artifacts",
+                    function="_run_training",
+                    training_run_id=training_run_id,
+                    artifact_ids=artifact_ids,
+                )
+                return
             run.status = JobStatus.RUNNING.value
             run.started_at = _utc_now()
             if task_record:
@@ -209,6 +323,14 @@ async def _run_training(training_run_id: str) -> None:
                 if task_record:
                     task_record.status = JobStatus.COMPLETED.value
                     task_record.detail = {"artifact_ids": artifact_ids, "metrics": run.metrics, **training_payload["reports"]}
+                await _store_processed_message(
+                    session,
+                    consumer_name=task_name,
+                    message_id=message_id,
+                    topic=task_name,
+                    payload={"training_run_id": training_run_id},
+                    detail={"artifact_ids": artifact_ids},
+                )
                 log_event(
                     logger,
                     logging.INFO,
@@ -582,12 +704,19 @@ async def _run_auto_training(auto_training_job_id: str) -> None:
 
 
 @observed("run_inference")
-async def _run_inference(inference_job_id: str) -> None:
+async def _run_inference(
+    inference_job_id: str,
+    *,
+    task_headers: dict[str, str] | None = None,
+    task_name: str = "training.run_inference",
+) -> None:
     """EN: Execute inference against the published model service and persist results.
     RU: Выполняет инференс через сервис опубликованных моделей и сохраняет результаты.
     """
 
     settings = get_settings()
+    headers = task_headers or {}
+    message_id = headers.get("message_id")
     with request_context({"type": "task", "service": "training-service", "inference_job_id": inference_job_id}):
         async with async_session_factory() as session:
             job = await session.get(InferenceJob, inference_job_id)
@@ -596,6 +725,43 @@ async def _run_inference(inference_job_id: str) -> None:
                 return
             task_record = await _get_latest_task_record(session, "inference_job", inference_job_id)
             task_record_id = task_record.id if task_record else None
+            if await _has_processed_message(session, consumer_name=task_name, message_id=message_id):
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "Inference job duplicate delivery skipped",
+                    function="_run_inference",
+                    inference_job_id=inference_job_id,
+                    message_id=message_id,
+                )
+                return
+            existing_results = await _list_detection_results(session, inference_job_id)
+            if job.status == JobStatus.COMPLETED.value and existing_results:
+                if task_record:
+                    task_record.status = JobStatus.COMPLETED.value
+                    task_record.detail = {
+                        **(task_record.detail or {}),
+                        "prediction_count": len(existing_results),
+                        "duplicate_delivery": True,
+                    }
+                await _store_processed_message(
+                    session,
+                    consumer_name=task_name,
+                    message_id=message_id,
+                    topic=task_name,
+                    payload={"inference_job_id": inference_job_id},
+                    detail={"prediction_count": len(existing_results), "duplicate_delivery": True},
+                )
+                await session.commit()
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "Inference job already completed, reused persisted predictions",
+                    function="_run_inference",
+                    inference_job_id=inference_job_id,
+                    prediction_count=len(existing_results),
+                )
+                return
             job.status = JobStatus.RUNNING.value
             if task_record:
                 task_record.status = JobStatus.RUNNING.value
@@ -620,6 +786,14 @@ async def _run_inference(inference_job_id: str) -> None:
                 if task_record:
                     task_record.status = JobStatus.COMPLETED.value
                     task_record.detail = {"prediction_count": len(predictions)}
+                await _store_processed_message(
+                    session,
+                    consumer_name=task_name,
+                    message_id=message_id,
+                    topic=task_name,
+                    payload={"inference_job_id": inference_job_id},
+                    detail={"prediction_count": len(predictions)},
+                )
                 log_event(
                     logger,
                     logging.INFO,
@@ -648,12 +822,19 @@ async def _run_inference(inference_job_id: str) -> None:
 
 
 @observed("generate_explanation")
-async def _generate_explanation(explanation_job_id: str) -> None:
+async def _generate_explanation(
+    explanation_job_id: str,
+    *,
+    task_headers: dict[str, str] | None = None,
+    task_name: str = "training.generate_explanation",
+) -> None:
     """EN: Build SHAP-style explanation payloads for stored detections.
     RU: Формирует SHAP-подобные explanation-payloads для сохранённых детекций.
     """
 
     store = ArtifactStore()
+    headers = task_headers or {}
+    message_id = headers.get("message_id")
     with request_context({"type": "task", "service": "training-service", "explanation_job_id": explanation_job_id}):
         async with async_session_factory() as session:
             job = await session.get(ExplanationJob, explanation_job_id)
@@ -668,6 +849,43 @@ async def _generate_explanation(explanation_job_id: str) -> None:
                 return
             task_record = await _get_latest_task_record(session, "explanation_job", explanation_job_id)
             task_record_id = task_record.id if task_record else None
+            if await _has_processed_message(session, consumer_name=task_name, message_id=message_id):
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "Explanation job duplicate delivery skipped",
+                    function="_generate_explanation",
+                    explanation_job_id=explanation_job_id,
+                    message_id=message_id,
+                )
+                return
+            existing_result = await _get_explanation_result(session, explanation_job_id)
+            if job.status == JobStatus.COMPLETED.value and existing_result is not None:
+                if task_record:
+                    task_record.status = JobStatus.COMPLETED.value
+                    task_record.detail = {
+                        **(task_record.detail or {}),
+                        "report_path": existing_result.report_path,
+                        "duplicate_delivery": True,
+                    }
+                await _store_processed_message(
+                    session,
+                    consumer_name=task_name,
+                    message_id=message_id,
+                    topic=task_name,
+                    payload={"explanation_job_id": explanation_job_id},
+                    detail={"report_path": existing_result.report_path, "duplicate_delivery": True},
+                )
+                await session.commit()
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "Explanation job already completed, reused persisted report",
+                    function="_generate_explanation",
+                    explanation_job_id=explanation_job_id,
+                    report_path=existing_result.report_path,
+                )
+                return
             job.status = JobStatus.RUNNING.value
             if task_record:
                 task_record.status = JobStatus.RUNNING.value
@@ -705,6 +923,14 @@ async def _generate_explanation(explanation_job_id: str) -> None:
                 if task_record:
                     task_record.status = JobStatus.COMPLETED.value
                     task_record.detail = {"report_path": report_path}
+                await _store_processed_message(
+                    session,
+                    consumer_name=task_name,
+                    message_id=message_id,
+                    topic=task_name,
+                    payload={"explanation_job_id": explanation_job_id},
+                    detail={"report_path": report_path},
+                )
                 log_event(
                     logger,
                     logging.INFO,
@@ -732,17 +958,17 @@ async def _generate_explanation(explanation_job_id: str) -> None:
             await session.commit()
 
 
-@celery_app.task(name="training.run_training")
-def run_training(training_run_id: str) -> None:
+@celery_app.task(name="training.run_training", bind=True)
+def run_training(self, training_run_id: str) -> None:
     """EN: Celery entry point for asynchronous model training.
     RU: Celery entry point для асинхронного обучения модели.
     """
 
-    _run_async(_run_training(training_run_id))
+    _run_async(_run_training(training_run_id, task_headers=_extract_task_headers(self), task_name=self.name))
 
 
-@celery_app.task(name="training.run_auto_training")
-def run_auto_training(auto_training_job_id: str) -> None:
+@celery_app.task(name="training.run_auto_training", bind=True)
+def run_auto_training(self, auto_training_job_id: str) -> None:
     """EN: Celery entry point for automatic archive-based training.
     RU: Celery entry point РґР»СЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРѕРіРѕ РѕР±СѓС‡РµРЅРёСЏ РёР· Р°СЂС…РёРІРЅС‹С… РЅР°Р±РѕСЂРѕРІ.
     """
@@ -750,19 +976,19 @@ def run_auto_training(auto_training_job_id: str) -> None:
     _run_async(_run_auto_training(auto_training_job_id))
 
 
-@celery_app.task(name="training.run_inference")
-def run_inference(inference_job_id: str) -> None:
+@celery_app.task(name="training.run_inference", bind=True)
+def run_inference(self, inference_job_id: str) -> None:
     """EN: Celery entry point for asynchronous inference execution.
     RU: Celery entry point для асинхронного выполнения инференса.
     """
 
-    _run_async(_run_inference(inference_job_id))
+    _run_async(_run_inference(inference_job_id, task_headers=_extract_task_headers(self), task_name=self.name))
 
 
-@celery_app.task(name="training.generate_explanation")
-def generate_explanation(explanation_job_id: str) -> None:
+@celery_app.task(name="training.generate_explanation", bind=True)
+def generate_explanation(self, explanation_job_id: str) -> None:
     """EN: Celery entry point for asynchronous explanation generation.
     RU: Celery entry point для асинхронной генерации объяснений.
     """
 
-    _run_async(_generate_explanation(explanation_job_id))
+    _run_async(_generate_explanation(explanation_job_id, task_headers=_extract_task_headers(self), task_name=self.name))

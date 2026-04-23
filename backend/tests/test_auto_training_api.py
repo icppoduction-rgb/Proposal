@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.services import archive_uploads
 from cybersec_platform.contracts.api import JobStatus
-from cybersec_platform.db import AutoTrainingArchive, AutoTrainingJob, TaskRecord, get_sync_engine
+from cybersec_platform.db import AutoTrainingArchive, AutoTrainingJob, OutboxMessage, TaskRecord, get_sync_engine
 
 
 def _login(client) -> str:
@@ -84,6 +84,12 @@ def test_auto_training_archive_upload_and_job_creation(client):
         task_record = session.query(TaskRecord).filter(TaskRecord.object_type == "auto_training_job").one_or_none()
         assert task_record is not None
         assert task_record.object_id == job_payload["id"]
+        assert task_record.celery_task_id == "test-task-id"
+        assert task_record.detail["publish_state"] == "published"
+        outbox_message = session.query(OutboxMessage).filter(OutboxMessage.task_record_id == task_record.id).one_or_none()
+        assert outbox_message is not None
+        assert outbox_message.status == "published"
+        assert outbox_message.queue_name == "training"
 
 
 def test_auto_training_completion_does_not_rescan_archive_root(client, monkeypatch):

@@ -62,7 +62,7 @@ from backend.app.services.raw_files import (
     serialize_raw_file,
     sync_raw_file_records,
 )
-from backend.app.services.tasks import dispatch_task
+from backend.app.services.tasks import dispatch_task, trigger_task_publish
 from cybersec_platform.contracts.api import (
     CellPatchIn,
     DatasetManifest,
@@ -189,19 +189,19 @@ async def validate_managed_dataset(dataset_id: str, session: SessionDep) -> Task
 
     try:
         linked_dataset = await ensure_legacy_dataset_for_managed_dataset(session, managed_dataset)
+        record = await dispatch_task(
+            session,
+            task_name="normalization.validate_dataset",
+            object_type="dataset",
+            object_id=linked_dataset.id,
+            queue="normalization",
+            kwargs={"dataset_id": linked_dataset.id},
+        )
         await session.commit()
+        await trigger_task_publish(session, record)
     except DatasetUploadError as exc:
         await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-    record = await dispatch_task(
-        session,
-        task_name="normalization.validate_dataset",
-        object_type="dataset",
-        object_id=linked_dataset.id,
-        queue="normalization",
-        kwargs={"dataset_id": linked_dataset.id},
-    )
     return TaskRecordOut.model_validate(record)
 
 
@@ -525,6 +525,8 @@ async def validate_dataset(dataset_id: str, session: SessionDep) -> TaskRecordOu
         queue="normalization",
         kwargs={"dataset_id": item.id},
     )
+    await session.commit()
+    await trigger_task_publish(session, record)
     return TaskRecordOut.model_validate(record)
 
 
@@ -541,4 +543,6 @@ async def trigger_parse(dataset_id: str, session: SessionDep) -> TaskRecordOut:
         queue="normalization",
         kwargs={"dataset_id": item.id},
     )
+    await session.commit()
+    await trigger_task_publish(session, record)
     return TaskRecordOut.model_validate(record)

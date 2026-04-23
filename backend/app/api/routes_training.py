@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from backend.app.api.deps import SessionDep, get_current_user
 from backend.app.schemas.common import TrainingRunOut
-from backend.app.services.tasks import dispatch_task
+from backend.app.services.tasks import dispatch_task, trigger_task_publish
 from cybersec_platform.contracts.api import JobStatus, TrainingRequest, ValidationStatus
 from cybersec_platform.db import Dataset, FeatureSchema, TrainingRun, User
 from cybersec_platform.ml.normalization import PROFILE_SCHEMA_MAP
@@ -42,9 +42,8 @@ async def create_training_run(payload: TrainingRequest, session: SessionDep, use
         request_payload=payload.model_dump(mode="json"),
     )
     session.add(item)
-    await session.commit()
-    await session.refresh(item)
-    await dispatch_task(
+    await session.flush()
+    record = await dispatch_task(
         session,
         task_name="training.run_training",
         object_type="training_run",
@@ -52,6 +51,9 @@ async def create_training_run(payload: TrainingRequest, session: SessionDep, use
         queue="training",
         kwargs={"training_run_id": item.id},
     )
+    await session.commit()
+    await session.refresh(item)
+    await trigger_task_publish(session, record)
     return TrainingRunOut.model_validate(item)
 
 

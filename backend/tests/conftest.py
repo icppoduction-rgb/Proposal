@@ -30,7 +30,7 @@ def mock_celery(monkeypatch):
     class Result:
         id = "test-task-id"
 
-    monkeypatch.setattr("backend.app.services.tasks.celery_app.send_task", lambda *args, **kwargs: Result())
+    monkeypatch.setattr("cybersec_platform.tasks.celery_app.send_task", lambda *args, **kwargs: Result())
 
 
 @pytest.fixture(autouse=True)

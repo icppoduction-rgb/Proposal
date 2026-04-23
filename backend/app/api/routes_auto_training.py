@@ -31,7 +31,7 @@ from backend.app.services.auto_training import (
     register_uploaded_archives,
     serialize_archive_file,
 )
-from backend.app.services.tasks import dispatch_task
+from backend.app.services.tasks import dispatch_task, trigger_task_publish
 from cybersec_platform.contracts.api import ArchiveFileOut
 from cybersec_platform.db import AutoTrainingJob, User
 
@@ -191,6 +191,7 @@ async def start_auto_training_job(
         )
         job.detail = {**job.detail, "task_id": record.id}
         await session.commit()
+        await trigger_task_publish(session, record)
         await session.refresh(job)
         return AutoTrainingJobOut.model_validate(job)
     except ArchiveUploadError as exc:

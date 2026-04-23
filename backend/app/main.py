@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from time import perf_counter
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +24,7 @@ from backend.app.api import (
     routes_users,
 )
 from backend.app.db.init_db import init_db, seed_defaults
+from backend.app.services.outbox import publish_pending_outbox_messages, run_outbox_publisher
 from cybersec_platform.db import get_async_session
 from cybersec_platform.db.session import get_settings
 from cybersec_platform.observability import configure_logging, log_event, request_context
@@ -41,9 +44,20 @@ async def lifespan(app: FastAPI):
     async for session in get_async_session():
         await seed_defaults(session)
         break
+    stop_event = asyncio.Event()
+    publisher_task = asyncio.create_task(run_outbox_publisher(stop_event), name="backend-outbox-publisher")
+    await publish_pending_outbox_messages()
     log_event(logger, 20, "Backend startup completed", function="lifespan", request={"type": "service", "service": "backend"})
-    yield
-    log_event(logger, 20, "Backend shutdown completed", function="lifespan", request={"type": "service", "service": "backend"})
+    try:
+        yield
+    finally:
+        stop_event.set()
+        publisher_task.cancel()
+        try:
+            await publisher_task
+        except asyncio.CancelledError:
+            pass
+        log_event(logger, 20, "Backend shutdown completed", function="lifespan", request={"type": "service", "service": "backend"})
 
 
 settings = get_settings()
@@ -64,12 +78,14 @@ async def log_requests(request: Request, call_next):
     RU: Привязывает метаданные запроса и сохраняет структурированные access-логи для каждого HTTP-вызова.
     """
 
+    correlation_id = request.headers.get("X-Correlation-ID") or str(uuid4())
     request_payload = {
         "type": "http",
         "method": request.method,
         "path": request.url.path,
         "query": str(request.url.query),
         "client": request.client.host if request.client else None,
+        "correlation_id": correlation_id,
     }
     started_at = perf_counter()
     with request_context(request_payload):
@@ -93,6 +109,7 @@ async def log_requests(request: Request, call_next):
             status_code=response.status_code,
             duration_ms=round((perf_counter() - started_at) * 1000, 2),
         )
+        response.headers["X-Correlation-ID"] = correlation_id
         return response
 
 for router in (

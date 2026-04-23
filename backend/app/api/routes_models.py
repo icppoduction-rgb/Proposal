@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from backend.app.api.deps import SessionDep, get_current_user
 from backend.app.schemas.common import ModelArtifactOut
 from cybersec_platform.contracts.api import ArtifactStatus
-from cybersec_platform.db import ModelArtifact
+from cybersec_platform.db import ModelArtifact, TrainingRun
 
 router = APIRouter(prefix="/models", tags=["models"])
 
@@ -33,12 +33,20 @@ async def promote_model(artifact_id: str, session: SessionDep) -> ModelArtifactO
     item = await session.get(ModelArtifact, artifact_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Model artifact not found")
+    training_run = await session.get(TrainingRun, item.training_run_id)
+    if training_run is None:
+        raise HTTPException(status_code=409, detail="Model artifact is not linked to a training run")
+    scoped_training_runs = select(TrainingRun.id).where(
+        TrainingRun.dataset_id == training_run.dataset_id,
+        TrainingRun.feature_schema_id == training_run.feature_schema_id,
+    )
     await session.execute(
         update(ModelArtifact)
         .where(
             ModelArtifact.model_type == item.model_type,
             ModelArtifact.status == ArtifactStatus.PROMOTED.value,
             ModelArtifact.id != item.id,
+            ModelArtifact.training_run_id.in_(scoped_training_runs),
         )
         .values(status=ArtifactStatus.DEPRECATED.value)
     )

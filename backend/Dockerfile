@@ -9,6 +9,7 @@ WORKDIR /app
 
 COPY shared/python /app/shared/python
 COPY backend/requirements.txt /app/backend/requirements.txt
+COPY alembic.ini /app/alembic.ini
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 COPY backend /app/backend

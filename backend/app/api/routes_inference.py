@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from backend.app.api.deps import SessionDep, get_current_user
 from backend.app.schemas.common import DetectionResultOut, InferenceJobOut
-from backend.app.services.tasks import dispatch_task
+from backend.app.services.tasks import dispatch_task, trigger_task_publish
 from cybersec_platform.contracts.api import InferenceRequest
 from cybersec_platform.contracts.api import ArtifactStatus
 from cybersec_platform.db import DetectionResult, InferenceJob, ModelArtifact
@@ -22,9 +22,8 @@ async def create_inference_job(payload: InferenceRequest, session: SessionDep) -
         raise HTTPException(status_code=400, detail="Only promoted model artifacts can be used for inference")
     item = InferenceJob(model_artifact_id=payload.model_artifact_id, request_payload=payload.model_dump(mode="json"))
     session.add(item)
-    await session.commit()
-    await session.refresh(item)
-    await dispatch_task(
+    await session.flush()
+    record = await dispatch_task(
         session,
         task_name="training.run_inference",
         object_type="inference_job",
@@ -32,6 +31,9 @@ async def create_inference_job(payload: InferenceRequest, session: SessionDep) -
         queue="training",
         kwargs={"inference_job_id": item.id},
     )
+    await session.commit()
+    await session.refresh(item)
+    await trigger_task_publish(session, record)
     return InferenceJobOut.model_validate(item)
 
 
