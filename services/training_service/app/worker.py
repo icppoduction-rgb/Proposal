@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -28,7 +29,7 @@ from cybersec_platform.db import (
 from cybersec_platform.db.session import async_session_factory, get_settings
 from cybersec_platform.ml.auto_training import build_auto_feature_schema_definition, discover_archive_training_inputs, extract_archive
 from cybersec_platform.ml.inference import InferenceEngine, load_model_bundle
-from cybersec_platform.ml.normalization import ContractValidationError, NormalizationEngine
+from cybersec_platform.ml.normalization import CORE_EVENT_COLUMNS, ContractValidationError, NormalizationEngine
 from cybersec_platform.ml.training import HybridTrainer
 from cybersec_platform.observability import configure_logging, log_event, observed, request_context
 from cybersec_platform.storage import ArtifactStore
@@ -125,6 +126,57 @@ async def _get_explanation_result(session, explanation_job_id: str) -> Explanati
         select(ExplanationResult).where(ExplanationResult.explanation_job_id == explanation_job_id)
     )
     return result.scalar_one_or_none()
+
+
+def _ordered_auto_training_columns(columns: set[str]) -> list[str]:
+    ordered: list[str] = [column for column in CORE_EVENT_COLUMNS if column in columns]
+    ordered.extend(sorted(column for column in columns if column not in set(ordered)))
+    return ordered
+
+
+def _prefix_auto_training_entities(normalized_output_path: str | Path, archive_name: str) -> list[str]:
+    frame = pd.read_csv(normalized_output_path)
+    archive_prefix = Path(archive_name).stem
+    frame["entity_id"] = frame["entity_id"].map(lambda value: f"{archive_prefix}:{value}")
+    frame.to_csv(normalized_output_path, index=False)
+    return list(frame.columns)
+
+
+def _build_combined_auto_training_frame(
+    normalized_paths: list[str | Path],
+    combined_output_path: str | Path,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    paths = [Path(path) for path in normalized_paths]
+    if not paths:
+        raise ContractValidationError("Automatic training did not produce any normalized inputs")
+
+    all_columns: set[str] = set()
+    for path in paths:
+        frame = pd.read_csv(path, nrows=0)
+        all_columns.update(str(column) for column in frame.columns)
+
+    ordered_columns = _ordered_auto_training_columns(all_columns)
+    combined_path = Path(combined_output_path)
+    combined_path.parent.mkdir(parents=True, exist_ok=True)
+    if combined_path.exists():
+        combined_path.unlink()
+
+    label_counter: Counter[int] = Counter()
+    wrote_any_rows = False
+    for index, path in enumerate(paths, start=1):
+        frame = pd.read_csv(path)
+        if frame.empty:
+            continue
+        frame = frame.reindex(columns=ordered_columns)
+        labels = pd.to_numeric(frame["label"], errors="coerce").dropna().astype(int)
+        label_counter.update(int(value) for value in labels.tolist())
+        frame.to_csv(combined_path, mode="a", header=index == 1, index=False)
+        wrote_any_rows = True
+
+    if not wrote_any_rows:
+        raise ContractValidationError("Automatic training dataset is empty after normalization")
+
+    return pd.read_csv(combined_path), {str(key): int(value) for key, value in sorted(label_counter.items())}
 
 
 def _run_async(coroutine):
@@ -461,11 +513,26 @@ async def _run_auto_training(auto_training_job_id: str) -> None:
                 await session.commit()
 
                 engine = NormalizationEngine()
-                normalized_frames: list[pd.DataFrame] = []
+                normalized_output_paths: list[str] = []
                 normalized_reports: list[dict[str, object]] = []
                 for index, input_file in enumerate(selected_inputs, start=1):
                     normalized_output_path = workspace_root / "normalized" / f"{index:04d}-{Path(input_file.extracted_path).stem}.csv"
                     report_path = Path(store.reports_dir) / "auto-training" / auto_training_job_id / f"{index:04d}-{Path(input_file.extracted_path).stem}.json"
+                    await _refresh_auto_training_progress(
+                        session,
+                        job,
+                        task_record,
+                        progress_percent=35 + (30 * (index - 1) / len(selected_inputs)),
+                        detail_patch={
+                            "normalized_inputs": normalized_reports,
+                            "current_normalization_input": {
+                                "archive_name": input_file.archive_name,
+                                "relative_path": input_file.relative_path,
+                                "dataset_format": input_file.dataset_format,
+                            },
+                        },
+                    )
+                    await session.commit()
                     manifest = DatasetManifest(
                         name=f"auto-{Path(input_file.extracted_path).stem}",
                         source_type=input_file.source_type,
@@ -481,16 +548,15 @@ async def _run_auto_training(auto_training_job_id: str) -> None:
                         default_label=input_file.default_label,
                         default_attack_stage=input_file.default_attack_stage,
                     )
-                    payload = engine.validate_and_normalize(
+                    payload = await asyncio.to_thread(
+                        engine.validate_and_normalize,
                         input_file.extracted_path,
                         manifest,
                         str(normalized_output_path),
-                        report_path=str(report_path),
+                        str(report_path),
                     )
-                    frame = pd.read_csv(normalized_output_path)
-                    archive_prefix = Path(input_file.archive_name).stem
-                    frame["entity_id"] = frame["entity_id"].map(lambda value: f"{archive_prefix}:{value}")
-                    normalized_frames.append(frame)
+                    await asyncio.to_thread(_prefix_auto_training_entities, normalized_output_path, input_file.archive_name)
+                    normalized_output_paths.append(str(normalized_output_path))
                     normalized_reports.append(
                         {
                             "archive_name": input_file.archive_name,
@@ -507,24 +573,24 @@ async def _run_auto_training(auto_training_job_id: str) -> None:
                         job,
                         task_record,
                         progress_percent=35 + (30 * index / len(selected_inputs)),
-                        detail_patch={"normalized_inputs": normalized_reports},
+                        detail_patch={
+                            "normalized_inputs": normalized_reports,
+                            "current_normalization_input": None,
+                        },
                     )
                     await session.commit()
 
-                combined_frame = pd.concat(normalized_frames, ignore_index=True, sort=False)
-                if combined_frame.empty:
-                    raise ContractValidationError("Automatic training dataset is empty after normalization")
-
+                combined_output_path = Path(store.normalized_dir) / "auto-training" / f"{auto_training_job_id}.csv"
+                combined_frame, label_distribution = await asyncio.to_thread(
+                    _build_combined_auto_training_frame,
+                    normalized_output_paths,
+                    combined_output_path,
+                )
                 labels = pd.to_numeric(combined_frame["label"], errors="coerce").dropna().astype(int)
-                label_distribution = {str(key): int(value) for key, value in labels.value_counts().to_dict().items()}
                 if labels.nunique() < 2:
                     raise ContractValidationError(
                         "Automatic training requires at least two label classes across the prepared dataset"
                     )
-
-                combined_output_path = Path(store.normalized_dir) / "auto-training" / f"{auto_training_job_id}.csv"
-                combined_output_path.parent.mkdir(parents=True, exist_ok=True)
-                combined_frame.to_csv(combined_output_path, index=False)
 
                 await _refresh_auto_training_progress(
                     session,
