@@ -1,3 +1,0 @@
-/app/shared/python[training,parser]
-pytest>=8.2,<9.0
-aiosqlite>=0.20,<1.0
