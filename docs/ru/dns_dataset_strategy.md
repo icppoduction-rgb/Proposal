@@ -84,7 +84,7 @@ TRAIN:
 
 ### Ссылка
 
-<https://www.yorku.ca/research/bccc/>
+<https://www.yorku.ca/research/bccc/ucs-technical/cybersecurity-datasets-cds/>
 
 ### Факт
 
