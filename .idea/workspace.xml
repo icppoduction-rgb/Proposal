@@ -6,7 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="7e503071-acf4-4819-884c-3e5b3e575231" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/ru/host_datasets_analysis.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/ru/host_datasets_analysis.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,7 +35,7 @@
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "git-widget-placeholder": "dev",
     "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "C:/Users/fmark/PythonProjects/Proposal/datasets/dns",
+    "last_opened_file_path": "C:/Users/fmark/PythonProjects/Proposal/docs/ru",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -47,8 +46,8 @@
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\datasets\dns" />
       <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\ru" />
+      <recent name="C:\Users\fmark\PythonProjects\Proposal\datasets\dns" />
       <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\en" />
       <recent name="C:\Users\fmark\PythonProjects\Proposal" />
     </key>
