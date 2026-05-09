@@ -1,8 +1,9 @@
 import os
 import argparse
 
-
 from dotenv import load_dotenv
+
+from scripts.dataset_path import write_dataset_path, write_extensions
 
 load_dotenv()
 
@@ -10,6 +11,7 @@ load_dotenv()
 
 PATH_DATASETS_FOLDER: str = os.getenv("PATH_DATASETS_FOLDER", "")
 PATH_FILE_JSON_DATASET: str = os.getenv("PATH_FILE_JSON_DATASET", "")
+PATH_FILE_JSON_EXTENSIONS: str = os.getenv("PATH_FILE_JSON_EXTENSIONS", "")
 
 
 parser = argparse.ArgumentParser()
@@ -32,8 +34,10 @@ def manage():
 
         case ("json", "write", "path-dataset"):
 
-            print("hello")
+            write_dataset_path(path_folder=PATH_DATASETS_FOLDER, path_file=PATH_FILE_JSON_DATASET)
 
+        case ("json", "write", "extensions"):
+            write_extensions(path_folder=PATH_DATASETS_FOLDER, path_file=PATH_FILE_JSON_EXTENSIONS)
         case _:
             print(
                 "Commands:\n"

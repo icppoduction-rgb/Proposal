@@ -1,4 +1,5 @@
 from pathlib import Path
+from scripts.json_data import JsonData
 
 
 def collect_dataset_files(root_dir: str | Path) -> dict[str, dict[str, list[str]]]:
@@ -51,4 +52,38 @@ def collect_dataset_files(root_dir: str | Path) -> dict[str, dict[str, list[str]
             result[dataset_type][category] = files
 
     return result
+
+
+
+def collect_extensions(root_dir: str | Path) -> dict[str, list[str]]:
+    root_path = Path(root_dir)
+
+    extensions = {
+        file_path.suffix.lower()
+        for file_path in root_path.rglob("*")
+        if file_path.is_file() and file_path.suffix
+    }
+
+    return {
+        "extensions": sorted(extensions)
+    }
+
+
+# Функция осуществляет запись путей в json файл
+def write_dataset_path(path_folder: str, path_file: str) -> None:
+
+    result_dict_path = collect_dataset_files(path_folder)
+
+    json_data = JsonData(path_file)
+
+    json_data.write(result_dict_path)
+
+# Функция осуществляет запись расширение файлов в json
+def write_extensions(path_folder: str, path_file: str) -> None:
+
+    result_dict_extensions = collect_extensions(path_folder)
+
+    json_data = JsonData(path_file)
+
+    json_data.write(result_dict_extensions)
 
