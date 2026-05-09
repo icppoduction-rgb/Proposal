@@ -5,7 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7e503071-acf4-4819-884c-3e5b3e575231" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/ru/planing.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/ru/planing.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/manage.py" beforeDir="false" afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -59,11 +61,11 @@
       <recent name="C:\Users\fmark\PythonProjects\Proposal" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\ru" />
       <recent name="C:\Users\fmark\PythonProjects\Proposal\data-json" />
       <recent name="C:\Users\fmark\PythonProjects\Proposal\docs" />
       <recent name="C:\Users\fmark\PythonProjects\Proposal" />
       <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\technical_docs" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\ru" />
     </key>
   </component>
   <component name="SharedIndexes">

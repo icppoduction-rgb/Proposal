@@ -2,4 +2,4 @@
 Этап второй распределение датасетов по папкам TRAIN | VALIDATION | TEST | EXPERIMENTS
 Этап третий запись всех путей к файлам датасетов в json:
 { dns: { Train: [], VALIDATION: [], TEST: []}, host: {Train: [], VALIDATION: [], TEST: [], EXPERIMENTS: []} }
-
+Этап четвертый конвертация основной документации в .md файла, 

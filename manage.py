@@ -38,6 +38,7 @@ def manage():
 
         case ("json", "write", "extensions"):
             write_extensions(path_folder=PATH_DATASETS_FOLDER, path_file=PATH_FILE_JSON_EXTENSIONS)
+
         case _:
             print(
                 "Commands:\n"
