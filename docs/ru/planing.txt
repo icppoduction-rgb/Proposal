@@ -1,2 +1,5 @@
 Этап первый сбор датасетов
 Этап второй распределение датасетов по папкам TRAIN | VALIDATION | TEST | EXPERIMENTS
+Этап третий запись всех путей к файлам датасетов в json:
+{ dns: { Train: [], VALIDATION: [], TEST: []}, host: {Train: [], VALIDATION: [], TEST: [], EXPERIMENTS: []} }
+
