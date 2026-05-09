@@ -1,0 +1,159 @@
+{
+  "data_root": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host",
+  "strategy": {
+    "TRAIN": [
+      "ADFA IDS baseline HIDS training data",
+      "LID-DS 2021 core syscall sequence modelling data",
+      "Maintainable Log Dataset enterprise log and multi-stage attack data"
+    ],
+    "VALIDATION": [
+      "ADFA IDS validation baseline data",
+      "LID-DS 2019 cross-version syscall validation data",
+      "LID-DS 2021 validation holdout data",
+      "LANL Dataset user-host and authentication behaviour validation data",
+      "Windows Event Log / OTRF Security Datasets SOC-style Windows telemetry validation data"
+    ],
+    "TEST": [
+      "LID-DS 2021 final syscall sequence test data",
+      "Unified Host + Network Dataset / LANL hybrid host-network test data",
+      "ISOT Cloud IDS Dataset cloud environment test data",
+      "Dynamic Malware Analysis Dataset malware-driven host behaviour test data"
+    ],
+    "EXPERIMENTS": [
+      "HDFS Log Dataset log anomaly detection experiments",
+      "BGL Logs when available",
+      "Syscall Dataset Generator when available",
+      "COMIDDS when available"
+    ]
+  },
+  "results": [
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\ADFA IDS",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\TRAIN\\ADFA IDS",
+      "split": "TRAIN",
+      "reason": "Baseline HIDS training dataset with normal and attack host traces.",
+      "status": "completed_move",
+      "bytes": 22064340555
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\LID-DS 2021",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\TRAIN\\LID-DS 2021",
+      "split": "TRAIN",
+      "reason": "Core host-based sequence modelling training dataset based on system calls.",
+      "status": "completed_move",
+      "bytes": 1687244464
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\Maintainable Log Dataset",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\TRAIN\\Maintainable Log Dataset",
+      "split": "TRAIN",
+      "reason": "Enterprise log behaviour and multi-stage attack modelling training dataset.",
+      "status": "completed_move",
+      "bytes": 18087780295
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\ADFA IDS",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\VALIDATION\\ADFA IDS",
+      "split": "VALIDATION",
+      "reason": "Additional ADFA holdout data for baseline HIDS validation.",
+      "status": "completed_move",
+      "bytes": 2281300085
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\LID-DS 2019",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\VALIDATION\\LID-DS 2019",
+      "split": "VALIDATION",
+      "reason": "Cross-version syscall validation dataset for CVE-based attack scenarios.",
+      "status": "completed_move",
+      "bytes": 85876674579
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\LID-DS 2021",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\VALIDATION\\LID-DS 2021",
+      "split": "VALIDATION",
+      "reason": "LID-DS 2021 validation holdout for syscall sequence robustness checks.",
+      "status": "completed_move",
+      "bytes": 391876506
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\LANL Dataset",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\VALIDATION\\LANL Dataset",
+      "split": "VALIDATION",
+      "reason": "Enterprise user-host, authentication, and network behaviour validation dataset.",
+      "status": "completed_move",
+      "bytes": 60298811728
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\Windows-Event-Log -OTRF-Security-Datasets",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\VALIDATION\\Windows-Event-Log -OTRF-Security-Datasets",
+      "split": "VALIDATION",
+      "reason": "SOC-style Windows Event Log and Sysmon telemetry validation dataset.",
+      "status": "completed_move",
+      "bytes": 2979287399
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\LID-DS 2021",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\TEST\\LID-DS 2021",
+      "split": "TEST",
+      "reason": "Final syscall sequence test split for LID-DS 2021.",
+      "status": "completed_move",
+      "bytes": 7018313117
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\Unified-Host-Network-Dataset -LANL",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\TEST\\Unified-Host-Network-Dataset -LANL",
+      "split": "TEST",
+      "reason": "Hybrid host and network telemetry test dataset for feature-level fusion checks.",
+      "status": "completed_move",
+      "bytes": 60298811728
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\ISOT-Cloud-IDS-Dataset",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\TEST\\ISOT-Cloud-IDS-Dataset",
+      "split": "TEST",
+      "reason": "Cloud environment validation/test dataset for host-side detection portability.",
+      "status": "completed_move",
+      "bytes": 20166706
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\Dynamic-Malware-Analysis-Dataset",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\TEST\\Dynamic-Malware-Analysis-Dataset",
+      "split": "TEST",
+      "reason": "Malware-driven host behaviour test dataset with Cuckoo reports, logs, and artifacts.",
+      "status": "completed_move",
+      "bytes": 170806322177
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\HDFS-Log-Dataset",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\EXPERIMENTS\\HDFS-Log-Dataset",
+      "split": "EXPERIMENTS",
+      "reason": "Log anomaly detection experiment dataset.",
+      "status": "completed_move",
+      "bytes": 1828041800
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\BGL Logs",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\EXPERIMENTS\\BGL Logs",
+      "split": "EXPERIMENTS",
+      "reason": "Optional non-security log anomaly baseline dataset from the host strategy document.",
+      "status": "missing_optional",
+      "bytes": 0
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\Syscall Dataset Generator",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\EXPERIMENTS\\Syscall Dataset Generator",
+      "split": "EXPERIMENTS",
+      "reason": "Optional synthetic syscall augmentation source from the host strategy document.",
+      "status": "missing_optional",
+      "bytes": 0
+    },
+    {
+      "source": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\COMIDDS",
+      "destination": "C:\\Users\\fmark\\PythonProjects\\Proposal\\datasets\\host\\EXPERIMENTS\\COMIDDS",
+      "split": "EXPERIMENTS",
+      "reason": "Optional source for discovering additional host datasets.",
+      "status": "missing_optional",
+      "bytes": 0
+    }
+  ]
+}

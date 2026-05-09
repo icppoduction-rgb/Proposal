@@ -25,6 +25,8 @@
 
 <https://research.unsw.edu.au/projects/adfa-ids-datasets>
 
+<https://www.kaggle.com/datasets/alishamekhi/adfa-ids-datasets?resource=download>
+
 ### Факт
 
 ADFA IDS — классический benchmark для Host Intrusion Detection Systems.
@@ -137,7 +139,7 @@ TRAIN:
 
 ### Ссылка
 
-<https://arxiv.org/abs/2203.08580>
+<https://data.niaid.nih.gov/resources?id=zenodo_5789063>
 
 ### Факт
 
