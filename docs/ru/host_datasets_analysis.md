@@ -1,12 +1,12 @@
-# Host Dataset Strategy для проекта Host-Based Intrusion Detection и Hybrid IDS
+# Стратегия host-датасетов для Host-Based Intrusion Detection и Hybrid IDS
 
 ## 1. Назначение документа
 
-Документ фиксирует набор датасетов для обучения, валидации, тестирования и экспериментов в host-side части проекта по обнаружению вторжений, вредоносного поведения, аномалий пользователей и hybrid host + network activity.
+Документ фиксирует набор датасетов для обучения, валидации, тестирования и экспериментов в host-side части проекта по обнаружению вторжений, вредоносного поведения, пользовательских аномалий и гибридной активности host + network.
 
 Основная цель — не смешивать роли датасетов и использовать каждый набор данных по назначению:
 
-- **TRAIN** — обучение модели на normal / attack host traces, syscall sequences и enterprise logs.
+- **TRAIN** — обучение модели на нормальных и атакующих host traces, syscall sequences и enterprise logs.
 - **VALIDATION** — проверка устойчивости модели на других поколениях данных, user-host behavior и SOC telemetry.
 - **TEST** — финальная проверка обобщающей способности модели на hybrid, cloud и malware-driven данных.
 - **EXPERIMENTS** — быстрые эксперименты, log anomaly detection, synthetic augmentation и поиск дополнительных источников.
@@ -15,13 +15,13 @@
 
 # 2. Обязательные датасеты
 
-## 🥇 1. ADFA IDS
+## 1. ADFA IDS
 
 ### Роль
 
 **Основной baseline dataset для Host Intrusion Detection Systems.**
 
-### Ссылка
+### Ссылки
 
 <https://research.unsw.edu.au/projects/adfa-ids-datasets>
 
@@ -55,7 +55,7 @@ ADFA IDS — классический benchmark для Host Intrusion Detection 
 |---|---|
 | Random Forest | базовая ML-модель |
 | XGBoost | сильный baseline для табличных признаков |
-| LSTM | sequence modelling по system call sequences |
+| LSTM | моделирование последовательностей system calls |
 | CNN | анализ локальных паттернов syscall-последовательностей |
 
 ### Почему критичен
@@ -74,7 +74,7 @@ TRAIN:
 
 ---
 
-## 🥈 2. LID-DS 2021
+## 2. LID-DS 2021
 
 ### Роль
 
@@ -97,7 +97,7 @@ LID-DS 2021 — современный dataset для Linux-based intrusion dete
 
 ### Для чего нужен
 
-Используется как **core sequence modelling dataset** для обучения моделей, которые анализируют поведение процессов во времени.
+Используется как **core sequence modelling dataset** для обучения моделей, анализирующих поведение процессов во времени.
 
 Основные задачи:
 
@@ -111,7 +111,7 @@ LID-DS 2021 — современный dataset для Linux-based intrusion dete
 | Тип модели | Применение |
 |---|---|
 | LSTM | анализ последовательностей system calls |
-| GRU | более лёгкое sequence modelling |
+| GRU | более легкое sequence modelling |
 | CNN-LSTM | локальные syscall-паттерны + временная динамика |
 | Transformer-based models | моделирование длинных зависимостей в syscall sequences |
 
@@ -131,7 +131,7 @@ TRAIN:
 
 ---
 
-## 🥉 3. Maintainable Log Dataset
+## 3. Maintainable Log Dataset
 
 ### Роль
 
@@ -191,7 +191,7 @@ TRAIN:
 
 # 3. Дополнительные датасеты
 
-## 🟡 4. LID-DS 2019
+## 4. LID-DS 2019
 
 ### Роль
 
@@ -203,7 +203,7 @@ TRAIN:
 
 ### Факт
 
-LID-DS 2019 содержит CVE-based attack scenarios с system calls и параметрами.
+LID-DS 2019 содержит CVE-based attack scenarios с system calls и syscall parameters.
 
 ### Содержит
 
@@ -235,7 +235,7 @@ VALIDATION:
 
 ### Почему важен
 
-LID-DS 2019 даёт cross-dataset validation внутри одного семейства host-based datasets. Это помогает отделить реальное качество модели от переобучения на конкретные traces.
+LID-DS 2019 дает cross-dataset validation внутри одного семейства host-based datasets. Это помогает отделить реальное качество модели от переобучения на конкретные traces.
 
 ### Использование в проекте
 
@@ -249,7 +249,7 @@ VALIDATION:
 
 ---
 
-## 🟡 5. LANL Dataset
+## 5. LANL Dataset
 
 ### Роль
 
@@ -261,7 +261,7 @@ VALIDATION:
 
 ### Факт
 
-Los Alamos National Lab dataset содержит enterprise authentication logs и user-computer events.
+Los Alamos National Laboratory dataset содержит enterprise authentication logs и user-computer events.
 
 ### Содержит
 
@@ -297,7 +297,7 @@ VALIDATION:
 
 ---
 
-## 🟡 6. Windows Event Log / OTRF Security Datasets
+## 6. Windows Event Log / OTRF Security Datasets
 
 ### Роль
 
@@ -332,7 +332,7 @@ OTRF Security Datasets содержат Windows security logs, часто вкл
 
 ### Почему важен
 
-ADFA и LID-DS больше ориентированы на syscall-level detection. Windows Event Logs позволяют добавить SOC-практичность и связать research с реальными security operations.
+ADFA и LID-DS больше ориентированы на syscall-level detection. Windows Event Logs добавляют SOC-практичность и связывают research с реальными security operations.
 
 ### Использование в проекте
 
@@ -346,7 +346,7 @@ VALIDATION:
 
 ---
 
-## 🟢 7. Unified Host + Network Dataset / LANL
+## 7. Unified Host + Network Dataset / LANL
 
 ### Роль
 
@@ -376,7 +376,7 @@ Unified Host + Network Dataset / LANL — редкий dataset, объединя
 - насколько host-level признаки усиливают network-level detection;
 - можно ли объединить host telemetry и network telemetry;
 - насколько модель устойчива при multi-source input;
-- применимость к SOC-style hybrid IDS архитектуре.
+- применимость к SOC-style hybrid IDS architecture.
 
 ### Почему важен
 
@@ -394,7 +394,7 @@ TEST:
 
 ---
 
-## 🟢 8. ISOT Cloud IDS Dataset
+## 8. ISOT Cloud IDS Dataset
 
 ### Роль
 
@@ -442,7 +442,7 @@ TEST:
 
 ---
 
-## 🟢 9. Dynamic Malware Analysis Dataset
+## 9. Dynamic Malware Analysis Dataset
 
 ### Роль
 
@@ -489,7 +489,7 @@ TEST:
 
 ---
 
-## 🟢 10. HDFS Log Dataset
+## 10. HDFS Log Dataset
 
 ### Роль
 
@@ -561,96 +561,96 @@ EXPERIMENTS:
 
 ```text
 ADFA IDS
-→ baseline normal / attack host traces
-→ HIDS baseline
-→ comparison with classic research approaches
+-> baseline normal / attack host traces
+-> HIDS baseline
+-> сравнение с классическими research-подходами
 ```
 
 ```text
 LID-DS 2021
-→ syscall sequence modelling
-→ Linux host behavior
-→ LSTM / GRU / CNN-LSTM / Transformer models
+-> syscall sequence modelling
+-> Linux host behavior
+-> LSTM / GRU / CNN-LSTM / Transformer models
 ```
 
 ```text
 Maintainable Log Dataset
-→ enterprise log behavior modelling
-→ multi-stage attack behavior
-→ feature-level fusion
+-> enterprise log behavior modelling
+-> multi-stage attack behavior
+-> feature-level fusion
 ```
 
 ## VALIDATION
 
 ```text
 LID-DS 2019
-→ CVE-based attack scenarios
-→ cross-version validation
-→ syscall-level robustness check
+-> CVE-based attack scenarios
+-> cross-version validation
+-> проверка устойчивости syscall-level признаков
 ```
 
 ```text
 LANL Dataset
-→ user-host behavior
-→ authentication behavior
-→ lateral movement patterns
+-> user-host behavior
+-> authentication behavior
+-> lateral movement patterns
 ```
 
 ```text
 Windows Event Logs / OTRF
-→ SOC telemetry validation
-→ Windows host behavior
-→ Sysmon-style event analysis
+-> SOC telemetry validation
+-> Windows host behavior
+-> Sysmon-style event analysis
 ```
 
 ## TEST
 
 ```text
 Unified Host + Network Dataset / LANL
-→ hybrid IDS validation
-→ host + network correlation
-→ multi-source telemetry test
+-> hybrid IDS validation
+-> host + network correlation
+-> multi-source telemetry test
 ```
 
 ```text
 ISOT Cloud IDS Dataset
-→ cloud environment validation
-→ cloud logs / syscalls
-→ cloud workload robustness
+-> cloud environment validation
+-> cloud logs / syscalls
+-> cloud workload robustness
 ```
 
 ```text
 Dynamic Malware Analysis Dataset
-→ malware-driven host behavior
-→ suspicious process behavior
-→ exfiltration-related activity
+-> malware-driven host behavior
+-> suspicious process behavior
+-> exfiltration-related activity
 ```
 
 ## EXPERIMENTS
 
 ```text
 HDFS Log Dataset
-→ log anomaly experiments
-→ structured log sequences
-→ non-security anomaly baseline
+-> log anomaly experiments
+-> structured log sequences
+-> non-security anomaly baseline
 ```
 
 ```text
 BGL Logs
-→ non-security anomaly baseline
-→ additional log anomaly experiments
+-> non-security anomaly baseline
+-> additional log anomaly experiments
 ```
 
 ```text
 Syscall Dataset Generator
-→ synthetic syscall augmentation
-→ extra syscall traces
+-> synthetic syscall augmentation
+-> extra syscall traces
 ```
 
 ```text
 COMIDDS
-→ поиск дополнительных datasets
-→ расширение набора validation / test данных
+-> поиск дополнительных datasets
+-> расширение набора validation / test данных
 ```
 
 ---
@@ -662,7 +662,7 @@ COMIDDS
 Host-side часть проекта не должна опираться на один датасет, потому что разные источники покрывают разные уровни поведения:
 
 ```text
-ADFA IDS даёт классический HIDS baseline.
+ADFA IDS дает классический HIDS baseline.
 LID-DS 2021 учит модель syscall sequence modelling.
 Maintainable Log Dataset добавляет enterprise multi-stage behavior.
 LID-DS 2019 проверяет переносимость внутри syscall-family datasets.
@@ -696,13 +696,13 @@ process behavior
 + malware-driven behavior
 ```
 
-Поэтому для host-side части проекта лучше использовать **feature-level fusion**, а не пытаться механически объединять raw logs, syscalls и authentication events в один общий датасет.
+Поэтому для host-side части проекта лучше использовать **feature-level fusion**, а не пытаться механически объединять raw logs, syscalls и authentication events в один общий dataset.
 
 ---
 
 # 7. Минимальная обязательная конфигурация
 
-Для серьёзного host-side proposal минимальный набор должен быть таким:
+Для серьезного host-side proposal минимальный набор должен быть таким:
 
 | Приоритет | Датасет | Статус |
 |---|---|---|
@@ -725,7 +725,7 @@ LID-DS 2021
 Maintainable Log Dataset
 ```
 
-Без этих трёх источников host-side часть проекта будет недостаточно обоснованной.
+Без этих трех источников host-side часть проекта будет недостаточно обоснованной.
 
 ## Оптимальный стек для proposal
 
