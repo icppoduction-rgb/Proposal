@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Iterable
 from pathlib import Path
 
 
@@ -54,6 +54,34 @@ class JsonData:
             )
 
     # Метод обновления
+    def write_jsonl(self, records: Iterable[Any], ensure_ascii: bool = False) -> int:
+        """
+        Writes records to an NDJSON/JSONL file using one JSON document per line.
+
+        The method writes to a temporary file first and then atomically replaces
+        the target file, so interrupted conversions do not leave a partial output.
+        """
+
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_file_path = self.file_path.with_name(f"{self.file_path.name}.tmp")
+        written_records = 0
+
+        try:
+            with temp_file_path.open("w", encoding=self.encoding, newline="\n") as file:
+                for record in records:
+                    json.dump(record, file, ensure_ascii=ensure_ascii)
+                    file.write("\n")
+                    written_records += 1
+
+            temp_file_path.replace(self.file_path)
+
+        except Exception:
+            if temp_file_path.exists():
+                temp_file_path.unlink()
+            raise
+
+        return written_records
+
     def update(self, new_data: dict) -> dict:
         """
         Обновляет JSON-файл новыми данными.

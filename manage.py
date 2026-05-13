@@ -76,7 +76,6 @@ def manage():
                 dry_run=False,
             )
             print_cleanup_result(result, dry_run=False)
-
         case _:
             print(
                 "Commands:\n"
