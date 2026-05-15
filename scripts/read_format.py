@@ -8,12 +8,14 @@ import gzip
 import hashlib
 import html.parser
 import io
+import ipaddress
 import json
 import logging
 import plistlib
 import struct
 import sys
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -21,6 +23,45 @@ from xml.etree import ElementTree
 
 DEFAULT_TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "utf-16", "cp1251", "latin-1")
 DEFAULT_BINARY_PREVIEW_BYTES = 64 * 1024
+DEFAULT_DECODED_PREVIEW_BYTES = 256
+DEFAULT_PACKET_PAYLOAD_PREVIEW_BYTES = 128
+DEFAULT_DECODED_RECORD_PREVIEW_COUNT = 10
+DEFAULT_PCAP_RECORD_LIMIT = 10_000
+DEFAULT_CSV_ROW_LIMIT = 10_000
+
+
+PCAP_MAGIC_HEADERS = {
+    b"\xd4\xc3\xb2\xa1": ("<", "microsecond"),
+    b"\xa1\xb2\xc3\xd4": (">", "microsecond"),
+    b"\x4d\x3c\xb2\xa1": ("<", "nanosecond"),
+    b"\xa1\xb2\x3c\x4d": (">", "nanosecond"),
+}
+
+LINKTYPE_NAMES = {
+    1: "Ethernet",
+}
+
+ETHERNET_TYPE_NAMES = {
+    0x0800: "IPv4",
+    0x0806: "ARP",
+    0x86DD: "IPv6",
+}
+
+IP_PROTOCOL_NAMES = {
+    1: "ICMP",
+    6: "TCP",
+    17: "UDP",
+    58: "ICMPv6",
+}
+
+PCAPNG_SECTION_HEADER_BLOCK = 0x0A0D0D0A
+PCAPNG_INTERFACE_DESCRIPTION_BLOCK = 0x00000001
+PCAPNG_SIMPLE_PACKET_BLOCK = 0x00000003
+PCAPNG_ENHANCED_PACKET_BLOCK = 0x00000006
+PCAPNG_BYTE_ORDER_MAGIC = {
+    b"\x4d\x3c\x2b\x1a": "<",
+    b"\x1a\x2b\x3c\x4d": ">",
+}
 
 
 TEXT_EXTENSIONS = {
@@ -378,28 +419,101 @@ class CsvFileHandler(TextFileHandler):
 
     format_name = "csv"
 
+    def __init__(self, row_limit: int | None = DEFAULT_CSV_ROW_LIMIT) -> None:
+        """Initializes bounded CSV row extraction settings."""
+        self._row_limit = row_limit
+
     def read(self, path: Path) -> dict[str, Any]:
-        """Parses CSV content with delimiter sniffing and large-field support."""
-        content, encoding = self.read_text_content(path)
+        """Parses CSV content with streaming reads and large-field support."""
+        sample, encoding = self._read_text_sample(path)
         self._set_max_csv_field_size()
 
         try:
-            dialect = csv.Sniffer().sniff(content[:4096])
+            dialect = csv.Sniffer().sniff(sample)
         except csv.Error:
             dialect = csv.excel
 
+        has_header = self._detect_header(sample)
+        rows: list[dict[str, Any]] = []
+        rows_seen = 0
+        fieldnames: list[str] = []
+
         try:
-            with io.StringIO(content, newline="") as stream:
-                reader = csv.DictReader(stream, dialect=dialect)
-                rows = [dict(row) for row in reader]
+            with path.open("r", encoding=encoding, newline="") as stream:
+                if has_header:
+                    reader = csv.DictReader(stream, dialect=dialect)
+                    for row in reader:
+                        if self._should_store_csv_row(rows_seen):
+                            rows.append(dict(row))
+                        rows_seen += 1
+                        if not self._should_continue_csv_scan(rows_seen):
+                            break
+                    fieldnames = list(reader.fieldnames or [])
+                else:
+                    reader = csv.reader(stream, dialect=dialect)
+                    for row in reader:
+                        if not fieldnames:
+                            fieldnames = [f"column_{index}" for index in range(len(row))]
+                        if self._should_store_csv_row(rows_seen):
+                            rows.append(self._row_to_dict(row, fieldnames))
+                        rows_seen += 1
+                        if not self._should_continue_csv_scan(rows_seen):
+                            break
+        except (OSError, UnicodeDecodeError) as error:
+            raise FileReadError(f"Cannot read CSV file: {path}") from error
         except csv.Error as error:
             raise FileContentProcessingError(f"Cannot parse CSV file: {path}") from error
 
+        rows_truncated = self._row_limit is not None and rows_seen > len(rows)
         return {
             "type": self.format_name,
-            "metadata": self.metadata(path) | {"encoding": encoding, "rows": len(rows), "columns": reader.fieldnames or []},
+            "metadata": self.metadata(path)
+            | {
+                "encoding": encoding,
+                "has_header": has_header,
+                "rows": len(rows),
+                "rows_returned": len(rows),
+                "rows_scanned": rows_seen,
+                "rows_truncated": rows_truncated,
+                "row_limit": self._row_limit,
+                "columns": fieldnames,
+            },
             "content": rows,
         }
+
+    def _read_text_sample(self, path: Path, size: int = 64 * 1024) -> tuple[str, str]:
+        """Reads a small text sample to detect CSV encoding and dialect."""
+        payload = self.read_preview(path, size=size)
+
+        for encoding in DEFAULT_TEXT_ENCODINGS:
+            try:
+                return payload.decode(encoding), encoding
+            except UnicodeDecodeError:
+                continue
+
+        raise FileContentProcessingError(f"Cannot decode CSV sample with known encodings: {path}")
+
+    def _detect_header(self, sample: str) -> bool:
+        """Detects whether a CSV sample likely contains a header row."""
+        try:
+            return csv.Sniffer().has_header(sample)
+        except csv.Error:
+            return True
+
+    def _should_store_csv_row(self, row_index: int) -> bool:
+        """Returns whether a row should be materialized in the result."""
+        return self._row_limit is None or row_index < self._row_limit
+
+    def _should_continue_csv_scan(self, rows_seen: int) -> bool:
+        """Stops after one row beyond the limit to mark truncation cheaply."""
+        return self._row_limit is None or rows_seen <= self._row_limit
+
+    def _row_to_dict(self, row: list[str], fieldnames: list[str]) -> dict[str, Any]:
+        """Converts a headerless CSV row to a stable dictionary shape."""
+        normalized = {field: row[index] if index < len(row) else None for index, field in enumerate(fieldnames)}
+        if len(row) > len(fieldnames):
+            normalized["_extra"] = row[len(fieldnames):]
+        return normalized
 
     def _set_max_csv_field_size(self) -> None:
         """Raises CSV field size limit to support large dataset cells."""
@@ -851,35 +965,530 @@ class PcapFileHandler(BinaryFileHandler):
 
     format_name = "pcap"
 
+    def __init__(self, record_limit: int | None = DEFAULT_PCAP_RECORD_LIMIT) -> None:
+        """Initializes packet record extraction settings."""
+        self._record_limit = record_limit
+
     def read(self, path: Path) -> dict[str, Any]:
-        """Reads PCAP header fields when the magic number is known."""
-        sample = self.read_preview(path)
-        result = super().read(path)
-        result["type"] = self.format_name
-        result["metadata"] = result["metadata"] | self._parse_pcap_metadata(sample)
-        return result
+        """Reads PCAP bytes and extracts packet records without embedding raw binary content."""
+        payload = self.read_bytes(path)
+        metadata, parser = self._parse_capture_header(payload, path)
+        if parser["container"] == "pcapng":
+            records, records_total, records_truncated, interfaces = self._parse_pcapng_packet_records(payload, parser)
+            metadata |= self._pcapng_interface_metadata(interfaces)
+        else:
+            records, records_total, records_truncated = self._parse_pcap_packet_records(payload, parser)
 
-    def _parse_pcap_metadata(self, payload: bytes) -> dict[str, Any]:
-        """Extracts PCAP version, snaplen and network type from global header."""
-        magic = payload[:4]
-        metadata: dict[str, Any] = {"magic_hex": magic.hex()}
-
-        if magic in {b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d"} and len(payload) >= 24:
-            byte_order = "<" if magic in {b"\xd4\xc3\xb2\xa1", b"\x4d\x3c\xb2\xa1"} else ">"
-            version_major, version_minor, _thiszone, _sigfigs, snaplen, network = struct.unpack(
-                f"{byte_order}HHIIII",
-                payload[4:24],
-            )
-            metadata |= {
-                "pcap_type": "pcap",
-                "version": f"{version_major}.{version_minor}",
-                "snaplen": snaplen,
-                "network": network,
+        return {
+            "type": self.format_name,
+            "format": self.format_name,
+            "metadata": self.metadata(path)
+            | {
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "source_bytes": len(payload),
+                "content_base64_included": False,
+                "records": records_total,
+                "records_total": records_total,
+                "records_returned": len(records),
+                "records_truncated": records_truncated,
+                "record_limit": self._record_limit,
             }
-        elif magic == b"\x0a\x0d\x0d\x0a":
-            metadata["pcap_type"] = "pcapng"
+            | metadata,
+            "records": records,
+            "decoded_content": self._decode_pcap_content(payload, records, records_total),
+        }
+
+    def _parse_capture_header(self, payload: bytes, path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Extracts global capture metadata for classic PCAP or PCAPNG."""
+        if payload[:4] == b"\x0a\x0d\x0d\x0a":
+            return self._parse_pcapng_header(payload, path)
+        return self._parse_pcap_header(payload, path)
+
+    def _parse_pcap_header(self, payload: bytes, path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Extracts PCAP global header and parser settings."""
+        if len(payload) < 24:
+            raise FileContentProcessingError(f"PCAP file is too small to contain a global header: {path}")
+
+        magic = payload[:4]
+        parser_settings = PCAP_MAGIC_HEADERS.get(magic)
+        if parser_settings is None:
+            raise FileContentProcessingError(f"Unsupported PCAP magic header '{magic.hex()}': {path}")
+
+        byte_order, timestamp_precision = parser_settings
+        version_major, version_minor, _thiszone, _sigfigs, snaplen, network = struct.unpack(
+            f"{byte_order}HHIIII",
+            payload[4:24],
+        )
+
+        metadata = {
+            "magic_hex": magic.hex(),
+            "pcap_type": "pcap",
+            "version": f"{version_major}.{version_minor}",
+            "snaplen": snaplen,
+            "network": network,
+            "link_type": LINKTYPE_NAMES.get(network, f"LINKTYPE_{network}"),
+            "timestamp_precision": timestamp_precision,
+        }
+        parser = {
+            "container": "pcap",
+            "byte_order": byte_order,
+            "timestamp_precision": timestamp_precision,
+            "network": network,
+        }
+        return metadata, parser
+
+    def _parse_pcapng_header(self, payload: bytes, path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Extracts PCAPNG section header and parser settings."""
+        if len(payload) < 28:
+            raise FileContentProcessingError(f"PCAPNG file is too small to contain a section header: {path}")
+
+        byte_order = PCAPNG_BYTE_ORDER_MAGIC.get(payload[8:12])
+        if byte_order is None:
+            raise FileContentProcessingError(f"Unsupported PCAPNG byte-order magic '{payload[8:12].hex()}': {path}")
+
+        block_type, block_total_length = struct.unpack(f"{byte_order}II", payload[:8])
+        if block_type != PCAPNG_SECTION_HEADER_BLOCK or block_total_length < 28 or block_total_length > len(payload):
+            raise FileContentProcessingError(f"Invalid PCAPNG section header block: {path}")
+
+        version_major, version_minor = struct.unpack(f"{byte_order}HH", payload[12:16])
+        section_length = struct.unpack(f"{byte_order}q", payload[16:24])[0]
+        metadata = {
+            "magic_hex": payload[:4].hex(),
+            "pcap_type": "pcapng",
+            "version": f"{version_major}.{version_minor}",
+            "section_length": section_length,
+            "timestamp_precision": "microsecond",
+        }
+        parser = {
+            "container": "pcapng",
+            "byte_order": byte_order,
+            "timestamp_precision": "microsecond",
+        }
+        return metadata, parser
+
+    def _decode_pcap_content(self, payload: bytes, records: list[dict[str, Any]], records_total: int) -> dict[str, Any]:
+        """Returns a human-readable view of the base64-encoded PCAP bytes."""
+        preview = payload[:DEFAULT_DECODED_PREVIEW_BYTES]
+        return {
+            "source_bytes": len(payload),
+            "preview_bytes": len(preview),
+            "preview_hex": self._format_hex(preview),
+            "preview_ascii": self._format_ascii(preview),
+            "packets_parsed": records_total,
+            "packets_returned": len(records),
+            "packets_preview": records[:DEFAULT_DECODED_RECORD_PREVIEW_COUNT],
+        }
+
+    def _parse_pcap_packet_records(self, payload: bytes, parser: dict[str, Any]) -> tuple[list[dict[str, Any]], int, bool]:
+        """Parses packet records from a classic PCAP payload."""
+        byte_order = str(parser["byte_order"])
+        offset = 24
+        packets: list[dict[str, Any]] = []
+        records_total = 0
+
+        while offset + 16 <= len(payload):
+            ts_seconds, ts_fraction, captured_length, original_length = struct.unpack(
+                f"{byte_order}IIII",
+                payload[offset:offset + 16],
+            )
+            packet_start = offset + 16
+            packet_end = min(packet_start + captured_length, len(payload))
+            packet_payload = payload[packet_start:packet_end]
+            if self._should_store_record(records_total):
+                packet_metadata = self._decode_packet_payload(packet_payload, int(parser["network"]))
+                packets.append(
+                    self._empty_packet_record()
+                    | {
+                        "index": records_total,
+                        "timestamp": self._format_timestamp(
+                            ts_seconds,
+                            ts_fraction,
+                            str(parser["timestamp_precision"]),
+                        ),
+                        "timestamp_seconds": ts_seconds,
+                        "timestamp_fraction": ts_fraction,
+                        "packet_length": original_length,
+                        "captured_length": captured_length,
+                        "original_length": original_length,
+                        "available_payload_bytes": len(packet_payload),
+                        "truncated": len(packet_payload) < captured_length,
+                    }
+                    | packet_metadata
+                )
+            records_total += 1
+
+            if len(packet_payload) < captured_length:
+                break
+
+            offset = packet_start + captured_length
+
+        return packets, records_total, records_total > len(packets)
+
+    def _parse_pcapng_packet_records(self, payload: bytes, parser: dict[str, Any]) -> tuple[list[dict[str, Any]], int, bool, list[dict[str, Any]]]:
+        """Parses packet records from PCAPNG interface and packet blocks."""
+        byte_order = str(parser["byte_order"])
+        offset = 0
+        packets: list[dict[str, Any]] = []
+        interfaces: list[dict[str, Any]] = []
+        records_total = 0
+
+        while offset + 12 <= len(payload):
+            block_type, block_total_length = struct.unpack(f"{byte_order}II", payload[offset:offset + 8])
+            if block_total_length < 12 or offset + block_total_length > len(payload):
+                break
+
+            body_start = offset + 8
+            body_end = offset + block_total_length - 4
+            body = payload[body_start:body_end]
+
+            if block_type == PCAPNG_SECTION_HEADER_BLOCK:
+                section_byte_order = PCAPNG_BYTE_ORDER_MAGIC.get(body[:4])
+                if section_byte_order is not None:
+                    byte_order = section_byte_order
+            elif block_type == PCAPNG_INTERFACE_DESCRIPTION_BLOCK:
+                interfaces.append(self._parse_pcapng_interface(body, byte_order))
+            elif block_type == PCAPNG_ENHANCED_PACKET_BLOCK:
+                packet = None
+                if self._should_store_record(records_total):
+                    packet = self._parse_pcapng_enhanced_packet(body, byte_order, interfaces, records_total)
+                if packet is not None:
+                    packets.append(packet)
+                records_total += 1
+            elif block_type == PCAPNG_SIMPLE_PACKET_BLOCK:
+                packet = None
+                if self._should_store_record(records_total):
+                    packet = self._parse_pcapng_simple_packet(body, byte_order, interfaces, records_total)
+                if packet is not None:
+                    packets.append(packet)
+                records_total += 1
+
+            offset += block_total_length
+
+        return packets, records_total, records_total > len(packets), interfaces
+
+    def _should_store_record(self, record_index: int) -> bool:
+        """Returns whether a packet record should be materialized in the result."""
+        return self._record_limit is None or record_index < self._record_limit
+
+    def _parse_pcapng_interface(self, body: bytes, byte_order: str) -> dict[str, Any]:
+        """Parses a PCAPNG Interface Description Block."""
+        if len(body) < 8:
+            return {"network": 0, "link_type": "LINKTYPE_0", "snaplen": 0, "timestamp_precision": "microsecond"}
+
+        network, _reserved, snaplen = struct.unpack(f"{byte_order}HHI", body[:8])
+        options = self._parse_pcapng_options(body[8:], byte_order)
+        timestamp_precision = self._parse_pcapng_timestamp_precision(options.get(9))
+        return {
+            "network": network,
+            "link_type": LINKTYPE_NAMES.get(network, f"LINKTYPE_{network}"),
+            "snaplen": snaplen,
+            "timestamp_precision": timestamp_precision,
+        }
+
+    def _parse_pcapng_enhanced_packet(
+        self,
+        body: bytes,
+        byte_order: str,
+        interfaces: list[dict[str, Any]],
+        index: int,
+    ) -> dict[str, Any] | None:
+        """Parses a PCAPNG Enhanced Packet Block."""
+        if len(body) < 20:
+            return None
+
+        interface_id, timestamp_high, timestamp_low, captured_length, original_length = struct.unpack(
+            f"{byte_order}IIIII",
+            body[:20],
+        )
+        packet_start = 20
+        packet_end = min(packet_start + captured_length, len(body))
+        packet_payload = body[packet_start:packet_end]
+        interface = interfaces[interface_id] if interface_id < len(interfaces) else {}
+        network = int(interface.get("network", 0))
+        timestamp_precision = str(interface.get("timestamp_precision", "microsecond"))
+        timestamp_value = (timestamp_high << 32) | timestamp_low
+
+        return (
+            self._empty_packet_record()
+            | {
+                "index": index,
+                "interface_id": interface_id,
+                "timestamp": self._format_pcapng_timestamp(timestamp_value, timestamp_precision),
+                "timestamp_seconds": self._pcapng_timestamp_seconds(timestamp_value, timestamp_precision),
+                "timestamp_fraction": self._pcapng_timestamp_fraction(timestamp_value, timestamp_precision),
+                "packet_length": original_length,
+                "captured_length": captured_length,
+                "original_length": original_length,
+                "available_payload_bytes": len(packet_payload),
+                "truncated": len(packet_payload) < captured_length,
+            }
+            | self._decode_packet_payload(packet_payload, network)
+        )
+
+    def _parse_pcapng_simple_packet(
+        self,
+        body: bytes,
+        byte_order: str,
+        interfaces: list[dict[str, Any]],
+        index: int,
+    ) -> dict[str, Any] | None:
+        """Parses a PCAPNG Simple Packet Block without timestamp metadata."""
+        if len(body) < 4:
+            return None
+
+        original_length = struct.unpack(f"{byte_order}I", body[:4])[0]
+        captured_length = min(original_length, len(body) - 4)
+        packet_payload = body[4:4 + captured_length]
+        interface = interfaces[0] if interfaces else {}
+        network = int(interface.get("network", 0))
+        return (
+            self._empty_packet_record()
+            | {
+                "index": index,
+                "interface_id": 0,
+                "packet_length": original_length,
+                "captured_length": len(packet_payload),
+                "original_length": original_length,
+                "available_payload_bytes": len(packet_payload),
+                "truncated": len(packet_payload) < original_length,
+            }
+            | self._decode_packet_payload(packet_payload, network)
+        )
+
+    def _parse_pcapng_options(self, payload: bytes, byte_order: str) -> dict[int, bytes]:
+        """Parses PCAPNG block options into raw values keyed by option code."""
+        options: dict[int, bytes] = {}
+        offset = 0
+        while offset + 4 <= len(payload):
+            code, length = struct.unpack(f"{byte_order}HH", payload[offset:offset + 4])
+            offset += 4
+            if code == 0:
+                break
+            value = payload[offset:offset + length]
+            options[code] = value
+            offset += length + self._pcapng_padding(length)
+
+        return options
+
+    def _parse_pcapng_timestamp_precision(self, value: bytes | None) -> str:
+        """Returns timestamp precision from PCAPNG if_tsresol option."""
+        if not value:
+            return "microsecond"
+
+        resolution = value[0]
+        if resolution & 0x80:
+            return f"2^-{resolution & 0x7F}"
+        if resolution == 9:
+            return "nanosecond"
+        if resolution == 6:
+            return "microsecond"
+        return f"10^-{resolution}"
+
+    def _pcapng_interface_metadata(self, interfaces: list[dict[str, Any]]) -> dict[str, Any]:
+        """Builds summary metadata for PCAPNG interfaces."""
+        first_interface = interfaces[0] if interfaces else {}
+        return {
+            "interfaces": len(interfaces),
+            "network": first_interface.get("network"),
+            "link_type": first_interface.get("link_type"),
+            "snaplen": first_interface.get("snaplen"),
+        }
+
+    def _pcapng_padding(self, length: int) -> int:
+        """Returns PCAPNG 32-bit alignment padding length."""
+        return (4 - (length % 4)) % 4
+
+    def _format_pcapng_timestamp(self, value: int, precision: str) -> str:
+        """Formats a PCAPNG timestamp as UTC ISO-8601."""
+        denominator = self._pcapng_timestamp_denominator(precision)
+        seconds = value // denominator
+        fraction = value % denominator
+        microsecond = fraction * 1_000_000 // denominator
+        return datetime.fromtimestamp(seconds, tz=timezone.utc).replace(microsecond=microsecond).isoformat()
+
+    def _pcapng_timestamp_seconds(self, value: int, precision: str) -> int:
+        """Returns whole seconds from a PCAPNG timestamp value."""
+        return value // self._pcapng_timestamp_denominator(precision)
+
+    def _pcapng_timestamp_fraction(self, value: int, precision: str) -> int:
+        """Returns the raw fractional component for a PCAPNG timestamp value."""
+        return value % self._pcapng_timestamp_denominator(precision)
+
+    def _pcapng_timestamp_denominator(self, precision: str) -> int:
+        """Returns timestamp units per second for a PCAPNG precision descriptor."""
+        if precision == "nanosecond":
+            return 1_000_000_000
+        if precision == "microsecond":
+            return 1_000_000
+        if precision.startswith("10^-"):
+            return 10 ** int(precision.removeprefix("10^-"))
+        if precision.startswith("2^-"):
+            return 2 ** int(precision.removeprefix("2^-"))
+        return 1_000_000
+
+    def _empty_packet_record(self) -> dict[str, Any]:
+        """Builds a stable packet record shape for missing optional metadata."""
+        return {
+            "timestamp": None,
+            "packet_length": None,
+            "captured_length": None,
+            "link_protocol": None,
+            "network_protocol": None,
+            "src_ip": None,
+            "dst_ip": None,
+            "transport_protocol": None,
+            "src_port": None,
+            "dst_port": None,
+            "payload_length": None,
+            "has_payload": False,
+            "payload_hex_preview": "",
+            "payload_ascii_preview": "",
+        }
+
+    def _decode_packet_payload(self, payload: bytes, link_type: int) -> dict[str, Any]:
+        """Extracts basic L2/L3/L4 metadata without decoding application protocols."""
+        if link_type != 1:
+            return {
+                "link_protocol": LINKTYPE_NAMES.get(link_type, f"LINKTYPE_{link_type}"),
+                "payload_length": len(payload),
+                "has_payload": bool(payload),
+                "payload_hex_preview": self._format_hex(payload[:DEFAULT_PACKET_PAYLOAD_PREVIEW_BYTES]),
+                "payload_ascii_preview": self._format_ascii(payload[:DEFAULT_PACKET_PAYLOAD_PREVIEW_BYTES]),
+            }
+
+        metadata = self._decode_ethernet_frame(payload)
+        preview_payload = metadata.pop("_payload_preview", payload)
+        metadata["payload_hex_preview"] = self._format_hex(preview_payload[:DEFAULT_PACKET_PAYLOAD_PREVIEW_BYTES])
+        metadata["payload_ascii_preview"] = self._format_ascii(preview_payload[:DEFAULT_PACKET_PAYLOAD_PREVIEW_BYTES])
+        return metadata
+
+    def _decode_ethernet_frame(self, payload: bytes) -> dict[str, Any]:
+        """Decodes an Ethernet frame and supported network-layer headers."""
+        metadata: dict[str, Any] = {
+            "link_protocol": "Ethernet",
+            "payload_length": max(len(payload) - 14, 0),
+            "has_payload": len(payload) > 14,
+            "_payload_preview": payload[14:] if len(payload) > 14 else b"",
+        }
+        if len(payload) < 14:
+            return metadata
+
+        ether_type_offset = 12
+        ether_type = struct.unpack("!H", payload[ether_type_offset:ether_type_offset + 2])[0]
+        frame_offset = 14
+
+        while ether_type in {0x8100, 0x88A8} and len(payload) >= frame_offset + 4:
+            ether_type = struct.unpack("!H", payload[frame_offset + 2:frame_offset + 4])[0]
+            frame_offset += 4
+
+        metadata["network_protocol"] = ETHERNET_TYPE_NAMES.get(ether_type, f"0x{ether_type:04x}")
+        frame_payload = payload[frame_offset:]
+        metadata["_payload_preview"] = frame_payload
+
+        if ether_type == 0x0800:
+            metadata |= self._decode_ipv4_packet(frame_payload)
+        elif ether_type == 0x86DD:
+            metadata |= self._decode_ipv6_packet(frame_payload)
 
         return metadata
+
+    def _decode_ipv4_packet(self, payload: bytes) -> dict[str, Any]:
+        """Decodes basic IPv4 and transport header metadata."""
+        if len(payload) < 20:
+            return {"network_protocol": "IPv4", "payload_length": 0, "has_payload": False}
+
+        version = payload[0] >> 4
+        ihl = (payload[0] & 0x0F) * 4
+        if version != 4 or ihl < 20 or len(payload) < ihl:
+            return {"network_protocol": "IPv4", "payload_length": 0, "has_payload": False}
+
+        total_length = struct.unpack("!H", payload[2:4])[0]
+        protocol_number = payload[9]
+        packet_length = min(total_length, len(payload)) if total_length else len(payload)
+        transport_payload = payload[ihl:packet_length]
+        metadata = {
+            "network_protocol": "IPv4",
+            "src_ip": str(ipaddress.ip_address(payload[12:16])),
+            "dst_ip": str(ipaddress.ip_address(payload[16:20])),
+            "transport_protocol": IP_PROTOCOL_NAMES.get(protocol_number, str(protocol_number)),
+            "payload_length": len(transport_payload),
+            "has_payload": bool(transport_payload),
+            "_payload_preview": transport_payload,
+        }
+        return metadata | self._decode_transport_segment(protocol_number, transport_payload)
+
+    def _decode_ipv6_packet(self, payload: bytes) -> dict[str, Any]:
+        """Decodes basic IPv6 and direct transport header metadata."""
+        if len(payload) < 40 or payload[0] >> 4 != 6:
+            return {"network_protocol": "IPv6", "payload_length": 0, "has_payload": False}
+
+        payload_length = struct.unpack("!H", payload[4:6])[0]
+        protocol_number = payload[6]
+        packet_end = min(40 + payload_length, len(payload))
+        transport_payload = payload[40:packet_end]
+        metadata = {
+            "network_protocol": "IPv6",
+            "src_ip": str(ipaddress.ip_address(payload[8:24])),
+            "dst_ip": str(ipaddress.ip_address(payload[24:40])),
+            "transport_protocol": IP_PROTOCOL_NAMES.get(protocol_number, str(protocol_number)),
+            "payload_length": len(transport_payload),
+            "has_payload": bool(transport_payload),
+            "_payload_preview": transport_payload,
+        }
+        return metadata | self._decode_transport_segment(protocol_number, transport_payload)
+
+    def _decode_transport_segment(self, protocol_number: int, payload: bytes) -> dict[str, Any]:
+        """Decodes basic TCP/UDP/ICMP metadata without L7 parsing."""
+        if protocol_number == 17 and len(payload) >= 8:
+            udp_length = struct.unpack("!H", payload[4:6])[0]
+            payload_end = min(max(udp_length, 8), len(payload))
+            app_payload = payload[8:payload_end]
+            return {
+                "src_port": struct.unpack("!H", payload[0:2])[0],
+                "dst_port": struct.unpack("!H", payload[2:4])[0],
+                "payload_length": len(app_payload),
+                "has_payload": bool(app_payload),
+                "_payload_preview": app_payload,
+            }
+
+        if protocol_number == 6 and len(payload) >= 20:
+            data_offset = (payload[12] >> 4) * 4
+            app_payload = payload[data_offset:] if data_offset >= 20 and len(payload) >= data_offset else b""
+            return {
+                "src_port": struct.unpack("!H", payload[0:2])[0],
+                "dst_port": struct.unpack("!H", payload[2:4])[0],
+                "payload_length": len(app_payload),
+                "has_payload": bool(app_payload),
+                "_payload_preview": app_payload,
+            }
+
+        if protocol_number in {1, 58} and len(payload) >= 8:
+            app_payload = payload[8:]
+            return {
+                "payload_length": len(app_payload),
+                "has_payload": bool(app_payload),
+                "_payload_preview": app_payload,
+            }
+
+        return {}
+
+    def _format_timestamp(self, seconds: int, fraction: int, precision: str) -> str:
+        """Formats a PCAP timestamp as UTC ISO-8601."""
+        if precision == "nanosecond":
+            microsecond = fraction // 1000
+        else:
+            microsecond = fraction
+
+        microsecond = max(0, min(microsecond, 999999))
+        return datetime.fromtimestamp(seconds, tz=timezone.utc).replace(microsecond=microsecond).isoformat()
+
+    def _format_hex(self, payload: bytes) -> str:
+        """Formats bytes as space-separated hexadecimal for safe display."""
+        return payload.hex(" ")
+
+    def _format_ascii(self, payload: bytes) -> str:
+        """Formats bytes as printable ASCII, replacing binary bytes with dots."""
+        return "".join(chr(byte) if 32 <= byte <= 126 else "." for byte in payload)
 
 
 class PlistFileHandler(BaseFileHandler):
@@ -905,10 +1514,16 @@ class PlistFileHandler(BaseFileHandler):
 class FileFormatReader:
     """Facade for reading supported file formats through registered handlers."""
 
-    def __init__(self, log_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        log_path: str | Path | None = None,
+        pcap_record_limit: int | None = DEFAULT_PCAP_RECORD_LIMIT,
+        csv_row_limit: int | None = DEFAULT_CSV_ROW_LIMIT,
+    ) -> None:
         """Initializes handler registry and optional file logging."""
         self._handlers: dict[str, BaseFileHandler] = {}
-        self._pcap_handler = PcapFileHandler()
+        self._pcap_handler = PcapFileHandler(record_limit=pcap_record_limit)
+        self._csv_handler = CsvFileHandler(row_limit=csv_row_limit)
         self._logger = self._build_logger(log_path)
         self._register_default_handlers()
 
@@ -973,7 +1588,7 @@ class FileFormatReader:
         """Selects a handler by extension with special support for rotated PCAP names."""
         extension = path.suffix.lower()
 
-        if ".pcap." in path.name.lower() and extension in self._handlers:
+        if self._is_rotated_pcap_path(path):
             return self._pcap_handler
 
         handler = self._handlers.get(extension)
@@ -981,6 +1596,10 @@ class FileFormatReader:
             raise UnsupportedFormatError(f"Unsupported file format '{extension or '<none>'}': {path}")
 
         return handler
+
+    def _is_rotated_pcap_path(self, path: Path) -> bool:
+        """Returns True for capture files named like traffic.pcap.<timestamp>."""
+        return ".pcap." in path.name.lower() and path.suffix.lower() in TIMESTAMP_PCAP_EXTENSIONS
 
     def _register_default_handlers(self) -> None:
         """Registers all built-in file format handlers."""
@@ -998,7 +1617,7 @@ class FileFormatReader:
 
         specialized_handlers: dict[str, BaseFileHandler] = {
             ".bson": binary_handler,
-            ".csv": CsvFileHandler(),
+            ".csv": self._csv_handler,
             ".docx": DocxFileHandler(),
             ".drawio": XmlFileHandler(),
             ".gz": GzipFileHandler(),
@@ -1062,9 +1681,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Read a supported file and print normalized JSON.")
     parser.add_argument("path", help="Path to a file")
     parser.add_argument("--log-path", help="Optional path to an error log file")
+    parser.add_argument(
+        "--pcap-record-limit",
+        type=int,
+        default=DEFAULT_PCAP_RECORD_LIMIT,
+        help=f"Maximum packet records to include for PCAP/PCAPNG files, default: {DEFAULT_PCAP_RECORD_LIMIT}",
+    )
+    parser.add_argument("--all-pcap-records", action="store_true", help="Include every packet record from PCAP/PCAPNG files")
+    parser.add_argument(
+        "--csv-row-limit",
+        type=int,
+        default=DEFAULT_CSV_ROW_LIMIT,
+        help=f"Maximum rows to include for CSV files, default: {DEFAULT_CSV_ROW_LIMIT}",
+    )
+    parser.add_argument("--all-csv-rows", action="store_true", help="Include every row from CSV files")
     args = parser.parse_args()
 
-    reader = FileFormatReader(log_path=args.log_path)
+    pcap_record_limit = None if args.all_pcap_records else args.pcap_record_limit
+    csv_row_limit = None if args.all_csv_rows else args.csv_row_limit
+    reader = FileFormatReader(log_path=args.log_path, pcap_record_limit=pcap_record_limit, csv_row_limit=csv_row_limit)
     result = reader.read(args.path)
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 

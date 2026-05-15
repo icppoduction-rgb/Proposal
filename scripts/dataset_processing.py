@@ -16,7 +16,7 @@ SELECTED_DATASETS: dict[str, set[str]] = {
         "CIC-Bell-DNS-EXF-2021",
         "CIC-Bell-DNS-2021",
         "BCCC-CIC-Bell-DNS-2024",
-        "Mendeley DNS Exfiltration Dataset",
+        "Mendeley-DNS-Exfiltration-Dataset",
         "Kaggle DNS Tunneling Dataset",
     },
     "host": {

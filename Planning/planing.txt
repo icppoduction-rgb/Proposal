@@ -1,4 +1,5 @@
 Этап первый сбор датасетов:
+
 Сбор датасетов осуществляется посредством скачивания доступных датасетов из интернета подробности содержатся файлах
 -docs/en/host_datasets_analysis.md
 -docs/en/dns_dataset_strategy.md
@@ -19,4 +20,7 @@ python manage.py convert dns train
 data-json/dataset-processed-extensions.json
 {extensions: []}
 
+Этап четвертый преобразование datasets/dns файлов в единый формат json
 
+Чтение данных datasets/dns с помощью read_format.py полученные данные ввиде словаря
+будут записываться в json формате в "datasets-new/dns"

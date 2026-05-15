@@ -2,11 +2,13 @@ import os
 import argparse
 
 from dotenv import load_dotenv
+from rich.console import Console
 
-from scripts.dataset_path import write_dataset_path, write_extensions
-from scripts.dataset_format_cleanup import cleanup_unreadable_dataset_files, print_cleanup_result
-from scripts.dataset_processing import print_processing_result, process_datasets
+from scripts.convertion.dns_convertion import convertion
 from scripts.dataset_processing import build_processed_file_paths
+from scripts.dataset_path import write_dataset_path, write_extensions
+from scripts.dataset_processing import print_processing_result, process_datasets
+from scripts.dataset_format_cleanup import cleanup_unreadable_dataset_files, print_cleanup_result
 
 load_dotenv()
 
@@ -17,6 +19,12 @@ PATH_FILE_JSON_DATASET: str = os.getenv("PATH_FILE_JSON_DATASET", "")
 PATH_FILE_JSON_EXTENSIONS: str = os.getenv("PATH_FILE_JSON_EXTENSIONS", "")
 PATH_FILE_JSON_PROCESSED_DATASET, PATH_FILE_JSON_PROCESSED_EXTENSIONS = build_processed_file_paths(PATH_FILE_JSON_DATASET)
 
+PATH_DATASETS_NEW_FOLDER: str = os.getenv("PATH_DATASETS_NEW_FOLDER", "")
+PATH_DATASETS_NEW_DNS_FOLDER: str = os.getenv("PATH_DATASETS_NEW_DNS_FOLDER", "")
+
+PATH_LOG_DATA: str = os.getenv("PATH_LOG_DATA", "")
+
+console = Console()
 
 parser = argparse.ArgumentParser()
 
@@ -76,6 +84,37 @@ def manage():
                 dry_run=False,
             )
             print_cleanup_result(result, dry_run=False)
+
+        case ("convert", "dns", "train"):
+
+            console.print("==> [bold blue]start command: convert dns train[/bold blue]")
+            convertion(
+                dns_key=args.action,
+                path_log_data=PATH_LOG_DATA,
+                path_file_json_dataset=PATH_FILE_JSON_DATASET,
+                path_dataset_new_dns=PATH_DATASETS_NEW_DNS_FOLDER
+            )
+
+        case ("convert", "dns", "validation"):
+
+            console.print("==> [bold blue]start command: convert dns validation[/bold blue]")
+            convertion(
+                dns_key=args.action,
+                path_log_data=PATH_LOG_DATA,
+                path_file_json_dataset=PATH_FILE_JSON_DATASET,
+                path_dataset_new_dns=PATH_DATASETS_NEW_DNS_FOLDER
+            )
+
+        case ("convert", "dns", "test"):
+
+            console.print("==> [bold blue]start command: convert dns test[/bold blue]")
+            convertion(
+                dns_key=args.action,
+                path_log_data=PATH_LOG_DATA,
+                path_file_json_dataset=PATH_FILE_JSON_DATASET,
+                path_dataset_new_dns=PATH_DATASETS_NEW_DNS_FOLDER
+            )
+
         case _:
             print(
                 "Commands:\n"
@@ -85,6 +124,7 @@ def manage():
                 "json process datasets: Write processed dataset json files and delete unselected datasets\n"
                 "json cleanup unreadable-dry-run: Show unreadable files selected for deletion\n"
                 "json cleanup unreadable: Delete unreadable files and update processed json files\n"
+                "convert dns train: \n"
             )
 
 

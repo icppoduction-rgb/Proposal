@@ -5,12 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7e503071-acf4-4819-884c-3e5b3e575231" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/ru/dns_dataset_strategy.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/ru/dns_dataset_strategy.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/ru/host_datasets_analysis.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/ru/host_datasets_analysis.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/ru/planing.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/planing.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/ru/project_proposal_analysis.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/ru/project_proposal_analysis.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/json_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/json_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Planning/Tasks.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/Tasks.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Planning/planing.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/planing.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/manage.py" beforeDir="false" afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/dataset_processing.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/dataset_processing.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/read_format.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/read_format.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -53,7 +55,7 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.keymap"
+    "settings.editor.selected.configurable": "preferences.pluginManager"
   }
 }]]></component>
   <component name="RecentsManager">
