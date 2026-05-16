@@ -24,3 +24,8 @@ data-json/dataset-processed-extensions.json
 
 Чтение данных datasets/dns с помощью read_format.py полученные данные ввиде словаря
 будут записываться в json формате в "datasets-new/dns"
+
+Этап пятый преобразование datasets/host файлов в единый формат json
+
+Чтение данных datasets/host с помощью read_format.py полученные данные ввиде словаря
+будут записываться в json формате в "datasets-new/host"

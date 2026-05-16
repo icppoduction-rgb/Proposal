@@ -1,78 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="AutoImportSettings">
-    <option name="autoReloadType" value="SELECTIVE" />
-  </component>
   <component name="ChangeListManager">
-    <list default="true" id="7e503071-acf4-4819-884c-3e5b3e575231" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+    <list default="true" id="675f5dd7-d427-4bf0-ab5f-a6309dc0de38" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Planning/Tasks.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/Tasks.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Planning/planing.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/planing.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/manage.py" beforeDir="false" afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/dataset_processing.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/dataset_processing.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/read_format.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/read_format.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="FileTemplateManagerImpl">
-    <option name="RECENT_TEMPLATES">
-      <list>
-        <option value="Python Script" />
-      </list>
-    </option>
-  </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 3,
-  &quot;fromUser&quot;: false
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 3
 }</component>
-  <component name="ProjectId" id="3CMEYHOMTsjUFSSb4iPWpvOOOLA" />
+  <component name="ProjectId" id="3DnScIe9XiqJmivgi7kz9tHGnzx" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "ASKED_MARK_IGNORED_FILES_AS_EXCLUDED": "true",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "dev",
-    "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "C:/Users/fmark/PythonProjects/Proposal/docs/en",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.pluginManager"
+    "git-widget-placeholder": "dev"
   }
 }]]></component>
-  <component name="RecentsManager">
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\en" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\ru" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\datasets\dns" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal" />
-    </key>
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\Planning" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\ru" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\data-json" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs" />
-      <recent name="C:\Users\fmark\PythonProjects\Proposal" />
-    </key>
-  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -82,23 +44,12 @@
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="7e503071-acf4-4819-884c-3e5b3e575231" name="Changes" comment="" />
-      <created>1776187085044</created>
+      <changelist id="675f5dd7-d427-4bf0-ab5f-a6309dc0de38" name="Changes" comment="" />
+      <created>1778916422924</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1776187085044</updated>
+      <updated>1778916422924</updated>
     </task>
     <servers />
-  </component>
-  <component name="TypeScriptGeneratedFilesManager">
-    <option name="version" value="3" />
-    <option name="exactExcludedFiles">
-      <list>
-        <option value="$PROJECT_DIR$/frontend/vitest.config.js" />
-        <option value="$PROJECT_DIR$/frontend/vitest.config.d.ts" />
-        <option value="$PROJECT_DIR$/frontend/vite.config.js" />
-        <option value="$PROJECT_DIR$/frontend/vite.config.d.ts" />
-      </list>
-    </option>
   </component>
 </project>

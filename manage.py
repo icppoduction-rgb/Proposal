@@ -5,6 +5,12 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 from scripts.convertion.dns_convertion import convertion
+from scripts.convertion.host_convertion import (
+    HOST_SPLITS,
+    HostConversionConfig,
+    convert_host_datasets,
+    print_host_conversion_summary,
+)
 from scripts.dataset_processing import build_processed_file_paths
 from scripts.dataset_path import write_dataset_path, write_extensions
 from scripts.dataset_processing import print_processing_result, process_datasets
@@ -21,6 +27,12 @@ PATH_FILE_JSON_PROCESSED_DATASET, PATH_FILE_JSON_PROCESSED_EXTENSIONS = build_pr
 
 PATH_DATASETS_NEW_FOLDER: str = os.getenv("PATH_DATASETS_NEW_FOLDER", "")
 PATH_DATASETS_NEW_DNS_FOLDER: str = os.getenv("PATH_DATASETS_NEW_DNS_FOLDER", "")
+PATH_DATASETS_NEW_HOST_FOLDER: str = os.getenv(
+    "PATH_DATASETS_NEW_HOST_FOLDER",
+    os.path.join(PATH_DATASETS_NEW_FOLDER or "datasets-new", "host"),
+)
+PATH_DATASETS_HOST_FOLDER: str = os.path.join(PATH_DATASETS_FOLDER or "datasets", "host")
+HOST_CONVERSION_WORKERS: int = int(os.getenv("HOST_CONVERSION_WORKERS", str(max(1, min(os.cpu_count() or 1, 4)))))
 
 PATH_LOG_DATA: str = os.getenv("PATH_LOG_DATA", "")
 
@@ -115,6 +127,33 @@ def manage():
                 path_dataset_new_dns=PATH_DATASETS_NEW_DNS_FOLDER
             )
 
+        case ("convert", "host", "all"):
+
+            console.print("==> [bold blue]start command: convert host all[/bold blue]")
+            summary = convert_host_datasets(
+                HostConversionConfig(
+                    source_root=PATH_DATASETS_HOST_FOLDER,
+                    target_root=PATH_DATASETS_NEW_HOST_FOLDER,
+                    splits=HOST_SPLITS,
+                    workers=HOST_CONVERSION_WORKERS,
+                )
+            )
+            print_host_conversion_summary(summary)
+
+        case ("convert", "host", "train" | "validation" | "experiments" | "test"):
+
+            split = args.action.upper()
+            console.print(f"==> [bold blue]start command: convert host {args.action}[/bold blue]")
+            summary = convert_host_datasets(
+                HostConversionConfig(
+                    source_root=PATH_DATASETS_HOST_FOLDER,
+                    target_root=PATH_DATASETS_NEW_HOST_FOLDER,
+                    splits=(split,),
+                    workers=HOST_CONVERSION_WORKERS,
+                )
+            )
+            print_host_conversion_summary(summary)
+
         case _:
             print(
                 "Commands:\n"
@@ -125,6 +164,8 @@ def manage():
                 "json cleanup unreadable-dry-run: Show unreadable files selected for deletion\n"
                 "json cleanup unreadable: Delete unreadable files and update processed json files\n"
                 "convert dns train: \n"
+                "convert host all: Convert all host dataset splits to datasets-new/host\n"
+                "convert host train|validation|experiments|test: Convert one host split to datasets-new/host\n"
             )
 
 
