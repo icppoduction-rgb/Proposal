@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from scripts.cleanup_host_datasets_new import cleanup_host_datasets_new
+from scripts.cleanup.cleanup_host_datasets_new import cleanup_host_datasets_new
 
 
 def write_converted_host_file(path: Path, dataset: str) -> None:

@@ -1,25 +1,44 @@
-# Анализ документа
+# Анализ проектного предложения
+
+---
 
 ## Краткое резюме
 
 Документ представляет собой проектное предложение по теме **«Behaviour-driven hybrid learning for data exfiltration detection»**. Основная идея исследования — разработать гибридный ML/DL-фреймворк для обнаружения утечки данных, объединяющий сетевые признаки, host-level telemetry, поведенческое моделирование последовательностей и SHAP-объяснимость.
 
+---
+
 ## Сильные стороны
 
-- **Тема актуальна и прикладная:** data exfiltration, APT, insider threats, DNS tunnelling и encrypted traffic относятся к существенным проблемам кибербезопасности.
-- **Хорошо сформулирован исследовательский разрыв:** документ последовательно показывает ограниченность single-modality подходов и недостаток sequence modelling.
-- **Логичная структура:** Abstract -> Background -> Problem Statement -> Research Questions -> Aim/Objectives -> Scope -> Methodology -> Plan.
-- **Методология соответствует задаче:** Design Science Research подходит для разработки и оценки исследовательского артефакта — detection framework.
-- **Есть реалистичные ограничения:** автор явно ограничивает scope по времени, данным и вычислительным ресурсам.
-- **Оценка продумана:** указаны accuracy, precision, recall, F1-score, FPR, AUC, ablation study и cross-validation.
+| Аспект | Оценка |
+|:---|:---|
+| Актуальность темы | Data exfiltration, APT, insider threats, DNS tunnelling и encrypted traffic — существенные проблемы кибербезопасности |
+| Исследовательский разрыв | Последовательно показаны ограниченность single-modality подходов и недостаток sequence modelling |
+| Структура | Логична: Abstract → Background → Problem Statement → Research Questions → Aim/Objectives → Scope → Methodology → Plan |
+| Методология | Design Science Research подходит для разработки и оценки detection framework |
+| Ограничения | Явно зафиксированы по времени, данным и вычислительным ресурсам |
+| Оценка | Указаны accuracy, precision, recall, F1-score, FPR, AUC, ablation study и cross-validation |
+
+---
 
 ## Потенциальные слабые места
 
-- **Риск недостаточной связности host и network datasets.** В тексте признается, что paired datasets могут отсутствовать, поэтому feature-level integration и simulation должны быть описаны максимально строго.
-- **Требуется усилить воспроизводимость.** Желательно явно указать конкретные datasets, preprocessing steps, train/test split strategy и baseline models.
-- **SHAP для LSTM/sequence component требует осторожности.** Нужно уточнить, будет ли использоваться KernelSHAP, DeepSHAP или объяснение агрегированных признаков.
-- **Некоторые утверждения зависят от актуальности источников.** Библиографические ссылки не были отдельно проверены на существование и корректность DOI при конвертации.
-- **Грамматика и академический стиль местами требуют редактуры.** Есть фразы, которые лучше переформулировать для более формального академического тона.
+> **1. Риск недостаточной связности host и network datasets.**
+> В тексте признается, что paired datasets могут отсутствовать, поэтому feature-level integration и simulation должны быть описаны максимально строго.
+
+> **2. Требуется усилить воспроизводимость.**
+> Желательно явно указать конкретные datasets, preprocessing steps, train/test split strategy и baseline models.
+
+> **3. SHAP для LSTM/sequence component требует осторожности.**
+> Нужно уточнить, будет ли использоваться KernelSHAP, DeepSHAP или объяснение агрегированных признаков.
+
+> **4. Некоторые утверждения зависят от актуальности источников.**
+> Библиографические ссылки не были отдельно проверены на существование и корректность DOI при конвертации.
+
+> **5. Грамматика и академический стиль местами требуют редактуры.**
+> Есть фразы, которые лучше переформулировать для более формального академического тона.
+
+---
 
 ## Рекомендации по доработке
 
@@ -30,27 +49,30 @@
 5. Уточнить, как будет оцениваться explainability: rank stability, case studies, alignment with MITRE ATT&CK tactics.
 6. Проверить все ссылки DOI и библиографические данные перед финальной сдачей.
 
-## Итоговая оценка
-
-Проектное предложение выглядит содержательно сильным и методологически последовательным. Главный риск — практическая реализация multi-source integration при отсутствии совместимых host/network датасетов. Если этот риск будет закрыт через четкую схему feature-level integration, прозрачные baseline experiments и воспроизводимый evaluation pipeline, работа будет выглядеть убедительно как академически, так и практически.
-
 ---
 
-**ИНДИВИДУАЛЬНОЕ ЗАДАНИЕ 2**
+## Итоговая оценка
 
-**ПРОЕКТНОЕ ПРЕДЛОЖЕНИЕ**
+> Проектное предложение выглядит содержательно сильным и методологически последовательным. Главный риск — практическая реализация multi-source integration при отсутствии совместимых host/network датасетов. Если этот риск будет закрыт через четкую схему feature-level integration, прозрачные baseline experiments и воспроизводимый evaluation pipeline, работа будет выглядеть убедительно как академически, так и практически.
+
+---
+---
+
+# ИНДИВИДУАЛЬНОЕ ЗАДАНИЕ 2 — ПРОЕКТНОЕ ПРЕДЛОЖЕНИЕ
 
 | Поле | Значение |
-|---|---|
-| Имя / TP Number | Djumakhodjaeva Malika / TP099270 |
-| Intake Code | APUMF2508CYS(PR) |
-| Module Code | CT095-6-M-RMCE |
-| Module Title | Research Methodology in Computing and Engineering |
-| Module Lecturer | Dr. Murugananthan Velayutham |
-| Nominated Supervisor | Dr. Jalil Md Desa |
-| Project Title | Behaviour-driven hybrid learning for data exfiltration detection |
-| Date Assigned | 6 февраля 2026 |
-| Date Completed | 24 апреля 2026 |
+|:---|:---|
+| **Имя / TP Number** | Djumakhodjaeva Malika / TP099270 |
+| **Intake Code** | APUMF2508CYS(PR) |
+| **Module Code** | CT095-6-M-RMCE |
+| **Module Title** | Research Methodology in Computing and Engineering |
+| **Module Lecturer** | Dr. Murugananthan Velayutham |
+| **Nominated Supervisor** | Dr. Jalil Md Desa |
+| **Project Title** | Behaviour-driven hybrid learning for data exfiltration detection |
+| **Date Assigned** | 6 февраля 2026 |
+| **Date Completed** | 24 апреля 2026 |
+
+---
 
 # Аннотация
 
@@ -58,13 +80,15 @@
 
 Хотя современные исследования активно применяют machine learning и deep learning для повышения качества обнаружения, большинство существующих систем используют только одну модальность данных: либо сетевой трафик, либо host-level telemetry. Кроме того, такие системы часто не моделируют последовательные поведенческие паттерны, характерные для постепенного развития атак эксфильтрации данных.
 
-Данное предложение представляет behaviour-driven hybrid machine learning framework, предназначенный для устранения этих ограничений за счет интеграции host telemetry, анализа сетевого трафика и behavioural sequence modelling в единую архитектуру обнаружения. Предлагаемый framework объединяет классические ансамблевые методы, такие как Random Forest и XGBoost, компоненты CNN deep learning и LSTM-based behavioural sequence modelling для захвата как структурированных признаков, так и сложных временных зависимостей в multi-source security data.
+Данное предложение представляет **behaviour-driven hybrid machine learning framework**, предназначенный для устранения этих ограничений за счет интеграции host telemetry, анализа сетевого трафика и behavioural sequence modelling в единую архитектуру обнаружения. Предлагаемый framework объединяет классические ансамблевые методы, такие как Random Forest и XGBoost, компоненты CNN deep learning и LSTM-based behavioural sequence modelling для захвата как структурированных признаков, так и сложных временных зависимостей в multi-source security data.
 
 Framework также будет интегрирован с explainable artificial intelligence technique, а именно SHAP-based feature attribution, чтобы повысить интерпретируемость решений обнаружения и поддержать рабочие процессы security analysts. Оценка framework будет выполнена на публично доступных cybersecurity benchmark datasets с использованием стандартных classification metrics.
 
 Ожидаемый вклад исследования — улучшенный hybrid detection framework, расширяющий существующие подходы, усиливающий early detection capability для stealthy multi-stage exfiltration attacks и предоставляющий воспроизводимые результаты для дальнейших исследований в behavioural intrusion detection.
 
 **Ключевые слова:** data exfiltration detection, hybrid deep learning, CNN, behavioural sequence modelling, LSTM, explainable artificial intelligence.
+
+---
 
 # Содержание
 
@@ -82,10 +106,12 @@ Framework также будет интегрирован с explainable artifici
 - 10. Итоги
 - Список источников
 
+---
+
 # Список сокращений и терминов
 
 | Сокращение | Расшифровка |
-|---|---|
+|:---|:---|
 | AUC | Area Under the ROC Curve |
 | CNN | Convolutional Neural Network |
 | DL | Deep Learning |
@@ -104,17 +130,21 @@ Framework также будет интегрирован с explainable artifici
 | XAI | Explainable Artificial Intelligence |
 | XGBoost | Extreme Gradient Boosting |
 
+---
+
 # 1. Введение
 
 Быстрый рост цифровой инфраструктуры существенно изменил то, как организации управляют информацией и обмениваются ею. Большие объемы чувствительных данных проходят через cloud systems, enterprise networks и personal endpoint devices, которые стали основными средами обмена данными. Эти изменения дают значительные преимущества, но одновременно создают новые сложные security challenges, требующие более продвинутых технологий обнаружения.
 
-Одной из наиболее серьезных угроз для организаций сегодня является data exfiltration — несанкционированная передача чувствительной информации из внутренних систем во внешние, контролируемые злоумышленником направления. В отличие от многих других cyberattacks, которые часто можно обнаружить сразу, data exfiltration обычно является скрытой, длительной и трудно заметной на ранних стадиях.
+Одной из наиболее серьезных угроз для организаций сегодня является **data exfiltration** — несанкционированная передача чувствительной информации из внутренних систем во внешние, контролируемые злоумышленником направления. В отличие от многих других cyberattacks, которые часто можно обнаружить сразу, data exfiltration обычно является скрытой, длительной и трудно заметной на ранних стадиях.
 
 Современные злоумышленники используют разные способы сокрытия эксфильтрации, включая DNS tunneling, HTTPS/TLS channels, cloud services, encrypted communication и legitimate-looking traffic. В результате традиционные IDS, основанные на signatures или статических правилах, часто не способны выявить multi-stage exfiltration attacks, особенно когда поведение злоумышленника имитирует нормальную активность пользователя или системы.
 
 В последние годы machine learning и deep learning стали активно использоваться для intrusion detection. Classical ML models, такие как Random Forest и XGBoost, хорошо работают со структурированными признаками, а deep learning approaches, такие как CNN и LSTM, способны выявлять сложные паттерны и temporal dependencies. Однако многие существующие решения используют только один источник данных, например network traffic или host logs, и не объединяют multi-source telemetry в единую detection architecture.
 
-Это исследование направлено на разработку behaviour-driven hybrid learning framework для обнаружения data exfiltration. Framework объединит network-level features, host-level telemetry, behavioural sequence modelling и explainability, чтобы улучшить качество обнаружения и сделать решения модели более понятными для security analysts.
+Это исследование направлено на разработку **behaviour-driven hybrid learning framework** для обнаружения data exfiltration. Framework объединит network-level features, host-level telemetry, behavioural sequence modelling и explainability, чтобы улучшить качество обнаружения и сделать решения модели более понятными для security analysts.
+
+---
 
 # 2. Исследовательский контекст
 
@@ -126,21 +156,25 @@ Data exfiltration остается одной из ключевых пробле
 
 Host telemetry может включать process activity, system calls, user actions, authentication behavior и log events. Network telemetry может включать DNS queries, flow statistics, packet-level features, connection metadata и encrypted traffic indicators. Отдельно эти источники дают неполную картину атаки. Их объединение на feature level может дать более устойчивое и информативное представление о поведении.
 
-Еще одной важной проблемой является explainability. Security analysts должны понимать, почему модель классифицировала событие как exfiltration или benign. Без интерпретируемости ML/DL-модели трудно использовать в operational SOC workflows. SHAP, LIME и другие XAI-методы помогают объяснить вклад признаков в решение модели, но их применение к hybrid and sequence-based IDS требует аккуратной методологии.
+Еще одной важной проблемой является **explainability**. Security analysts должны понимать, почему модель классифицировала событие как exfiltration или benign. Без интерпретируемости ML/DL-модели трудно использовать в operational SOC workflows. SHAP, LIME и другие XAI-методы помогают объяснить вклад признаков в решение модели, но их применение к hybrid and sequence-based IDS требует аккуратной методологии.
+
+---
 
 # 3. Постановка проблемы
 
 Существующие подходы к обнаружению data exfiltration имеют несколько ограничений.
 
-Во-первых, многие решения используют single-modality telemetry. Network-based approaches анализируют traffic patterns, DNS queries или flow features, но могут не видеть host-side behavior, например suspicious process activity, unusual file access или abnormal user actions. Host-based approaches, наоборот, могут видеть локальное поведение системы, но не всегда связывают его с network-level exfiltration channels.
+**Во-первых**, многие решения используют **single-modality telemetry**. Network-based approaches анализируют traffic patterns, DNS queries или flow features, но могут не видеть host-side behavior, например suspicious process activity, unusual file access или abnormal user actions. Host-based approaches, наоборот, могут видеть локальное поведение системы, но не всегда связывают его с network-level exfiltration channels.
 
-Во-вторых, многие detection systems недостаточно моделируют temporal behavior. Data exfiltration часто развивается постепенно: reconnaissance, staging, compression, encryption, channel establishment и data transfer могут происходить в разные моменты времени. Простая tabular classification может пропустить такие sequential patterns.
+**Во-вторых**, многие detection systems **недостаточно моделируют temporal behavior**. Data exfiltration часто развивается постепенно: reconnaissance, staging, compression, encryption, channel establishment и data transfer могут происходить в разные моменты времени. Простая tabular classification может пропустить такие sequential patterns.
 
-В-третьих, многие ML/DL approaches остаются недостаточно объяснимыми. Даже если модель показывает высокую accuracy, security analysts должны понимать, какие признаки или события привели к решению. Без explainability сложно доверять модели, расследовать incidents и интегрировать результаты в SOC workflows.
+**В-третьих**, многие ML/DL approaches **остаются недостаточно объяснимыми**. Даже если модель показывает высокую accuracy, security analysts должны понимать, какие признаки или события привели к решению. Без explainability сложно доверять модели, расследовать incidents и интегрировать результаты в SOC workflows.
 
-В-четвертых, существует практический риск несовместимости datasets. Публичные cybersecurity datasets часто собираются в разных условиях, используют разные форматы и не всегда содержат paired host/network telemetry. Поэтому multi-source integration должна быть реализована строго, воспроизводимо и с четкими ограничениями.
+**В-четвертых**, существует **практический риск несовместимости datasets**. Публичные cybersecurity datasets часто собираются в разных условиях, используют разные форматы и не всегда содержат paired host/network telemetry. Поэтому multi-source integration должна быть реализована строго, воспроизводимо и с четкими ограничениями.
 
-Следовательно, существует необходимость в hybrid detection framework, который объединяет host and network features, моделирует behavioural sequences и предоставляет explainable outputs.
+> Следовательно, существует необходимость в hybrid detection framework, который объединяет host and network features, моделирует behavioural sequences и предоставляет explainable outputs.
+
+---
 
 # 4. Исследовательские вопросы
 
@@ -160,11 +194,13 @@ Host telemetry может включать process activity, system calls, user 
 
 Этот вопрос рассматривает применение SHAP-based explanations для анализа решений модели.
 
+---
+
 # 5. Цель и задачи
 
 ## 5.1 Цель
 
-Цель исследования — разработать и оценить behaviour-driven hybrid machine learning framework для обнаружения data exfiltration, объединяющий host telemetry, network traffic features, behavioural sequence modelling и explainable AI.
+Цель исследования — разработать и оценить **behaviour-driven hybrid machine learning framework** для обнаружения data exfiltration, объединяющий host telemetry, network traffic features, behavioural sequence modelling и explainable AI.
 
 ## 5.2 Задачи
 
@@ -173,6 +209,8 @@ Host telemetry может включать process activity, system calls, user 
 3. Реализовать behavioural sequence modelling component для выявления temporal attack patterns.
 4. Интегрировать SHAP-based explainability для интерпретации решений модели.
 5. Оценить framework на publicly available cybersecurity benchmark datasets с использованием standard classification metrics.
+
+---
 
 # 6. Область исследования
 
@@ -197,11 +235,11 @@ Framework будет использовать:
 
 ## 6.4 Behavioural Sequence Modelling
 
-Behavioural sequence modelling будет использоваться для анализа ordered event sequences, построенных из host и network telemetry. Основной подход — LSTM, поскольку он подходит для временных зависимостей и multi-stage behavior.
+Behavioural sequence modelling будет использоваться для анализа ordered event sequences, построенных из host и network telemetry. Основной подход — **LSTM**, поскольку он подходит для временных зависимостей и multi-stage behavior.
 
 ## 6.5 Explainability
 
-Explainability будет реализована через SHAP-based feature attribution. Объяснения будут использоваться для анализа вклада признаков в решения модели и для поддержки security analyst workflows.
+Explainability будет реализована через **SHAP-based feature attribution**. Объяснения будут использоваться для анализа вклада признаков в решения модели и для поддержки security analyst workflows.
 
 ## 6.6 Evaluation
 
@@ -210,6 +248,8 @@ Explainability будет реализована через SHAP-based feature a
 ## 6.7 Geographical and Organizational Scope
 
 Исследование не ограничивается конкретной организацией или географическим регионом. Оно использует publicly available datasets и не включает live traffic capture или доступ к реальным organizational systems.
+
+---
 
 # 7. Значимость исследования
 
@@ -229,11 +269,15 @@ Data exfiltration является критической угрозой, пот
 
 Использование публичных datasets, воспроизводимой методологии и стандартных metrics позволит другим исследователям сравнивать результаты и развивать предложенный framework.
 
+---
+
 # 8. Методология исследования
 
 ## 8.1 Research Design and Approach
 
-Исследование будет выполнено в рамках Design Science Research, поскольку его основной результат — разработка и оценка artifact в виде hybrid detection framework. Методология включает identification of problem, design and development, demonstration, evaluation и communication.
+Исследование будет выполнено в рамках **Design Science Research**, поскольку его основной результат — разработка и оценка artifact в виде hybrid detection framework. Методология включает identification of problem, design and development, demonstration, evaluation и communication.
+
+---
 
 ## 8.2 Phase 1: Feature Identification and Dataset Preparation
 
@@ -247,6 +291,8 @@ Data exfiltration является критической угрозой, пот
 
 Feature engineering будет включать извлечение DNS features, flow features, host activity indicators, system-call features, log-based features и temporal aggregation features. Там, где возможно, признаки будут сопоставлены с MITRE ATT&CK tactics and techniques.
 
+---
+
 ## 8.3 Phase 2: Hybrid Framework Design
 
 Вторая фаза будет посвящена проектированию hybrid framework.
@@ -255,25 +301,33 @@ Feature engineering будет включать извлечение DNS feature
 
 Framework будет включать три основных слоя:
 
-- **Multi-source data integration layer** — объединяет host и network telemetry на feature level.
-- **Hybrid ML/DL classification layer** — использует Random Forest, XGBoost и CNN для анализа structured and local feature patterns.
-- **Behavioural sequence modelling layer** — использует LSTM для анализа temporal relationships и multi-stage attack behavior.
+| Слой | Назначение |
+|:---|:---|
+| **Multi-source data integration layer** | Объединяет host и network telemetry на feature level |
+| **Hybrid ML/DL classification layer** | Использует Random Forest, XGBoost и CNN для анализа structured and local feature patterns |
+| **Behavioural sequence modelling layer** | Использует LSTM для анализа temporal relationships и multi-stage attack behavior |
 
-Выходы classification и sequence modelling components будут объединяться через late fusion. Вероятности предсказаний будут агрегироваться для получения финального classification decision.
+Выходы classification и sequence modelling components будут объединяться через **late fusion**. Вероятности предсказаний будут агрегироваться для получения финального classification decision.
+
+---
 
 ## 8.4 Phase 3: Behavioural Sequence Modelling
 
 Третья фаза направлена на разработку behavioural sequence modelling component.
 
-LSTM будет использовать ordered sequences of behavioural events, полученные из host и network telemetry. Event sequences будут строиться через sliding time windows. Каждая sequence будет состоять из фиксированного числа событий, например 50-100 events per sequence, а labels будут назначаться на основе наличия exfiltration activity внутри окна.
+LSTM будет использовать ordered sequences of behavioural events, полученные из host и network telemetry. Event sequences будут строиться через sliding time windows. Каждая sequence будет состоять из фиксированного числа событий (например, **50–100 events per sequence**), а labels будут назначаться на основе наличия exfiltration activity внутри окна.
 
-Модель будет выполнять binary classification на уровне sequence: benign vs exfiltration.
+Модель будет выполнять **binary classification** на уровне sequence: benign vs exfiltration.
+
+---
 
 ## 8.5 Phase 4: Explainability Integration
 
 Четвертая фаза включает интеграцию explainable artificial intelligence techniques.
 
-Основной техникой будет SHAP. SHAP-based explanations будут анализироваться для selected detection cases, включая true positives и false positives. Качественная оценка будет проверять, дают ли explanations осмысленные insights о behavioural patterns. Количественная оценка будет использовать rank-order consistency across cross-validation folds для проверки стабильности explanations.
+Основной техникой будет **SHAP**. SHAP-based explanations будут анализироваться для selected detection cases, включая true positives и false positives. Качественная оценка будет проверять, дают ли explanations осмысленные insights о behavioural patterns. Количественная оценка будет использовать rank-order consistency across cross-validation folds для проверки стабильности explanations.
+
+---
 
 ## 8.6 Phase 5: Evaluation and Validation
 
@@ -283,14 +337,16 @@ LSTM будет использовать ordered sequences of behavioural events
 
 Для оценки будут использоваться:
 
-- accuracy;
-- precision;
-- recall;
-- F1-score;
-- false positive rate;
-- AUC.
+| Метрика | Назначение |
+|:---|:---|
+| accuracy | общая точность классификации |
+| precision | точность предсказания класса атаки |
+| recall | полнота обнаружения атак |
+| F1-score | основная метрика при class imbalance |
+| false positive rate | контроль ложных срабатываний |
+| AUC | оценка discriminative capability |
 
-Поскольку cybersecurity datasets часто имеют class imbalance, precision, recall и F1-score будут рассматриваться как основные метрики. AUC будет использоваться для оценки discriminative capability.
+Поскольку cybersecurity datasets часто имеют class imbalance, precision, recall и F1-score будут рассматриваться как **основные метрики**. AUC будет использоваться для оценки discriminative capability.
 
 Также будут выполнены:
 
@@ -301,11 +357,13 @@ LSTM будет использовать ordered sequences of behavioural events
 
 ### 8.6.2 Ethical Considerations
 
-Исследование использует только publicly available benchmark datasets. Личные данные не собираются и не обрабатываются. Live network traffic capture не выполняется, реальные organizational systems не мониторятся. Поэтому исследование имеет низкий ethical risk.
+Исследование использует только publicly available benchmark datasets. Личные данные не собираются и не обрабатываются. Live network traffic capture не выполняется, реальные organizational systems не мониторятся. Поэтому исследование имеет **низкий ethical risk**.
+
+---
 
 # 9. План исследования
 
-Исследование запланировано на 12 недель с мая 2026 по август 2026. План организован вокруг пяти методологических фаз.
+Исследование запланировано на **12 недель** с мая 2026 по август 2026. План организован вокруг пяти методологических фаз.
 
 ## 9.1 Research Timeline Overview
 
@@ -314,13 +372,15 @@ LSTM будет использовать ordered sequences of behavioural events
 ## 9.2 Phase Descriptions and Key Milestones
 
 | Phase | Milestone | Key Deliverable | Success Criterion | Target Date |
-|---|---|---|---|---|
-| Phase 1 — Feature identification and dataset preparation | Datasets accessed and features extracted | Preprocessed feature dataset with MITRE ATT&CK mappings | datasets loaded, cleaned, feature-engineered and documented | May 15 |
-| Phase 2 — Hybrid framework design | Functional classification pipeline implemented | Hybrid detection framework prototype | baseline classification performance achieved on at least one dataset | June 12 |
-| Phase 3 — Behavioural sequence modelling | LSTM sequence model integrated | Integrated LSTM sequence modelling component | temporal event sequences captured and integrated into ensemble layer | July 3 |
-| Phase 4 — Explainability integration | SHAP module integrated | SHAP explanation module | SHAP values generated and validated against known attack sequences | July 24 |
-| Phase 5 — Evaluation and validation | Experiments completed | Experimental results report | framework outperforms at least one baseline on F1-score and AUC; ablation study complete | August 14 |
-| Report writing | Final report submitted | Completed research report and slides | report finalized and proofread | August 28 |
+|:---|:---|:---|:---|:---:|
+| **Phase 1** — Feature identification and dataset preparation | Datasets accessed and features extracted | Preprocessed feature dataset with MITRE ATT&CK mappings | datasets loaded, cleaned, feature-engineered and documented | May 15 |
+| **Phase 2** — Hybrid framework design | Functional classification pipeline implemented | Hybrid detection framework prototype | baseline classification performance achieved on at least one dataset | June 12 |
+| **Phase 3** — Behavioural sequence modelling | LSTM sequence model integrated | Integrated LSTM sequence modelling component | temporal event sequences captured and integrated into ensemble layer | July 3 |
+| **Phase 4** — Explainability integration | SHAP module integrated | SHAP explanation module | SHAP values generated and validated against known attack sequences | July 24 |
+| **Phase 5** — Evaluation and validation | Experiments completed | Experimental results report | framework outperforms at least one baseline on F1-score and AUC; ablation study complete | August 14 |
+| **Report writing** | Final report submitted | Completed research report and slides | report finalized and proofread | August 28 |
+
+---
 
 ### 9.2.1 Phase 1 — Feature Identification and Dataset Preparation
 
@@ -346,34 +406,44 @@ LSTM будет использовать ordered sequences of behavioural events
 
 Фаза включает непрерывное написание глав, review and revisions, подготовку к oral defence и финальную submission.
 
+---
+
 ## 9.3 Risk and Contingency Planning
 
 | Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
+|:---|:---:|:---:|:---|
 | Dataset incompatibility between host and network sources | Medium | High | использовать feature-level integration и synthetic host behaviour simulation для согласования heterogeneous datasets |
 | Computational resource constraints limiting deep learning training | Medium | Medium | использовать cloud-based computing resources, например Google Colab или Kaggle; оптимизировать model complexity |
 | Underperformance of sequence modelling component | Low | Medium | перейти к simpler temporal aggregation features; скорректировать scope of Objective 3 |
 | Timeline delays due to integration complexity | Medium | Medium | сохранить buffer weeks для revisions; приоритизировать core objectives O1-O3 |
 
+---
+
 # 10. Итоги
 
 Проектное предложение описывает исследование, направленное на устранение четко сформулированного gap в области data exfiltration detection. Существующие detection systems — network-based, host-based, predictive или hybrid — часто ограничены reliance on single-modality telemetry и неспособностью моделировать sequential behavioural patterns, характерные для multi-stage exfiltration attacks.
 
-В ответ на этот gap предлагается behaviour-driven hybrid machine learning framework, объединяющий три ключевых компонента:
+В ответ на этот gap предлагается **behaviour-driven hybrid machine learning framework**, объединяющий три ключевых компонента:
 
-- multi-source data integration layer, объединяющий host и network telemetry;
-- hybrid ML/DL classification layer, использующий ensemble methods и deep learning architecture;
-- behavioural sequence modelling layer на основе LSTM.
+| Компонент | Назначение |
+|:---|:---|
+| Multi-source data integration layer | Объединяет host и network telemetry |
+| Hybrid ML/DL classification layer | Ensemble methods + deep learning architecture |
+| Behavioural sequence modelling layer | LSTM-based sequence analysis |
 
 SHAP-based explainability будет добавлена для повышения interpretability of detection decisions.
 
-Исследование направляется четырьмя research questions, связанными с cross-domain feature identification, hybrid architecture design, behavioural sequence modelling и explainability integration. Эти вопросы сопоставлены с конкретными objectives, каждый из которых представляет проверяемую единицу работы.
+Исследование направляется **четырьмя research questions**, связанными с cross-domain feature identification, hybrid architecture design, behavioural sequence modelling и explainability integration. Эти вопросы сопоставлены с конкретными objectives, каждый из которых представляет проверяемую единицу работы.
 
 Использование publicly available benchmark datasets ограничивает scope, повышает ethical compliance и поддерживает reproducibility. 12-недельный план исследования разделен на пять methodological phases с понятными milestones и risk mitigation strategies.
 
-Значимость исследования имеет как академическое, так и практическое измерение. Академически оно развивает existing hybrid detection architectures через behavioural sequence modelling и multi-source feature integration. Практически оно может улучшить early detection of stealthy multi-stage attacks и повысить interpretability для security operations teams.
+Значимость исследования имеет как академическое, так и практическое измерение:
+- **Академически:** развивает existing hybrid detection architectures через behavioural sequence modelling и multi-source feature integration.
+- **Практически:** может улучшить early detection of stealthy multi-stage attacks и повысить interpretability для security operations teams.
 
-В заключение, proposed framework представляет своевременный и обоснованный вклад в cybersecurity, напрямую addressing limitations of existing approaches и responding to emerging research priorities in multi-source telemetry integration, behavioural modelling and explainable intrusion detection.
+> В заключение, proposed framework представляет своевременный и обоснованный вклад в cybersecurity, напрямую addressing limitations of existing approaches и responding to emerging research priorities in multi-source telemetry integration, behavioural modelling and explainable intrusion detection.
+
+---
 
 # Список источников
 

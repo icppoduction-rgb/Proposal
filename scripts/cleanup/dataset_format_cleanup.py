@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.dataset_processing import collect_processed_extensions, write_processed_dataset_json
+from scripts.workdatasets.dataset_processing import collect_processed_extensions, write_processed_dataset_json
 from scripts.json_data import JsonData
 
 

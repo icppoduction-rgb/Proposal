@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.read_format import (
+from scripts.workdatasets.read_format import (
     DEFAULT_TEXT_ENCODINGS,
     PCAP_MAGIC_HEADERS,
     TEXT_EXTENSIONS,

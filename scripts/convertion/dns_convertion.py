@@ -1,7 +1,7 @@
 from rich.console import Console
 
 from scripts.json_data import JsonData
-from scripts.read_format import FileFormatReader
+from scripts.workdatasets.read_format import FileFormatReader
 
 
 console = Console()

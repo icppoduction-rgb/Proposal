@@ -1,16 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
     <list default="true" id="675f5dd7-d427-4bf0-ab5f-a6309dc0de38" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Planning/Tasks.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/Tasks.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Planning/planing.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/planing.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/en/dns_dataset_strategy.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/en/host_datasets_analysis.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/en/project_proposal_analysis.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/ru/dns_dataset_strategy.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/ru/host_datasets_analysis.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/ru/host_datasets_cleanup_report.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/ru/project_proposal_analysis.md" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/manage.py" beforeDir="false" afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/cleanup_host_datasets_new.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/cleanup/cleanup_host_datasets_new.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/convertion/dns_convertion.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/convertion/dns_convertion.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/convertion/host_convertion.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/convertion/host_convertion.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/dataset_format_cleanup.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/cleanup/dataset_format_cleanup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/dataset_path.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/workdatasets/dataset_path.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/dataset_processing.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/workdatasets/dataset_processing.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/read_format.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/workdatasets/read_format.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_cleanup_host_datasets_new.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_cleanup_host_datasets_new.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_read_format.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_read_format.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -32,9 +59,25 @@
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "dev"
+    "git-widget-placeholder": "dev",
+    "last_opened_file_path": "C:/Users/fmark/PythonProjects/Proposal/docs/en",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\en" />
+      <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\ru" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\fmark\PythonProjects\Proposal\scripts\workdatasets" />
+      <recent name="C:\Users\fmark\PythonProjects\Proposal\scripts\cleanup" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -51,5 +94,8 @@
       <updated>1778916422924</updated>
     </task>
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
 </project>

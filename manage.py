@@ -11,10 +11,10 @@ from scripts.convertion.host_convertion import (
     convert_host_datasets,
     print_host_conversion_summary,
 )
-from scripts.dataset_processing import build_processed_file_paths
-from scripts.dataset_path import write_dataset_path, write_extensions
-from scripts.dataset_processing import print_processing_result, process_datasets
-from scripts.dataset_format_cleanup import cleanup_unreadable_dataset_files, print_cleanup_result
+from scripts.workdatasets.dataset_processing import build_processed_file_paths
+from scripts.workdatasets.dataset_path import write_dataset_path, write_extensions
+from scripts.workdatasets.dataset_processing import print_processing_result, process_datasets
+from scripts.cleanup.dataset_format_cleanup import cleanup_unreadable_dataset_files, print_cleanup_result
 
 load_dotenv()
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from scripts.read_format import FileContentProcessingError, FileFormatReader
+from scripts.workdatasets.read_format import FileContentProcessingError, FileFormatReader
 
 
 class FileFormatReaderTests(unittest.TestCase):

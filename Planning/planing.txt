@@ -27,5 +27,10 @@ data-json/dataset-processed-extensions.json
 
 Этап пятый преобразование datasets/host файлов в единый формат json
 
-Чтение данных datasets/host с помощью read_format.py полученные данные ввиде словаря
+Чтение данных datasets/host с помощью read_format.py полученные данные в виде словаря
 будут записываться в json формате в "datasets-new/host"
+
+Этап шестой выборка нужных datasets и очистка мусора.
+Информация по очистки находится docs/ru|en/host_datasets_cleanup_report.md
+также удалены файл в data-json за не надобностью они временно использовались для выборки и преобразования датасетов в
+единый json формат

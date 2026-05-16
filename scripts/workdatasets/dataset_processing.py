@@ -8,8 +8,8 @@ from typing import Any
 from scripts.json_data import JsonData
 
 
-PROCESSED_PATH_FILE_NAME = "dataset-processed-path.json"
-PROCESSED_EXTENSIONS_FILE_NAME = "dataset-processed-extensions.json"
+PROCESSED_PATH_FILE_NAME = ""
+PROCESSED_EXTENSIONS_FILE_NAME = ""
 
 SELECTED_DATASETS: dict[str, set[str]] = {
     "dns": {
