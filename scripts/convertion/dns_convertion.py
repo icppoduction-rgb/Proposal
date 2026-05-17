@@ -1,4 +1,9 @@
-from rich.console import Console
+try:
+    from rich.console import Console
+except ModuleNotFoundError:
+    class Console:
+        def print(self, *objects, **kwargs):
+            print(*objects)
 
 from scripts.json_data import JsonData
 from scripts.workdatasets.read_format import FileFormatReader

@@ -1,0 +1,12 @@
+services:
+  duckdb:
+    image: duckdb/duckdb:latest
+    container_name: proposal_duckdb
+    env_file:
+      - ../../.env
+    volumes:
+      - ${DUCKDB_DATA_PATH}:/data
+    working_dir: /data
+    tty: true
+    stdin_open: true
+    command: duckdb /data/${DUCKDB_DATABASE}

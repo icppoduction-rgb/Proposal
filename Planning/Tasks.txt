@@ -585,4 +585,15 @@ C:\Users\fmark\PythonProjects\Proposal\datasets\host на C:\Users\fmark\PythonP
    - .ndjson
 10. Корректная обработка ошибок и понятные комментарии к функциям и методам.
 
+Задача запуск базы данных
+DuckDB:
+path: databases/duckdb/docker-compse.yml
 
+- проанализируй репозиторий нужные строчки для подключения я добавил в .env
+  ```
+  DUCKDB_DATA_PATH=databases/data/duckdb
+  DUCKDB_DATABASE=proposal.duckdb
+  ```
+Требуется запускать и останавливать эту базу через manage.py
+
+реализуй все нужные команды но пока не запуска я это сделаю сам
