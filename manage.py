@@ -1,7 +1,11 @@
-import os
 import argparse
+import asyncio
+import json
+import os
 import subprocess
+import sys
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -9,8 +13,11 @@ try:
     from rich.console import Console
 except ModuleNotFoundError:
     class Console:
-        def print(self, *objects, **kwargs):
+        def print(self, *objects: object, **kwargs: object) -> None:
             print(*objects)
+
+        def print_json(self, json: str, **kwargs: object) -> None:
+            print(json)
 
 from scripts.database.duckdb_service import (
     DuckDBDockerConfig,
@@ -45,11 +52,14 @@ PATH_FILE_JSON_DATASET: str = os.getenv("PATH_FILE_JSON_DATASET", "")
 PATH_FILE_JSON_EXTENSIONS: str = os.getenv("PATH_FILE_JSON_EXTENSIONS", "")
 PATH_FILE_JSON_PROCESSED_DATASET, PATH_FILE_JSON_PROCESSED_EXTENSIONS = build_processed_file_paths(PATH_FILE_JSON_DATASET)
 
-PATH_DATASETS_NEW_FOLDER: str = os.getenv("PATH_DATASETS_NEW_FOLDER", "")
-PATH_DATASETS_NEW_DNS_FOLDER: str = os.getenv("PATH_DATASETS_NEW_DNS_FOLDER", "")
+PATH_DATASETS_NEW_FOLDER: str = os.getenv("PATH_DATASETS_NEW_FOLDER", str(PROJECT_ROOT / "datasets-new"))
+PATH_DATASETS_NEW_DNS_FOLDER: str = os.getenv(
+    "PATH_DATASETS_NEW_DNS_FOLDER",
+    os.path.join(PATH_DATASETS_NEW_FOLDER, "dns"),
+)
 PATH_DATASETS_NEW_HOST_FOLDER: str = os.getenv(
     "PATH_DATASETS_NEW_HOST_FOLDER",
-    os.path.join(PATH_DATASETS_NEW_FOLDER or "datasets-new", "host"),
+    os.path.join(PATH_DATASETS_NEW_FOLDER, "host"),
 )
 PATH_DATASETS_HOST_FOLDER: str = os.path.join(PATH_DATASETS_FOLDER or "datasets", "host")
 HOST_CONVERSION_WORKERS: int = int(os.getenv("HOST_CONVERSION_WORKERS", str(max(1, min(os.cpu_count() or 1, 4)))))
@@ -57,9 +67,6 @@ HOST_CONVERSION_WORKERS: int = int(os.getenv("HOST_CONVERSION_WORKERS", str(max(
 PATH_LOG_DATA: str = os.getenv("PATH_LOG_DATA", "")
 
 # ------------------------------ Database settings ------------------------------ #
-
-DUCKDB_DATA_PATH: str = os.getenv("DUCKDB_DATA_PATH", "")
-DUCKDB_DATABASE: str = os.getenv("DUCKDB_DATABASE", "")
 
 console = Console()
 
@@ -70,14 +77,6 @@ parser.add_argument("service", nargs="?")
 parser.add_argument("action", nargs="?")
 
 
-def build_project_duckdb_config() -> DuckDBDockerConfig:
-    return build_duckdb_config(
-        project_root=PROJECT_ROOT,
-        data_path_value=DUCKDB_DATA_PATH,
-        database=DUCKDB_DATABASE,
-    )
-
-
 # Функция управления
 def manage():
     """
@@ -85,7 +84,7 @@ def manage():
     run scripts and to start and stop the project.
     """
 
-    args = parser.parse_args()
+    args, _unknown = parser.parse_known_args()
 
     match (args.module, args.service, args.action):
 
@@ -186,29 +185,8 @@ def manage():
                 )
             )
             print_host_conversion_summary(summary)
-
-        case ("database" | "db", "duckdb", "start"):
-            console.print("==> [bold blue]start command: database duckdb start[/bold blue]")
-            start_duckdb(build_project_duckdb_config())
-
-        case ("database" | "db", "duckdb", "stop"):
-            console.print("==> [bold blue]start command: database duckdb stop[/bold blue]")
-            stop_duckdb(build_project_duckdb_config())
-
-        case ("database" | "db", "duckdb", "restart"):
-            console.print("==> [bold blue]start command: database duckdb restart[/bold blue]")
-            restart_duckdb(build_project_duckdb_config())
-
-        case ("database" | "db", "duckdb", "status"):
-            console.print("==> [bold blue]start command: database duckdb status[/bold blue]")
-            show_duckdb_status(build_project_duckdb_config())
-
-        case ("database" | "db", "duckdb", "logs"):
-            console.print("==> [bold blue]start command: database duckdb logs[/bold blue]")
-            show_duckdb_logs(build_project_duckdb_config())
-
         case _:
-            print(
+            console.print(
                 "Commands:\n"
                 "json write path-dataset: Write path file dataset in json format\n"
                 "json write extensions: Write file extensions in json format\n"
@@ -219,20 +197,8 @@ def manage():
                 "convert dns train: \n"
                 "convert host all: Convert all host dataset splits to datasets-new/host\n"
                 "convert host train|validation|experiments|test: Convert one host split to datasets-new/host\n"
-                "database duckdb start: Start DuckDB container via Docker Compose\n"
-                "database duckdb stop: Stop DuckDB container and remove Compose resources\n"
-                "database duckdb restart: Restart DuckDB container via Docker Compose\n"
-                "database duckdb status: Show DuckDB Compose service status\n"
-                "database duckdb logs: Show last 100 DuckDB service logs\n"
             )
 
 
 if __name__ == "__main__":
-    try:
-        manage()
-    except DuckDBServiceError as exc:
-        console.print(f"[bold red]DuckDB configuration error:[/bold red] {exc}")
-        raise SystemExit(2) from exc
-    except subprocess.CalledProcessError as exc:
-        console.print(f"[bold red]Command failed with exit code {exc.returncode}:[/bold red] {' '.join(exc.cmd)}")
-        raise SystemExit(exc.returncode) from exc
+    manage()

@@ -4,7 +4,17 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="675f5dd7-d427-4bf0-ab5f-a6309dc0de38" name="Changes" comment="" />
+    <list default="true" id="675f5dd7-d427-4bf0-ab5f-a6309dc0de38" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.env.exemple" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Planning/Tasks.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/Tasks.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Planning/task.md" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/task.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/ru/architecture.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/manage.py" beforeDir="false" afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/convertion/dns_convertion.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/convertion/dns_convertion.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -38,7 +48,8 @@
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "git-widget-placeholder": "dev",
-    "last_opened_file_path": "C:/Users/fmark/PythonProjects/Proposal/docs/en",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "C:/Users/fmark/PythonProjects/Proposal",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -59,7 +70,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-024ed6589d45-c2ffad84badb-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-261.23567.174" />
+        <option value="bundled-python-sdk-c59985aa861c-c2ffad84badb-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-261.24374.152" />
       </set>
     </attachedChunks>
   </component>

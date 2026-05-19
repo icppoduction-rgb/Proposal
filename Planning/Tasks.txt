@@ -597,3 +597,17 @@ path: databases/duckdb/docker-compse.yml
 Требуется запускать и останавливать эту базу через manage.py
 
 реализуй все нужные команды но пока не запуска я это сделаю сам
+
+Задача (анализ репозитория и исправление ошибок):
+- изучи документы docs/ru/architecture.md|project_proposal_analysis.md
+- изучи tasks Planning/task.md
+- я использую conda "C:\Users\fmark\.conda\envs\proposal2" python 3.11
+- проанализируй весь репозиторий найди ошибки в коде и не состыковки с документации
+- исправь все ошибки и не состыковки
+
+
+Задача (анализ репозитория и исправление ошибок):
+- изучи документы docs/ru/project_proposal_analysis.md|architecture.md
+- проанализируй datasets-new
+- проанализируй код он должен соответствовать docs/ru/project_proposal_analysis.md|architecture.md
+- исправь не соответствия с docs/ru/project_proposal_analysis.md|architecture.md

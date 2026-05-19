@@ -3,7 +3,7 @@
 > **Reference architecture:** `docs/ru/architecture.md`  
 > **Project language:** Python 3.11+  
 > **Platform:** Windows 11 / Linux compatible  
-> **Status:** Database infrastructure ready. `normalization/` and `train/` need to be implemented.
+> **Status:** Implemented. Database infrastructure, `normalization/`, `train/`, model storage, sequence storage, CLI integration, and focused tests are present.
 
 ---
 
@@ -83,11 +83,11 @@ HOST_LABELS = {"benign": 0, "attack": 1}
 
 ---
 
-## What needs to be implemented
+## Implemented framework scope
 
 ### 1. `normalization/` — Dataset normalization
 
-Create this folder with the following files:
+The implemented folder contains the following files:
 
 ```
 normalization/
@@ -325,6 +325,7 @@ CREATE TABLE IF NOT EXISTS host_features (
     event_count     FLOAT,
     unique_events   FLOAT,
     event_entropy   FLOAT,
+    mean_inter_event_gap FLOAT,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -409,7 +410,7 @@ class TrainResult:
     val_f1: float
     val_auc: float
     duration_seconds: float
-    artifact_paths: dict[str, str]  # {"model": "models/v1/rf.joblib", ...}
+    artifact_paths: dict[str, str]  # {"model": "models/v1/dns/random_forest.joblib", ...}
 
 class BaseTrainer(ABC):
     """
@@ -793,15 +794,14 @@ models/
 └── .gitkeep
 ```
 
-Each trained version will create `models/v{N}/` automatically with:
+Each trained version will create source-specific folders under `models/v{N}/{source}/`.
+This keeps DNS and Host artifacts separate because they use different label spaces.
+Each source folder may contain:
 - `random_forest.joblib`
 - `xgboost.json`
 - `cnn.pt`
 - `lstm.pt`
 - `fusion_weights.json`
-- `feature_scaler.joblib`
-- `label_encoder.joblib`
-- `shap_summary.png`
 - `metadata.json`
 
 ---
@@ -930,10 +930,10 @@ python manage.py normalize dns stateless
 python manage.py normalize host all
 
 # Step 4 — Train full hybrid framework version v1
-python manage.py train v1 all --epochs-cnn 50 --epochs-lstm 100 --batch-size 256
+python manage.py train v1 all --source all --epochs-cnn 50 --epochs-lstm 100 --batch-size 256
 
 # Step 5 — Evaluate on test split
-python manage.py evaluate v1 TEST
+python manage.py evaluate v1 TEST --source all
 
 # Step 6 — Check model info
 python manage.py info models all
@@ -943,14 +943,14 @@ python manage.py info models all
 
 ## Definition of done
 
-- [ ] `normalization/` — all 7 files implemented, classes instantiable, `run()` produces a non-empty DataFrame
-- [ ] `normalization/db_writer.py` — `DuckDBWriter.write_dataframe()` creates tables and inserts rows without error
-- [ ] `train/` — all files implemented, `TrainPipeline` can be instantiated without import errors
-- [ ] `train/trainers/` — each trainer's `fit()` and `predict_proba()` work on dummy NumPy arrays
-- [ ] `train/fusion/late_fusion.py` — `optimize_weights()` runs without error on random probability arrays
-- [ ] `models/` folder exists with `.gitkeep`
-- [ ] `sequences/` folder exists with `.gitkeep`
-- [ ] `manage.py` — new commands registered and parseable
-- [ ] `requirements.txt` — updated
-- [ ] All classes have docstrings and type hints
-- [ ] `python manage.py --help` does not crash (existing commands still work)
+- [x] `normalization/` — all 7 files implemented, classes instantiable, `run()` produces a non-empty DataFrame
+- [x] `normalization/db_writer.py` — `DuckDBWriter.write_dataframe()` creates tables and inserts rows without error
+- [x] `train/` — all files implemented, `TrainPipeline` can be instantiated without import errors
+- [x] `train/trainers/` — each trainer's `fit()` and `predict_proba()` work on dummy NumPy arrays
+- [x] `train/fusion/late_fusion.py` — `optimize_weights()` runs without error on random probability arrays
+- [x] `models/` folder exists with `.gitkeep`
+- [x] `sequences/` folder exists with `.gitkeep`
+- [x] `manage.py` — new commands registered and parseable
+- [x] `requirements.txt` — updated
+- [x] Public classes have docstrings and type hints
+- [x] `python manage.py --help` does not crash (existing commands still work)
