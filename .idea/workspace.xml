@@ -5,15 +5,22 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="675f5dd7-d427-4bf0-ab5f-a6309dc0de38" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.env.exemple" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Planning/Tasks.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/Tasks.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Planning/task.md" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/task.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/ru/architecture.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Planning/ArchitectureProjectsTasks.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Planning/Tasks.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Planning/planing.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Planning/planing.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/manage.py" beforeDir="false" afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/convertion/dns_convertion.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/convertion/dns_convertion.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/cleanup/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/cleanup/cleanup_host_datasets_new.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/cleanup/dataset_format_cleanup.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/convertion/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/convertion/dns_convertion.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/convertion/host_convertion.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/workdatasets/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/workdatasets/dataset_path.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/workdatasets/dataset_processing.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/workdatasets/read_format.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -39,24 +46,24 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "dev",
-    "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "C:/Users/fmark/PythonProjects/Proposal",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;dev&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/fmark/PythonProjects/Proposal&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\fmark\PythonProjects\Proposal\docs\en" />
