@@ -1,12 +1,7 @@
 .idea/
-.claude
 __pycache__/
 .pytest_cache/
 *.pyc
-datasets
 .env
-data-json
-temp-data
 logs
-databases/data
 temp_data
