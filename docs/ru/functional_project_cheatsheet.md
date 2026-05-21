@@ -1,83 +1,94 @@
-# Шпаргалка по функциональному проекту (гибридное обнаружение эксфильтрации)
+# Шпаргалка по функциональному проекту
 
-## 1. Главный фокус (по proposal + dataset docs)
-- Сделать **behavior-driven hybrid IDS** для обнаружения эксфильтрации данных.
-- Объединять **сетевую и хостовую телеметрию** на уровне **признаков** (а не сырые логи в один массив).
-- Ловить **многоэтапное развитие атаки** (recon -> staging -> exfiltration), а не только одиночные аномалии.
-- Встроить объяснимость через **SHAP**, чтобы SOC-аналитик понимал причину алерта.
+## 1. Цель проекта
+Спроектировать и оценить behaviour-driven гибридный ML-фреймворк для детекции многоэтапной эксфильтрации данных с объединением host-телеметрии, network-признаков, sequence modelling и explainability.
 
-## 2. Что обязательно должно работать в MVP
-- Сквозной pipeline: от загрузки датасетов до воспроизводимой оценки модели.
-- Два уровня детекции:
-  - классификация события/сэмпла (RF, XGBoost, CNN);
-  - классификация последовательности (LSTM по sliding windows).
-- Late fusion: объединение вероятностей классификатора и sequence-модуля.
-- Оценка через stratified CV и отдельный контроль false positives.
-- Воспроизводимые артефакты: метрики, модели, схема признаков, логи экспериментов.
+## 2. Основной исследовательский фокус
+- Выделить кросс-доменные поведенческие индикаторы (host + network) для стадий эксфильтрации.
+- Построить гибридную архитектуру, совмещающую классический ML и DL.
+- Моделировать временную последовательность атаки, а не только event-level аномалии.
+- Повысить интерпретируемость решений через SHAP.
 
-## 3. Обязательная стратегия датасетов (роли не смешивать)
+## 3. Ядро архитектуры
+- **Слой 1: Multi-source integration**: сбор, предобработка и нормализация host/network признаков в единое представление.
+- **Слой 2: Hybrid ML/DL classification**: Random Forest, XGBoost, CNN для классификации benign/malicious на уровне событий/сэмплов.
+- **Слой 3: Behavioural sequence modelling**: LSTM по упорядоченным поведенческим событиям.
+- **Логика решения**: late fusion вероятностей классификатора и sequence-модели.
 
-### DNS-ветка
-- `TRAIN (атаки)`: CIC-Bell-DNS-EXF-2021
-- `TRAIN/VALIDATION (benign + FP control)`: CIC-Bell-DNS-2021
-- `TEST (финальный бенчмарк)`: BCCC-CIC-Bell-DNS-2024
-- `TEST (реализм, cross-dataset)`: Mendeley DNS Exfiltration Dataset
-- `Только EXPERIMENTS`: Kaggle DNS Tunneling (synthetic)
+## 4. Стратегия датасетов
+- Строго разделять роли: `TRAIN`, `VALIDATION`, `TEST`, `EXPERIMENTS`.
+- Не смешивать DNS-логику и host-логику в одной ролевой таблице.
+- Интеграцию разнородных источников делать на уровне признаков, а не через прямой raw-fusion логов.
 
-### Host-ветка
-- `TRAIN`: ADFA IDS + LID-DS 2021 + Maintainable Log Dataset
-- `VALIDATION`: LID-DS 2019 + LANL + OTRF Windows/Sysmon
-- `TEST`: Unified Host+Network (LANL) + ISOT Cloud IDS + Dynamic Malware Analysis
-- `Только EXPERIMENTS`: HDFS/BGL и synthetic generators
+## 5. Роли DNS-датасетов
+| Роль | Датасет(ы) | Назначение |
+|---|---|---|
+| `TRAIN` | CIC-Bell-DNS-EXF-2021 | Обучение attack-класса (DNS exfiltration/tunneling). |
+| `TRAIN` | CIC-Bell-DNS-2021 | Обучение benign-класса (нормальное DNS-поведение). |
+| `VALIDATION` | CIC-Bell-DNS-2021 split | Контроль false positives, настройка порога. |
+| `TEST` | BCCC-CIC-Bell-DNS-2024 | Финальный benchmark, проверка generalization и overfitting. |
+| `TEST` | Mendeley DNS Exfiltration | Проверка реалистичности и междатасетного переноса. |
+| `EXPERIMENTS` | Kaggle DNS Tunneling | Быстрый прототипинг, feature-эксперименты, augmentation only. |
 
-## 4. Архитектурные приоритеты для рабочего проекта
-- Единая каноническая схема события для всех источников: время, actor/process, network context, label.
-- Жесткие границы train/val/test по источнику и времени, чтобы убрать leakage.
-- Раздельные генераторы признаков:
-  - network features (flow stats, DNS entropy, inter-arrival, frequency);
-  - host features (syscall distributions, process patterns, privilege indicators, file-access entropy).
-- Sequence builder с фиксированными окнами (в proposal ориентир ~50-100 событий).
-- Модуль explainability:
-  - глобальный SHAP-рейтинг признаков;
-  - локальные SHAP-объяснения для TP/FP кейсов;
-  - проверка стабильности рангов между CV-фолдами.
+## 6. Роли host-датасетов
+| Роль | Датасет(ы) | Назначение |
+|---|---|---|
+| `TRAIN` | ADFA IDS | Базовое HIDS-обучение. |
+| `TRAIN` | LID-DS 2021 | Основное sequence-моделирование syscall. |
+| `TRAIN` | Maintainable Log Dataset | Enterprise logs и моделирование multi-stage поведения. |
+| `VALIDATION` | LID-DS 2019 | Cross-version/CVE валидация устойчивости. |
+| `VALIDATION` | LANL | Валидация user-host/auth/lateral movement поведения. |
+| `VALIDATION` | Windows Event Log / OTRF | SOC-ориентированная валидация Windows телеметрии. |
+| `TEST` | Unified Host + Network / LANL | Гибридный host+network тест устойчивости. |
+| `TEST` | ISOT Cloud IDS | Проверка переносимости в cloud-среду. |
+| `TEST` | Dynamic Malware Analysis | Проверка malware-driven host поведения. |
+| `EXPERIMENTS` | HDFS, BGL, Syscall Generator, COMIDDS | Вспомогательные эксперименты/augmentation/поиск датасетов. |
 
-## 5. Минимальный практический стек
-- **Обязательные датасеты**:
-  - DNS: EXF-2021 + DNS-2021 + BCCC-2024
-  - Host: ADFA + LID-DS 2021 + Maintainable Log
-- **Обязательные модели**:
-  - RF/XGBoost как стабильные baseline
-  - CNN для структурных паттернов
-  - LSTM для временного поведения
-- **Обязательные метрики**:
-  - Precision, Recall, F1 как основные
-  - FPR и AUC как контрольные
+## 7. Фокус feature engineering
+- Network-признаки: flow-статистики, распределения размера пакетов, inter-arrival timing, DNS entropy, частота коммуникаций.
+- Host-признаки: частоты syscall, file-access entropy, process execution patterns, индикаторы использования привилегий.
+- Использовать MITRE ATT&CK mapping как промежуточный слой согласования индикаторов стадий атаки.
+- Валидировать важность признаков через SHAP.
 
-## 6. Риски, которые нужно закрыть заранее
-- Несовместимость host/network датасетов -> feature-level integration + явная карта соответствия признаков.
-- Дисбаланс классов -> взвешивание/сэмплинг и threshold tuning только на validation.
-- Переобучение на одном семействе данных -> cross-dataset проверки (BCCC, Mendeley, LID-DS 2019, LANL).
-- Ограничения по ресурсам -> сначала baseline-пайплайн, потом итерации CNN/LSTM.
+## 8. Фокус sequence modelling
+- Использовать LSTM для временных зависимостей многоэтапного поведения.
+- Формировать упорядоченные последовательности через sliding windows.
+- Целевой размер sequence: примерно 50-100 событий.
+- Бинарная sequence-классификация: benign vs exfiltration.
 
-## 7. Каркас выполнения на 12 недель (из proposal)
-1. Phase 1: доступ к данным + feature engineering + ATT&CK mapping.
-2. Phase 2: реализация hybrid classifier pipeline.
-3. Phase 3: LSTM sequence module и интеграция.
-4. Phase 4: интеграция SHAP и проверка качества интерпретации.
-5. Phase 5: ablation + benchmark comparisons + финальная валидация.
+## 9. Фокус explainability
+- Основной XAI-метод: SHAP.
+- Нужны global и local feature attribution.
+- Качественная проверка: объяснения TP/FP по каждому CV-fold относительно MITRE-логики стадий.
+- Количественная проверка: стабильность rank-order SHAP между CV-fold.
 
-## 8. Критерии готовности «функционального проекта»
-- Полный воспроизводимый прогон от сырых данных до финального отчета.
-- Документированная конфигурация ролей датасетов и политики сплитов.
-- Сохраненные артефакты: модели, пороги, списки признаков, SHAP-сводки.
-- Финальный отчет содержит:
-  - метрики по каждому датасету;
-  - анализ false positives;
-  - ablation-таблицу (no-sequence vs sequence, no-host vs hybrid);
-  - ограничения и следующий план итераций.
+## 10. Приоритеты реализации
+1. Зафиксировать доступ к датасетам и role-separated splits.
+2. Реализовать feature engineering и ATT&CK-согласованную схему признаков.
+3. Собрать baseline hybrid classifier (RF/XGBoost/CNN).
+4. Интегрировать LSTM sequence-слой и late fusion.
+5. Добавить SHAP-пайплайн и проверки качества объяснений.
+6. Провести stratified k-fold CV, ablation и cross-dataset validation.
 
-## 9. Привязка к структуре репозитория
-- `manage.py`: оркестратор стадий (`prepare`, `train`, `eval`, `explain`, `report`).
-- `scripts/`: идемпотентные скрипты подготовки данных, генерации признаков, обучения и оценки.
-- `docs/en|ru`: синхронно поддерживать архитектурные решения, матрицу ролей датасетов и инструкции воспроизводимости.
+## 11. Ограничения проекта
+- Таймлайн: 12 недель (май-август 2026), 5 фаз методологии.
+- Только публичные benchmark-датасеты; без live traffic capture.
+- Ограниченный стек моделей: RF, XGBoost, CNN, LSTM.
+- Вне текущего scope: RL-компоненты, graph-based расширения, полностью unsupervised sequence modelling, крупномасштабный raw multi-dataset fusion.
+- Ожидается class imbalance; ключевые метрики: precision/recall/F1 (+ AUC, FPR).
+
+## 12. Чего не делать
+- Не обучать модель на датасетах, отведённых под `TEST`.
+- Не использовать синтетический Kaggle DNS tunneling как финальное доказательство качества.
+- Не сливать DNS- и host-роль в один смешанный pipeline.
+- Не закладываться на payload-inspection для encrypted каналов (в scope — metadata/behavioural подход).
+- Не пропускать контроль false positives на benign-heavy распределениях.
+
+## 13. Рекомендуемый порядок разработки
+1. Зафиксировать инвентарь датасетов и role-matrix отдельно для DNS и host потоков.
+2. Реализовать общие контракты предобработки и словари признаков.
+3. Обучить baseline non-sequential модели и зафиксировать reference-метрики.
+4. Добавить LSTM sequence-ветку и late-fusion слой принятия решения.
+5. Интегрировать SHAP-отчёты (global/local + fold consistency checks).
+6. Выполнить полный пакет оценки: stratified CV, ablation, cross-dataset generalization.
+7. Зафиксировать воспроизводимые конфиги экспериментов и шаблоны отчётности.

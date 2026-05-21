@@ -1,83 +1,94 @@
-# Functional Project Cheatsheet (Hybrid Exfiltration Detection)
+# Functional Project Cheatsheet
 
-## 1. Core Focus (from proposal + datasets docs)
-- Build a **behaviour-driven hybrid IDS** for data exfiltration detection.
-- Combine **network telemetry + host telemetry** at the **feature level** (not raw log fusion).
-- Model **multi-stage attack progression** (recon -> staging -> exfiltration), not only isolated anomalies.
-- Keep explainability practical with **SHAP** so SOC analysts can validate why alerts fired.
+## 1. Project Goal
+Design and evaluate a behaviour-driven hybrid ML framework for multi-stage data exfiltration detection by combining host telemetry, network traffic features, sequence modelling, and explainability.
 
-## 2. What Must Work in a Functional MVP
-- End-to-end pipeline from dataset ingestion to reproducible model evaluation.
-- Two-level detection logic:
-  - event/sample classification (RF, XGBoost, CNN);
-  - sequence-level classification (LSTM over sliding windows).
-- Late fusion of classifier probability + sequence probability.
-- Evaluation with stratified CV and explicit false-positive control.
-- Reproducible outputs: metrics, model artifacts, feature schema, experiment logs.
+## 2. Main Research Focus
+- Identify cross-domain behavioural indicators (host + network) for exfiltration stages.
+- Build a hybrid architecture combining classical ML and DL.
+- Model temporal attack progression (not only event-level anomalies).
+- Improve operational interpretability with SHAP.
 
-## 3. Mandatory Dataset Strategy (Do Not Mix Roles)
+## 3. Core Architecture
+- **Layer 1: Multi-source integration**: ingest, preprocess, normalize host/network features into unified feature representation.
+- **Layer 2: Hybrid ML/DL classifier**: Random Forest, XGBoost, CNN for event/sample-level malicious vs benign classification.
+- **Layer 3: Behavioural sequence modelling**: LSTM over ordered behavioural events.
+- **Decision logic**: late fusion of classifier and sequence-model probabilities.
 
-### DNS branch
-- `TRAIN (attack)`: CIC-Bell-DNS-EXF-2021
-- `TRAIN/VALIDATION (benign + FP control)`: CIC-Bell-DNS-2021
-- `TEST (final benchmark)`: BCCC-CIC-Bell-DNS-2024
-- `TEST (cross-dataset realism)`: Mendeley DNS Exfiltration Dataset
-- `EXPERIMENTS only`: Kaggle DNS Tunneling (synthetic)
+## 4. Dataset Strategy
+- Keep strict role separation: `TRAIN`, `VALIDATION`, `TEST`, `EXPERIMENTS`.
+- Do not mix DNS and host dataset logic in one role table; manage them independently.
+- Use feature-level integration across heterogeneous sources (not raw one-to-one log fusion).
 
-### Host branch
-- `TRAIN`: ADFA IDS + LID-DS 2021 + Maintainable Log Dataset
-- `VALIDATION`: LID-DS 2019 + LANL + OTRF Windows/Sysmon
-- `TEST`: Unified Host+Network (LANL) + ISOT Cloud IDS + Dynamic Malware Analysis
-- `EXPERIMENTS only`: HDFS/BGL and synthetic generators
+## 5. DNS Dataset Roles
+| Role | Dataset(s) | Purpose |
+|---|---|---|
+| `TRAIN` | CIC-Bell-DNS-EXF-2021 | Attack-class training (DNS exfiltration/tunneling). |
+| `TRAIN` | CIC-Bell-DNS-2021 | Benign-class training (normal DNS behaviour). |
+| `VALIDATION` | CIC-Bell-DNS-2021 split | False-positive control, threshold tuning. |
+| `TEST` | BCCC-CIC-Bell-DNS-2024 | Final benchmark, generalization, overfitting check. |
+| `TEST` | Mendeley DNS Exfiltration | Cross-dataset realism/transferability check. |
+| `EXPERIMENTS` | Kaggle DNS Tunneling | Fast prototyping, feature experiments, augmentation only. |
 
-## 4. Architectural Priorities for Production-Ready Growth
-- Canonical event schema for all sources: timestamps, actor/process, network context, labels.
-- Strict train/val/test split boundaries by source/time to avoid leakage.
-- Separate feature builders:
-  - network features (flow stats, DNS entropy, inter-arrival, frequency);
-  - host features (syscall distributions, process patterns, privilege indicators, file-access entropy).
-- Sequence builder with fixed windows (proposal suggests ~50-100 events/window).
-- Explainability module:
-  - global SHAP feature ranking;
-  - local SHAP for TP/FP cases;
-  - stability check across CV folds.
+## 6. Host Dataset Roles
+| Role | Dataset(s) | Purpose |
+|---|---|---|
+| `TRAIN` | ADFA IDS | Baseline HIDS training. |
+| `TRAIN` | LID-DS 2021 | Primary syscall sequence modelling. |
+| `TRAIN` | Maintainable Log Dataset | Enterprise log + multi-stage behaviour modelling. |
+| `VALIDATION` | LID-DS 2019 | Cross-version/CVE robustness validation. |
+| `VALIDATION` | LANL | User-host/authentication/lateral movement validation. |
+| `VALIDATION` | Windows Event Log / OTRF | SOC-style Windows telemetry validation. |
+| `TEST` | Unified Host + Network / LANL | Hybrid host+network robustness test. |
+| `TEST` | ISOT Cloud IDS | Cloud transferability test. |
+| `TEST` | Dynamic Malware Analysis | Malware-driven host behaviour test. |
+| `EXPERIMENTS` | HDFS, BGL, Syscall Generator, COMIDDS | Auxiliary anomaly experiments/augmentation/dataset search. |
 
-## 5. Minimum Practical Stack
-- **Must-have datasets**:
-  - DNS: EXF-2021 + DNS-2021 + BCCC-2024
-  - Host: ADFA + LID-DS 2021 + Maintainable Log
-- **Must-have models**:
-  - RF/XGBoost as robust baselines
-  - CNN for structured feature patterns
-  - LSTM for temporal behaviour
-- **Must-have metrics**:
-  - Precision, Recall, F1 as primary
-  - FPR and AUC as control metrics
+## 7. Feature Engineering Focus
+- Network features: flow stats, packet size patterns, inter-arrival timing, DNS entropy, communication frequency.
+- Host features: syscall frequencies, file-access entropy, process execution patterns, privilege usage.
+- Use MITRE ATT&CK mapping as intermediate alignment for attack-stage indicators.
+- Validate feature importance with SHAP.
 
-## 6. Risks to Control Early
-- Dataset incompatibility between host/network sources -> use feature-level integration and documented mapping.
-- Class imbalance -> weighted losses/sampling and threshold tuning on validation only.
-- Overfitting to one dataset family -> cross-dataset tests (BCCC, Mendeley, LID-DS 2019, LANL).
-- Compute limits -> keep baseline-first training order, then add CNN/LSTM iterations.
+## 8. Sequence Modelling Focus
+- Use LSTM for temporal dependencies in multi-stage behaviour.
+- Build ordered event sequences using sliding windows.
+- Sequence size target: ~50-100 events per sequence.
+- Sequence-level binary classification: benign vs exfiltration.
 
-## 7. 12-Week Execution Spine (from proposal)
-1. Phase 1: dataset access + feature engineering + ATT&CK mapping.
-2. Phase 2: hybrid classifier pipeline implementation.
-3. Phase 3: LSTM sequence module and integration.
-4. Phase 4: SHAP integration and interpretation quality checks.
-5. Phase 5: ablation + benchmark comparisons + final validation.
+## 9. Explainability Focus
+- SHAP is the primary XAI method.
+- Produce both global and local feature attributions.
+- Qualitative check: TP/FP case explanations per CV fold vs MITRE stage logic.
+- Quantitative check: SHAP rank-order consistency across CV folds.
 
-## 8. Done Criteria for “Functional Project”
-- Full reproducible run from raw source files to final test report.
-- Documented config for dataset role mapping and split policy.
-- Saved artifacts: models, thresholds, feature lists, SHAP summaries.
-- Test report includes:
-  - per-dataset metrics;
-  - FP analysis;
-  - ablation table (no-sequence vs sequence, no-host vs hybrid);
-  - known limitations and next-step plan.
+## 10. Implementation Priorities
+1. Finalize dataset access and role-separated splits.
+2. Implement feature engineering + ATT&CK-aligned feature schema.
+3. Build baseline hybrid classifier (RF/XGBoost/CNN).
+4. Integrate LSTM sequence layer + late fusion.
+5. Add SHAP pipeline and explanation quality checks.
+6. Run stratified k-fold CV, ablation, and cross-dataset validation.
 
-## 9. Repo-Level Implementation Hint
-- `manage.py`: orchestrator for stages (`prepare`, `train`, `eval`, `explain`, `report`).
-- `scripts/`: idempotent data preparation, feature build, training/eval runners.
-- `docs/en|ru`: keep architecture decisions, dataset-role matrix, and reproducibility instructions synchronized.
+## 11. Project Constraints
+- Timeline: 12 weeks (May-Aug 2026), 5 phased methodology.
+- Public benchmark datasets only; no live traffic capture.
+- Scope-limited model set: RF, XGBoost, CNN, LSTM.
+- Out of scope: RL components, graph-based extensions, full unsupervised sequence modelling, large-scale raw multi-dataset fusion.
+- Class imbalance expected; prioritize precision/recall/F1 (+ AUC, FPR).
+
+## 12. What Not To Do
+- Do not train on datasets assigned for `TEST`.
+- Do not use synthetic Kaggle DNS tunneling data as final evidence of model quality.
+- Do not collapse DNS and host role logic into one mixed dataset pipeline.
+- Do not rely on payload inspection assumptions for encrypted channels (scope is metadata/behavioural modelling).
+- Do not skip false-positive validation on benign-heavy distributions.
+
+## 13. Recommended Development Order
+1. Lock dataset inventory and role matrix for DNS and host streams separately.
+2. Implement shared preprocessing contracts and feature dictionaries.
+3. Train baseline non-sequential models and establish reference metrics.
+4. Add LSTM sequence branch and late-fusion decision layer.
+5. Integrate SHAP reports (global/local + fold consistency checks).
+6. Execute full evaluation suite: stratified CV, ablation, cross-dataset generalization.
+7. Freeze reproducible experiment configs and reporting templates.
