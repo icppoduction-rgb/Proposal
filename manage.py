@@ -38,8 +38,8 @@ def manage():
     args, _unknown = parser.parse_known_args()
 
     match (args.module, args.service, args.action):
-
-        case ("handlers", "file-processing", "collection-file-dns"):
+        # пример
+        case ("handler", "example", "work_example"):
 
             pass
 
