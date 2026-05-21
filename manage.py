@@ -6,16 +6,18 @@ from pathlib import Path
 from dotenv import load_dotenv
 from rich.console import Console
 
+
 load_dotenv()
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parent
 
 # ---------------------- Variables for working with data sets ---------------------- #
 
-PATH_DATASETS_FOLDER: str = os.getenv("PATH_DATASETS_FOLDER", "")
-PATH_FILE_JSON_DATASET: str = os.getenv("PATH_FILE_JSON_DATASET", "")
-PATH_FILE_JSON_EXTENSIONS: str = os.getenv("PATH_FILE_JSON_EXTENSIONS", "")
+PATH_FOLDER_DATASETS: str =  os.getenv("PATH_FOLDER_DATASETS", "")
 
+PATH_TEMP_DATA: str = fr"{PROJECT_ROOT}\temp_data"
+
+PATH_DNS_DATASETS: str = fr"{PATH_FOLDER_DATASETS}\dns"
 # ------------------------------ Database settings ------------------------------ #
 
 console = Console()
@@ -25,7 +27,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("module", nargs="?")
 parser.add_argument("service", nargs="?")
 parser.add_argument("action", nargs="?")
-
 
 # Функция управления
 def manage():
@@ -37,6 +38,10 @@ def manage():
     args, _unknown = parser.parse_known_args()
 
     match (args.module, args.service, args.action):
+
+        case ("handlers", "file-processing", "collection-file-dns"):
+
+            pass
 
         case _:
             console.print(
