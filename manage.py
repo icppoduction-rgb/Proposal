@@ -16,6 +16,7 @@ except ModuleNotFoundError:
             print(message)
 
 from scripts.handlers.dns_dataset_handler import DNSDatasetHandler
+from scripts.handlers.host_dataset_handler import HostDatasetHandler
 
 
 load_dotenv()
@@ -27,6 +28,11 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parent
 PATH_FOLDER_DATASETS: str = os.getenv("PATH_FOLDER_DATASETS", "")
 
 PATH_TEMP_DATA: str = os.getenv("PATH_TEMP_DATA", fr"{PROJECT_ROOT}\temp_data")
+
+PATH_HOST_DATASETS: str = os.getenv(
+    "PATH_HOST_DATASETS",
+    fr"{PATH_FOLDER_DATASETS}\host" if PATH_FOLDER_DATASETS else "",
+)
 
 PATH_DNS_DATASETS: str = os.getenv(
     "PATH_DNS_DATASETS",
@@ -68,10 +74,23 @@ def manage() -> None:
                 f"Files JSON: {result.files_json_file}"
             )
 
+        case ("host", "dataset", "analyze"):
+            handler = HostDatasetHandler(
+                host_datasets_path=PATH_HOST_DATASETS,
+                temp_data_path=PATH_TEMP_DATA,
+            )
+            result = handler.analyze_and_save()
+            console.print(
+                "Host dataset analysis completed.\n"
+                f"Path JSON: {result.path_json_file}\n"
+                f"Files JSON: {result.files_json_file}"
+            )
+
         case _:
             console.print(
                 "Commands:\n"
                 "python manage.py dataset dns analyze\n"
+                "python manage.py host dataset analyze\n"
             )
 
 
