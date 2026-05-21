@@ -44,9 +44,10 @@ class DNSDatasetHandler:
 
         for current_path, files in self._walk_dns_files():
             role = self._detect_role(current_path)
-            paths_by_role_set[role].add(str(current_path))
 
             for file_name in files:
+                file_path = current_path / file_name
+                paths_by_role_set[role].add(str(file_path))
                 files_by_role_set[role].add(file_name)
 
         paths_by_role = self._prepare_output(paths_by_role_set)
