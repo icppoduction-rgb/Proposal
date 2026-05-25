@@ -17,6 +17,7 @@ except ModuleNotFoundError:
 
 from scripts.handlers.dns_dataset_handler import DNSDatasetHandler
 from scripts.handlers.host_dataset_handler import HostDatasetHandler
+from scripts.handlers.filter_host_dataset_handler import HostDatasetFilterHandler
 
 
 load_dotenv()
@@ -37,6 +38,11 @@ PATH_HOST_DATASETS: str = os.getenv(
 PATH_DNS_DATASETS: str = os.getenv(
     "PATH_DNS_DATASETS",
     fr"{PATH_FOLDER_DATASETS}\dns" if PATH_FOLDER_DATASETS else "",
+)
+
+PATH_FILTER_LOG: str = os.getenv(
+    "PATH_FILTER_LOG",
+    str(PROJECT_ROOT / "logs" / "filter.log"),
 )
 # ------------------------------ Database settings ------------------------------ #
 
@@ -86,11 +92,28 @@ def manage() -> None:
                 f"Files JSON: {result.files_json_file}"
             )
 
+        case ("host", "dataset", "filter"):
+            handler = HostDatasetFilterHandler(
+                temp_data_path=PATH_TEMP_DATA,
+                log_file_path=PATH_FILTER_LOG,
+            )
+            result = handler.filter_and_save()
+            console.print(
+                "Host dataset filter completed.\n"
+                f"Path JSON: {result.path_json_file}\n"
+                f"Files JSON: {result.files_json_file}\n"
+                f"Log file: {result.log_file}\n"
+                f"Kept files: {result.kept_files_count}\n"
+                f"Excluded files: {result.excluded_files_count}\n"
+                f"Excluded reasons: {result.excluded_by_reason}"
+            )
+
         case _:
             console.print(
                 "Commands:\n"
                 "python manage.py dataset dns analyze\n"
                 "python manage.py host dataset analyze\n"
+                "python manage.py host dataset filter\n"
             )
 
 
