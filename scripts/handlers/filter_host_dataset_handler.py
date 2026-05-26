@@ -15,7 +15,7 @@ class HostFilterResult:
     path_json_file: str
     files_json_file: str
     log_file: str
-    dataset_paths_by_role: dict[str, list[str]]
+    file_paths_by_role: dict[str, list[str]]
     files_by_role: dict[str, list[str]]
     kept_files_count: int
     excluded_files_count: int
@@ -73,7 +73,7 @@ class HostDatasetFilterHandler:
 
         source_file_names_by_role = self._normalize_files_by_role(source_files)
 
-        dataset_paths_by_role_set: dict[str, set[str]] = self._init_role_sets()
+        file_paths_by_role_set: dict[str, set[str]] = self._init_role_sets()
         files_by_role_set: dict[str, set[str]] = self._init_role_sets()
         excluded_by_reason: dict[str, int] = {}
 
@@ -144,36 +144,24 @@ class HostDatasetFilterHandler:
                     )
                     continue
 
-                dataset_root = self._extract_dataset_root(file_path=file_path, dataset_name=dataset_name)
-                if dataset_root is None:
-                    excluded_files_count += 1
-                    self._track_exclusion(
-                        excluded_by_reason=excluded_by_reason,
-                        file_path=raw_path,
-                        reason="dataset_root_not_detected",
-                        role=role,
-                        dataset_name=dataset_name,
-                    )
-                    continue
-
                 kept_files_count += 1
-                dataset_paths_by_role_set[role].add(str(dataset_root))
+                file_paths_by_role_set[role].add(raw_path)
                 files_by_role_set[role].add(file_path.name)
 
-        dataset_paths_by_role = self._prepare_output(dataset_paths_by_role_set)
+        file_paths_by_role = self._prepare_output(file_paths_by_role_set)
         files_by_role = self._prepare_output(files_by_role_set)
 
         filter_path_json = self.temp_data_path / "filter-host-path-file.json"
         filter_file_json = self.temp_data_path / "filter-host-file.json"
 
-        JsonDataManager(filter_path_json).write(dataset_paths_by_role)
+        JsonDataManager(filter_path_json).write(file_paths_by_role)
         JsonDataManager(filter_file_json).write(files_by_role)
 
         return HostFilterResult(
             path_json_file=str(filter_path_json),
             files_json_file=str(filter_file_json),
             log_file=str(self.log_file_path),
-            dataset_paths_by_role=dataset_paths_by_role,
+            file_paths_by_role=file_paths_by_role,
             files_by_role=files_by_role,
             kept_files_count=kept_files_count,
             excluded_files_count=excluded_files_count,
@@ -300,15 +288,6 @@ class HostDatasetFilterHandler:
         for index, part in enumerate(parts):
             if part.lower() == "host" and index + 2 < len(parts):
                 return parts[index + 2]
-        return None
-
-    @staticmethod
-    def _extract_dataset_root(file_path: Path, dataset_name: str) -> Path | None:
-        """Возвращает путь до корня конкретного датасета."""
-        parts = file_path.parts
-        for index, part in enumerate(parts):
-            if part.lower() == "host" and index + 2 < len(parts) and parts[index + 2] == dataset_name:
-                return Path(*parts[: index + 3])
         return None
 
     @classmethod
