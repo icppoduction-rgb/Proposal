@@ -19,6 +19,7 @@ from scripts.handlers.dns_dataset_handler import DNSDatasetHandler
 from scripts.handlers.host_dataset_handler import HostDatasetHandler
 from scripts.handlers.filter_host_dataset_handler import HostDatasetFilterHandler
 from scripts.handlers.sort_host_dataset_handler import HostDatasetSortHandler
+from scripts.handlers.save_sort_host_path_handler import HostSortedPathExportHandler
 
 
 load_dotenv()
@@ -132,6 +133,19 @@ def manage() -> None:
                 f"Formats by role: {result.files_by_role_and_format}"
             )
 
+        case ("host", "dataset", "save-paths"):
+            handler = HostSortedPathExportHandler(
+                host_datasets_filter_path=PATH_HOST_DATASETS_FILTER,
+                temp_data_path=PATH_TEMP_DATA,
+            )
+            result = handler.export_paths()
+            console.print(
+                "Host sorted path export completed.\n"
+                f"JSON file: {result.json_file}\n"
+                f"Scanned files: {result.scanned_files_count}\n"
+                f"Counts by role/format: {result.counts_by_role_and_format}"
+            )
+
         case _:
             console.print(
                 "Commands:\n"
@@ -139,6 +153,7 @@ def manage() -> None:
                 "python manage.py host dataset analyze\n"
                 "python manage.py host dataset filter\n"
                 "python manage.py host dataset sort\n"
+                "python manage.py host dataset save-paths\n"
             )
 
 
