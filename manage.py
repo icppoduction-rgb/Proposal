@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 from scripts.handlers.dns_dataset_handler import DNSDatasetHandler
 from scripts.handlers.host_dataset_handler import HostDatasetHandler
 from scripts.handlers.filter_host_dataset_handler import HostDatasetFilterHandler
+from scripts.handlers.sort_host_dataset_handler import HostDatasetSortHandler
 
 
 load_dotenv()
@@ -27,6 +28,8 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parent
 # ---------------------- Variables for working with data sets ---------------------- #
 
 PATH_FOLDER_DATASETS: str = os.getenv("PATH_FOLDER_DATASETS", "")
+
+PATH_FOLDER_DATASETS_FILTER: str = os.getenv('PATH_FOLDER_DATASETS_FILTER', "")
 
 PATH_TEMP_DATA: str = os.getenv("PATH_TEMP_DATA", fr"{PROJECT_ROOT}\temp_data")
 
@@ -44,6 +47,9 @@ PATH_FILTER_LOG: str = os.getenv(
     "PATH_FILTER_LOG",
     str(PROJECT_ROOT / "logs" / "filter.log"),
 )
+
+PATH_HOST_DATASETS_FILTER: str = fr'{PATH_FOLDER_DATASETS_FILTER}\host'
+
 # ------------------------------ Database settings ------------------------------ #
 
 console = Console()
@@ -108,12 +114,31 @@ def manage() -> None:
                 f"Excluded reasons: {result.excluded_by_reason}"
             )
 
+        case ("host", "dataset", "sort"):
+            handler = HostDatasetSortHandler(
+                temp_data_path=PATH_TEMP_DATA,
+                host_datasets_filter_path=PATH_HOST_DATASETS_FILTER,
+            )
+            result = handler.sort_and_prepare()
+            console.print(
+                "Host dataset sort completed.\n"
+                f"Sorted root: {result.sorted_root_path}\n"
+                f"Summary JSON: {result.summary_json_file}\n"
+                f"Created hardlinks: {result.created_links_count}\n"
+                f"Copied files: {result.copied_files_count}\n"
+                f"Skipped existing: {result.skipped_existing_count}\n"
+                f"Missing source files: {result.missing_source_count}\n"
+                f"Name mismatches: {result.name_mismatch_count}\n"
+                f"Formats by role: {result.files_by_role_and_format}"
+            )
+
         case _:
             console.print(
                 "Commands:\n"
                 "python manage.py dataset dns analyze\n"
                 "python manage.py host dataset analyze\n"
                 "python manage.py host dataset filter\n"
+                "python manage.py host dataset sort\n"
             )
 
 
