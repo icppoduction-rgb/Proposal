@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import os
@@ -28,7 +28,7 @@ class HostDatasetSortResult:
 class HostDatasetSortHandler:
     """Сортирует отфильтрованные Host-файлы по ролям и форматам."""
 
-    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION", "EXPERIMENTS")
+    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION")
 
     SEMANTIC_LOG_FORMATS: tuple[str, ...] = (
         "auth.log",
@@ -160,7 +160,7 @@ class HostDatasetSortHandler:
             )
 
     def _create_base_role_directories(self) -> None:
-        """Создаёт обязательные разделы TRAIN/TEST/VALIDATION/EXPERIMENTS."""
+        """Создаёт обязательные разделы TRAIN/TEST/VALIDATION."""
         for role in self.ROLE_ORDER:
             (self.host_datasets_filter_path / role).mkdir(parents=True, exist_ok=True)
 

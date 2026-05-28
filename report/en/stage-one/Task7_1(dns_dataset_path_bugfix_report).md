@@ -1,4 +1,4 @@
-﻿# Report: bugfix for paths in dns-path-file.json
+# Report: bugfix for paths in dns-path-file.json
 
 ## Brief description
 Fixed a bug in the DNS dataset handler: `dns-path-file.json` contained directory paths instead of full file paths.

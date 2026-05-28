@@ -1,377 +1,72 @@
-# DNS Dataset Strategy for a DNS Exfiltration and Tunneling Detection Project
+# DNS Dataset Strategy (Current Scope)
 
----
+## 1. Purpose
+This document defines the DNS datasets currently used in the project.
 
-## 1. Purpose of the Document
+Current DNS scope:
+- `TRAIN`: attack + benign learning
+- `VALIDATION`: false-positive control
+- `TEST`: cross-dataset realism check
+- DNS `EXPERIMENTS`: not used
 
-This document defines the set of datasets for training, validation, testing, and experiments in a project focused on detecting DNS data exfiltration and DNS tunneling.
+## 2. Active DNS Datasets
 
-**Main goal** — avoid mixing dataset roles and use each dataset for its intended purpose:
+### 2.1 CIC-Bell-DNS-EXF-2021
+Role: `TRAIN` (attack-class behavior)
 
-| Role | Purpose |
-|:---:|:---|
-| **`TRAIN`** | Train the model on attacks and normal traffic |
-| **`VALIDATION`** | Control model quality and false positives |
-| **`TEST`** | Perform the final check of the model's generalization ability |
-| **`EXPERIMENTS`** | Run quick experiments, prototyping, and feature engineering |
+Use:
+- DNS exfiltration / tunneling attack patterns
+- temporal and tabular feature extraction for classifier + sequence branch
 
----
+Link: <https://www.unb.ca/cic/datasets/dns-exf-2021.html>
 
-# 2. Required Datasets
+### 2.2 CIC-Bell-DNS-2021
+Role: `TRAIN` + `VALIDATION` (benign baseline and FP control)
 
----
+Use:
+- normal DNS behavior baseline
+- benign-class balancing
+- false-positive calibration
 
-## 1. CIC-Bell-DNS-EXF-2021
+Link: <https://www.unb.ca/cic/datasets/dns-2021.html>
 
-> **Role:** Primary dataset for training attack behavior.
+### 2.3 Mendeley DNS Exfiltration Dataset
+Role: `TEST` (independent realism/generalization check)
 
-**Link:** <https://www.unb.ca/cic/datasets/dns-exf-2021.html>
+Use:
+- external validation on data with distribution shift
+- robustness check for transferability
 
----
+Link: <https://data.mendeley.com/datasets/c4n7fckkz3/3>
 
-### Description
+## 3. Role Matrix (Current)
 
-CIC-Bell-DNS-EXF-2021 was created specifically for detecting:
+| Role | Dataset | Purpose |
+|---|---|---|
+| `TRAIN` | CIC-Bell-DNS-EXF-2021 | attack behavior learning |
+| `TRAIN` | CIC-Bell-DNS-2021 | benign behavior learning |
+| `VALIDATION` | CIC-Bell-DNS-2021 split | false-positive control and threshold tuning |
+| `TEST` | Mendeley DNS Exfiltration Dataset | cross-dataset realism / generalization |
 
-- DNS data exfiltration;
-- DNS tunneling;
-- light attack scenarios;
-- heavy attack scenarios.
+## 4. Training / Validation / Test Scheme
 
-**Contents:**
-
-- benign traffic;
-- light attacks;
-- heavy attacks;
-- stateful features;
-- stateless features;
-- temporal features suitable for sequence modeling.
-
----
-
-### Suitable Models
-
-| Model Type | Application |
-|:---|:---|
-| Random Forest | baseline ML model |
-| XGBoost | strong baseline for tabular features |
-| CNN | analysis of local feature patterns |
-| LSTM | analysis of time windows and sequences |
-
----
-
-### Why It Is Critical
-
-> This is the key dataset because it:
->
-> - directly models DNS exfiltration scenarios;
-> - contains different attack levels;
-> - supports sequence modeling;
-> - is suitable for LSTM because of time-window features.
-
-**Use in the Project:**
-
-```
+```text
 TRAIN:
-- attack class
-- DNS exfiltration
-- DNS tunneling
-```
-
----
-
-## 2. BCCC-CIC-Bell-DNS-2024
-
-> **Role:** Final model evaluation and research-level benchmark.
-
-**Link:** <https://www.yorku.ca/research/bccc/ucs-technical/cybersecurity-datasets-cds/>
-
----
-
-### Description
-
-BCCC-CIC-Bell-DNS-2024 combines data from:
-
-- DNS-2021;
-- EXF-2021.
-
-It also adds an expanded feature space and additional attack types.
-
-**Contents:**
-
-- 6 attack types;
-- flow-based features;
-- application-level features;
-- 120 features;
-- expanded feature space.
-
----
-
-### Why It Is Needed
-
-Used for **final model testing**:
-
-- generalization check;
-- robustness check against new data;
-- evaluation across different attack types;
-- overfitting detection.
-
-> **Important:** This is the most modern and complex dataset in the list. It is more appropriate to use it not for primary training, but as an independent test benchmark.
-
-**Use in the Project:**
-
-```
-TEST:
-- final evaluation
-- generalization check
-- overfitting check
-```
-
----
-
-## 3. CIC-Bell-DNS-2021
-
-> **Role:** Baseline for normal DNS traffic and false-positive control.
-
-**Link:** <https://www.unb.ca/cic/datasets/dns-2021.html>
-
----
-
-### Description
-
-CIC-Bell-DNS-2021 contains about **1 million domains**, with approximately **99% of the data** belonging to benign traffic.
-
-**Contents:**
-
-- benign traffic;
-- phishing;
-- malware;
-- spam;
-- realistic internet traffic distribution.
-
----
-
-### Why It Is Needed
-
-This dataset is needed to build an understanding of normal DNS traffic behavior.
-
-**Main tasks:**
-
-- baseline for normal behavior;
-- training of the benign class;
-- false-positive control;
-- training-set balancing;
-- addition of real-world benign traffic.
-
-> **Important:** Without CIC-Bell-DNS-2021, the model would be overly biased toward attacks — this would lead to many false positives on real DNS traffic.
-
-**Use in the Project:**
-
-```
-TRAIN:
-- benign class
+  - CIC-Bell-DNS-EXF-2021
+  - CIC-Bell-DNS-2021
 
 VALIDATION:
-- false positive control
-- normal traffic behavior check
-```
-
----
-
-# 3. Additional Datasets
-
----
-
-## 4. Mendeley DNS Exfiltration Dataset
-
-> **Role:** Realism and robustness evaluation.
-
-**Link:** <https://data.mendeley.com/datasets/c4n7fckkz3/3>
-
----
-
-### Description
-
-The dataset contains DNS exfiltration traffic and is closer to realistic conditions than purely laboratory datasets.
-
-Used to evaluate model robustness against new data.
-
-**Main scenario:**
-
-```
-TRAIN:
-- CIC datasets
+  - CIC-Bell-DNS-2021 split
 
 TEST:
-- Mendeley DNS Exfiltration Dataset
+  - Mendeley DNS Exfiltration Dataset
 ```
 
-**It checks:**
+## 5. Scope Note
+DNS branch uses only the datasets listed above.
 
-- model transferability;
-- robustness to new patterns;
-- ability to work outside laboratory conditions;
-- quality of cross-dataset validation.
-
-> The Mendeley DNS Exfiltration Dataset shows how well the model applies to data that differs from the training distribution.
-
----
-
-## 5. Kaggle DNS Tunneling Dataset
-
-> **Role:** Quick experiments and prototyping.
-
-**Link:** <https://www.kaggle.com/datasets/daumel/dns-tunneling-dataset>
-
----
-
-### Description
-
-The dataset is **synthetic** and contains DNS tunneling traffic generated by several tunneling tools.
-
-**Suitable for:**
-
-- quick experiments;
-- feature engineering;
-- initial prototyping;
-- data augmentation;
-- testing ideas before running them on the main datasets.
-
-> **Limitation:** The dataset is synthetic, so its results transfer less reliably to real-world traffic. It should not be used as the main ground-truth source for evaluating model quality.
-
-**Use in the Project:**
-
-```
-EXPERIMENTS:
-- quick tests
-- feature engineering
-- augmentation
-```
-
----
-
-# 4. Correct Role Assignment
-
-| Stage | Dataset | Purpose |
-|:---:|:---|:---|
-| `TRAIN` | CIC-Bell-DNS-EXF-2021 | training on the attack class |
-| `TRAIN` | CIC-Bell-DNS-2021 | training on the benign class |
-| `VALIDATION` | CIC-Bell-DNS-2021 split | false-positive control |
-| `TEST` | BCCC-CIC-Bell-DNS-2024 | final evaluation and generalization |
-| `TEST` | Mendeley DNS Exfiltration Dataset | realism evaluation |
-| `EXPERIMENTS` | Kaggle DNS Tunneling Dataset | quick experiments |
-
----
-
-# 5. Correct Training Scheme
-
-## `TRAIN`
-
-```
-CIC-Bell-DNS-EXF-2021
--> attack class
--> DNS exfiltration
--> DNS tunneling
-```
-
-```
-CIC-Bell-DNS-2021
--> benign class
--> real-world normal DNS traffic
-```
-
-## `VALIDATION`
-
-```
-CIC-Bell-DNS-2021 split
--> validation split
--> false positives control
--> threshold tuning
-```
-
-## `TEST`
-
-```
-BCCC-CIC-Bell-DNS-2024
--> final benchmark
--> generalization test
--> robustness against multiple attack types
-```
-
-```
-Mendeley DNS Exfiltration Dataset
--> cross-dataset validation
--> real-world pattern check
-```
-
-## `EXPERIMENTS`
-
-```
-Kaggle DNS Tunneling Dataset
--> prototype
--> feature engineering
--> quick model comparison
-```
-
----
-
-# 6. Final Usage Logic
-
-**Main idea:** The model must learn not only to recognize attacks, but also to understand normal DNS traffic behavior.
-
-Therefore, training is structured as follows:
-
-```
-EXF-2021  → teaches the model to detect attacks
-DNS-2021  → teaches the model to understand normal DNS traffic
-BCCC-2024 → checks whether the model has overfitted
-Mendeley  → checks applicability to more realistic data
-Kaggle    → used only for quick experiments
-```
-
----
-
-# 7. Minimum Required Configuration
-
-For a serious project, the minimum dataset set should be:
-
-| Priority | Dataset | Status |
-|:---:|:---|:---:|
-| 1 | CIC-Bell-DNS-EXF-2021 | **Required** |
-| 2 | CIC-Bell-DNS-2021 | **Required** |
-| 3 | BCCC-CIC-Bell-DNS-2024 | **Required** |
-| 4 | Mendeley DNS Exfiltration Dataset | Recommended |
-| 5 | Kaggle DNS Tunneling Dataset | Optional |
-
----
-
-# 8. Short Conclusion
-
-## Required
-
-1. **CIC-Bell-DNS-EXF-2021** — primary attack training.
-2. **CIC-Bell-DNS-2021** — normal DNS traffic and false positives.
-3. **BCCC-CIC-Bell-DNS-2024** — final benchmark.
-
-## Additional
-
-4. **Mendeley DNS Exfiltration Dataset** — realism and cross-dataset validation.
-5. **Kaggle DNS Tunneling Dataset** — quick experiments and augmentation.
-
-## Final Scheme
-
-```
-TRAIN:
-  - EXF-2021
-  - DNS-2021
-
-VALIDATION:
-  - DNS-2021 split
-
-TEST:
-  - BCCC-2024
-  - Mendeley DNS
-
-EXPERIMENTS:
-  - Kaggle DNS
-```
+## 6. Short Conclusion
+Required and active DNS datasets:
+1. `CIC-Bell-DNS-EXF-2021`
+2. `CIC-Bell-DNS-2021`
+3. `Mendeley DNS Exfiltration Dataset`

@@ -1,4 +1,4 @@
-﻿# Report: DNS dataset analysis (stage 1)
+# Report: DNS dataset analysis (stage 1)
 
 ## Brief description of completed task
 The first stage of DNS dataset analysis was implemented: scanning dataset directories, assigning roles (`TRAIN`, `TEST`, `VALIDATION`, `EXPERIMENTS`), collecting dataset paths and file names, and saving the result into JSON files.

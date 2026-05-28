@@ -1,7 +1,6 @@
 # Report: Host dataset filtering (stage 3)
 
 ## Task summary
-Implemented Host dataset analysis/filtering stage: from primary scan outputs (`host-path-file.json`, `host-file.json`), only relevant datasets and files are kept for `TRAIN`, `TEST`, `VALIDATION`, and `EXPERIMENTS`.
 
 ## Added/changed files
 ### Added
@@ -38,7 +37,6 @@ Files are excluded for these main reasons:
    - `TRAIN`: `ADFA IDS`, `LID-DS 2021`, `Maintainable Log Dataset`
    - `VALIDATION`: `LID-DS 2019`, `LANL Dataset`, `Windows-Event-Log -OTRF-Security-Datasets`
    - `TEST`: `Unified-Host-Network-Dataset -LANL`, `ISOT-Cloud-IDS-Dataset`, `Dynamic-Malware-Analysis-Dataset`
-   - `EXPERIMENTS`: `HDFS-Log-Dataset`
 3. Apply dataset-aware path/extension rules:
    - keep syscall/log/telemetry artifacts;
    - remove environment scripts, docs, binaries, and other non-relevant files.

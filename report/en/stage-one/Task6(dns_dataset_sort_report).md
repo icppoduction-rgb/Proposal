@@ -1,4 +1,4 @@
-﻿# Report: DNS dataset format sorting (stage 6)
+# Report: DNS dataset format sorting (stage 6)
 
 ## Task description
 Implemented DNS dataset sorting by file formats using input JSON files:

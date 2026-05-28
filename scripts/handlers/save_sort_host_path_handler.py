@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +20,7 @@ class HostSortedPathExportResult:
 class HostSortedPathExportHandler:
     """Сканирует PATH_HOST_DATASETS_FILTER и сохраняет пути в JSON по ролям/форматам."""
 
-    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION", "EXPERIMENTS")
+    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION")
 
     def __init__(
         self,

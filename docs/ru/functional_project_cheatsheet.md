@@ -16,7 +16,7 @@
 - **Логика решения**: late fusion вероятностей классификатора и sequence-модели.
 
 ## 4. Стратегия датасетов
-- Строго разделять роли: `TRAIN`, `VALIDATION`, `TEST`, `EXPERIMENTS`.
+- Строго разделять роли: `TRAIN`, `VALIDATION`, `TEST`.
 - Не смешивать DNS-логику и host-логику в одной ролевой таблице.
 - Интеграцию разнородных источников делать на уровне признаков, а не через прямой raw-fusion логов.
 
@@ -26,9 +26,10 @@
 | `TRAIN` | CIC-Bell-DNS-EXF-2021 | Обучение attack-класса (DNS exfiltration/tunneling). |
 | `TRAIN` | CIC-Bell-DNS-2021 | Обучение benign-класса (нормальное DNS-поведение). |
 | `VALIDATION` | CIC-Bell-DNS-2021 split | Контроль false positives, настройка порога. |
-| `TEST` | BCCC-CIC-Bell-DNS-2024 | Финальный benchmark, проверка generalization и overfitting. |
 | `TEST` | Mendeley DNS Exfiltration | Проверка реалистичности и междатасетного переноса. |
-| `EXPERIMENTS` | Kaggle DNS Tunneling | Быстрый прототипинг, feature-эксперименты, augmentation only. |
+
+Примечание по DNS:
+- DNS experiments не используются.
 
 ## 6. Роли host-датасетов
 | Роль | Датасет(ы) | Назначение |
@@ -42,7 +43,6 @@
 | `TEST` | Unified Host + Network / LANL | Гибридный host+network тест устойчивости. |
 | `TEST` | ISOT Cloud IDS | Проверка переносимости в cloud-среду. |
 | `TEST` | Dynamic Malware Analysis | Проверка malware-driven host поведения. |
-| `EXPERIMENTS` | HDFS, BGL, Syscall Generator, COMIDDS | Вспомогательные эксперименты/augmentation/поиск датасетов. |
 
 ## 7. Фокус feature engineering
 - Network-признаки: flow-статистики, распределения размера пакетов, inter-arrival timing, DNS entropy, частота коммуникаций.
@@ -79,8 +79,7 @@
 
 ## 12. Чего не делать
 - Не обучать модель на датасетах, отведённых под `TEST`.
-- Не использовать синтетический Kaggle DNS tunneling как финальное доказательство качества.
-- Не сливать DNS- и host-роль в один смешанный pipeline.
+- Не сливать DNS- и host-роли в один смешанный pipeline.
 - Не закладываться на payload-inspection для encrypted каналов (в scope — metadata/behavioural подход).
 - Не пропускать контроль false positives на benign-heavy распределениях.
 

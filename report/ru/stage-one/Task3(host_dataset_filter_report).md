@@ -1,7 +1,6 @@
 # Отчёт: фильтрация Host-датасетов (этап 3)
 
 ## Краткое описание задачи
-Реализован этап анализа и фильтрации Host-датасетов: из результатов первичного сканирования (`host-path-file.json`, `host-file.json`) отобраны только релевантные датасеты и файлы для `TRAIN`, `TEST`, `VALIDATION`, `EXPERIMENTS`.
 
 ## Какие файлы были добавлены или изменены
 ### Добавлены
@@ -38,7 +37,6 @@
    - `TRAIN`: `ADFA IDS`, `LID-DS 2021`, `Maintainable Log Dataset`
    - `VALIDATION`: `LID-DS 2019`, `LANL Dataset`, `Windows-Event-Log -OTRF-Security-Datasets`
    - `TEST`: `Unified-Host-Network-Dataset -LANL`, `ISOT-Cloud-IDS-Dataset`, `Dynamic-Malware-Analysis-Dataset`
-   - `EXPERIMENTS`: `HDFS-Log-Dataset`
 3. Для каждого датасета применяются dataset-aware правила по расширениям и пути:
    - сохраняются syscall/log/telemetry артефакты;
    - исключаются документация, скрипты окружения, бинарные и явно нерелевантные файлы.

@@ -1,7 +1,7 @@
-﻿# Report: Host dataset analysis (stage 1)
+# Report: Host dataset analysis (stage 1)
 
 ## Brief description of completed task
-Implemented stage 1 for Host dataset analysis: scanning files under the Host datasets directory, assigning roles (`TRAIN`, `TEST`, `VALIDATION`, `EXPERIMENTS`), and saving structure metadata to JSON files.
+Implemented stage 1 for Host dataset analysis: scanning files under the Host datasets directory, assigning roles (`TRAIN`, `TEST`, `VALIDATION`), and saving structure metadata to JSON files.
 
 ## Added or modified files
 ### Added
@@ -28,7 +28,6 @@ Role structure in both JSON files:
 - `TRAIN`
 - `TEST`
 - `VALIDATION`
-- `EXPERIMENTS`
 
 ## Where results are stored
 Both JSON files are stored in the directory from `PATH_TEMP_DATA`.

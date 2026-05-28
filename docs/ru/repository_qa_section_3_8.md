@@ -17,12 +17,10 @@
   - TRAIN: `ADFA IDS`, `LID-DS 2021`, `Maintainable Log Dataset`
   - VALIDATION: `LID-DS 2019`, `LANL Dataset`, `Windows-Event-Log -OTRF-Security-Datasets`
   - TEST: `Dynamic-Malware-Analysis-Dataset`, `ISOT-Cloud-IDS-Dataset`, `Unified-Host-Network-Dataset -LANL`
-  - EXPERIMENTS: `HDFS-Log-Dataset`
 
 **Вопрос:** Для каждого датасета: сколько всего сэмплов, benign vs malicious, сколько признаков?  
 **Ответ:** Полных чисел в репозитории нет. Подтверждаемые значения:
 - `CIC-Bell-DNS-2021`: около 1,000,000 доменов, около 99% benign (утверждение из документации).
-- `BCCC-CIC-Bell-DNS-2024` (есть в стратегии как planned, но отсутствует в текущих обработанных путях): 120 признаков, 6 типов атак (утверждение из документации).
 - Для остальных датасетов в репозитории не указаны: total samples / class split / feature count.
 
 **Вопрос:** Были отдельные датасеты для network и host или один?  
@@ -113,7 +111,7 @@
 **Вопрос:** Какие statistical significance tests использовались?  
 **Ответ:** Не указаны (paired t-test/Wilcoxon не найдены).
 
-**Вопрос:** Hardware (CPU/GPU/RAM)?  
+**Р'РѕРїСЂРѕСЃ:** Hardware (CPU/GPU/RAM)?  
 **Ответ:** Не указано. В документации есть только общий комментарий, что при необходимости можно использовать облачные ресурсы (например Colab/Kaggle).
 
 **Вопрос:** Software версии (Python/libs)?  
@@ -135,5 +133,4 @@
 **Вопрос:** Какие объёмы подтверждены артефактами репозитория?  
 **Ответ:**
 - DNS sorted/exported files: 35 (`temp_data/sort-path-dns-file-summary.json`)
-- Host filtered kept file paths: 361,646 (`report/en/stage-one/Task3...` и `temp_data/sort-path-host-file-summary.json`)
-
+- Host filtered kept file paths: 361,646 (`report/en/stage-one/Task3...` Рё `temp_data/sort-path-host-file-summary.json`)

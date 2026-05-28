@@ -16,7 +16,7 @@ Design and evaluate a behaviour-driven hybrid ML framework for multi-stage data 
 - **Decision logic**: late fusion of classifier and sequence-model probabilities.
 
 ## 4. Dataset Strategy
-- Keep strict role separation: `TRAIN`, `VALIDATION`, `TEST`, `EXPERIMENTS`.
+- Keep strict role separation: `TRAIN`, `VALIDATION`, `TEST`.
 - Do not mix DNS and host dataset logic in one role table; manage them independently.
 - Use feature-level integration across heterogeneous sources (not raw one-to-one log fusion).
 
@@ -26,9 +26,10 @@ Design and evaluate a behaviour-driven hybrid ML framework for multi-stage data 
 | `TRAIN` | CIC-Bell-DNS-EXF-2021 | Attack-class training (DNS exfiltration/tunneling). |
 | `TRAIN` | CIC-Bell-DNS-2021 | Benign-class training (normal DNS behaviour). |
 | `VALIDATION` | CIC-Bell-DNS-2021 split | False-positive control, threshold tuning. |
-| `TEST` | BCCC-CIC-Bell-DNS-2024 | Final benchmark, generalization, overfitting check. |
 | `TEST` | Mendeley DNS Exfiltration | Cross-dataset realism/transferability check. |
-| `EXPERIMENTS` | Kaggle DNS Tunneling | Fast prototyping, feature experiments, augmentation only. |
+
+DNS notes:
+- DNS experiments are not used.
 
 ## 6. Host Dataset Roles
 | Role | Dataset(s) | Purpose |
@@ -42,7 +43,6 @@ Design and evaluate a behaviour-driven hybrid ML framework for multi-stage data 
 | `TEST` | Unified Host + Network / LANL | Hybrid host+network robustness test. |
 | `TEST` | ISOT Cloud IDS | Cloud transferability test. |
 | `TEST` | Dynamic Malware Analysis | Malware-driven host behaviour test. |
-| `EXPERIMENTS` | HDFS, BGL, Syscall Generator, COMIDDS | Auxiliary anomaly experiments/augmentation/dataset search. |
 
 ## 7. Feature Engineering Focus
 - Network features: flow stats, packet size patterns, inter-arrival timing, DNS entropy, communication frequency.
@@ -79,7 +79,6 @@ Design and evaluate a behaviour-driven hybrid ML framework for multi-stage data 
 
 ## 12. What Not To Do
 - Do not train on datasets assigned for `TEST`.
-- Do not use synthetic Kaggle DNS tunneling data as final evidence of model quality.
 - Do not collapse DNS and host role logic into one mixed dataset pipeline.
 - Do not rely on payload inspection assumptions for encrypted channels (scope is metadata/behavioural modelling).
 - Do not skip false-positive validation on benign-heavy distributions.

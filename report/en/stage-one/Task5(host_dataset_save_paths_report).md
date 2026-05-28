@@ -1,4 +1,4 @@
-﻿# Report: export sorted Host dataset paths to JSON (stage 5)
+# Report: export sorted Host dataset paths to JSON (stage 5)
 
 ## Task description
 Implemented a handler that exports paths of sorted Host datasets into JSON.
@@ -32,13 +32,12 @@ Output JSON:
   "VALIDATION": {
     "format": ["absolute_path_to_file"]
   },
-  "EXPERIMENTS": {
     "format": ["absolute_path_to_file"]
   }
 }
 ```
 
-- First level: dataset role (`TRAIN`, `TEST`, `VALIDATION`, `EXPERIMENTS`).
+- First level: dataset role (`TRAIN`, `TEST`, `VALIDATION`).
 - Second level: file format (format directory name in sorted structure).
 - Value: list of absolute file paths.
 

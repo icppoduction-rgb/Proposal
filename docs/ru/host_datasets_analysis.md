@@ -13,7 +13,6 @@
 | **`TRAIN`** | Обучение модели на нормальных и атакующих host traces, syscall sequences и enterprise logs |
 | **`VALIDATION`** | Проверка устойчивости модели на других поколениях данных, user-host behavior и SOC telemetry |
 | **`TEST`** | Финальная проверка обобщающей способности на hybrid, cloud и malware-driven данных |
-| **`EXPERIMENTS`** | Быстрые эксперименты, log anomaly detection, synthetic augmentation и поиск источников |
 
 ---
 
@@ -215,7 +214,6 @@ TRAIN:
 
 > **Роль:** Validation dataset для CVE-based атак и cross-version проверки.
 
-**Ссылка:** <https://fkie-cad.github.io/COMIDDS/content/datasets/lids_ds_2019/>
 
 ---
 
@@ -467,7 +465,6 @@ TEST:
 
 ---
 
-## 10. HDFS Log Dataset
 
 > **Роль:** Дополнительный baseline для log anomaly detection.
 
@@ -477,7 +474,6 @@ TEST:
 
 ### Описание
 
-HDFS Log Dataset — классический log anomaly detection dataset.
 
 **Содержит:**
 
@@ -489,7 +485,7 @@ HDFS Log Dataset — классический log anomaly detection dataset.
 
 - быстрых экспериментов;
 - проверки log anomaly методов;
-- feature engineering на structured log sequences;
+- feature engineering РЅР° structured log sequences;
 - сравнения anomaly detection подходов.
 
 > **Ограничение:** Это не security-focused dataset. Он полезен для проверки log anomaly методов, но не должен быть основным источником для host intrusion detection.
@@ -497,8 +493,6 @@ HDFS Log Dataset — классический log anomaly detection dataset.
 **Использование в проекте:**
 
 ```
-EXPERIMENTS:
-- log anomaly experiments
 - structured log sequences
 - anomaly detection baseline
 ```
@@ -518,10 +512,6 @@ EXPERIMENTS:
 | `TEST` | Unified Host + Network Dataset / LANL | hybrid host + network test |
 | `TEST` | ISOT Cloud IDS Dataset | cloud environment test |
 | `TEST` | Dynamic Malware Analysis Dataset | malware behavior test |
-| `EXPERIMENTS` | HDFS Log Dataset | log anomaly experiments |
-| `EXPERIMENTS` | BGL Logs | non-security anomaly baseline |
-| `EXPERIMENTS` | Syscall Dataset Generator | synthetic syscall augmentation |
-| `EXPERIMENTS` | COMIDDS | поиск дополнительных datasets |
 
 ---
 
@@ -596,29 +586,22 @@ Dynamic Malware Analysis Dataset
 -> exfiltration-related activity
 ```
 
-## `EXPERIMENTS`
 
 ```
-HDFS Log Dataset
--> log anomaly experiments
 -> structured log sequences
 -> non-security anomaly baseline
 ```
 
 ```
-BGL Logs
 -> non-security anomaly baseline
--> additional log anomaly experiments
 ```
 
 ```
-Syscall Dataset Generator
 -> synthetic syscall augmentation
 -> extra syscall traces
 ```
 
 ```
-COMIDDS
 -> поиск дополнительных datasets
 -> расширение набора validation / test данных
 ```
@@ -631,15 +614,14 @@ COMIDDS
 
 ```
 ADFA IDS                           → классический HIDS baseline
-LID-DS 2021                        → syscall sequence modelling
-Maintainable Log Dataset           → enterprise multi-stage behavior
+LID-DS 2021                        в†' syscall sequence modelling
+Maintainable Log Dataset           в†' enterprise multi-stage behavior
 LID-DS 2019                        → переносимость внутри syscall-family
-LANL                               → user / authentication behavior
+LANL                               в†' user / authentication behavior
 Windows Event Logs / OTRF          → применимость к SOC telemetry
-Unified Host + Network Dataset     → hybrid host + network fusion
-ISOT Cloud IDS                     → cloud environment
-Dynamic Malware Analysis Dataset   → malware-driven host behavior
-HDFS / BGL                         → только для anomaly experiments
+Unified Host + Network Dataset     в†' hybrid host + network fusion
+ISOT Cloud IDS                     в†' cloud environment
+Dynamic Malware Analysis Dataset   в†' malware-driven host behavior
 ```
 
 ---
@@ -685,7 +667,6 @@ process behavior
 | 7 | Windows Event Log / OTRF Security Datasets | Желательно |
 | 8 | ISOT Cloud IDS Dataset | Опционально |
 | 9 | Dynamic Malware Analysis Dataset | Опционально |
-| 10 | HDFS / BGL Logs | Только experiments |
 
 ---
 
@@ -718,10 +699,8 @@ Unified Host + Network Dataset / LANL
 ISOT Cloud IDS Dataset
 Dynamic Malware Analysis Dataset
 Windows Event Logs / OTRF
-HDFS / BGL Logs
 ```
 
-Этот стек усиливает cloud validation, malware behavior validation, SOC-style применимость и дополнительные anomaly experiments.
 
 ---
 
@@ -744,7 +723,6 @@ HDFS / BGL Logs
 
 8. **ISOT Cloud IDS Dataset** — cloud environment validation.
 9. **Dynamic Malware Analysis Dataset** — malware-driven host behavior.
-10. **HDFS / BGL Logs** — дополнительные log anomaly experiments.
 
 ## Финальная схема
 
@@ -764,9 +742,4 @@ TEST:
   - ISOT Cloud IDS Dataset
   - Dynamic Malware Analysis Dataset
 
-EXPERIMENTS:
-  - HDFS Log Dataset
-  - BGL Logs
-  - Syscall Dataset Generator
-  - COMIDDS
 ```

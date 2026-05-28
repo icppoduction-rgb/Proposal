@@ -24,7 +24,6 @@ class HostDatasetHandler:
         "TRAIN": ("train", "training"),
         "TEST": ("test", "testing"),
         "VALIDATION": ("validation", "valid", "val", "dev", "eval"),
-        "EXPERIMENTS": ("experiment", "experiments", "exp", "sandbox", "trial"),
     }
 
     def __init__(self, host_datasets_path: str | Path, temp_data_path: str | Path) -> None:
@@ -104,7 +103,7 @@ class HostDatasetHandler:
             if any(keyword in path_tokens for keyword in keywords):
                 return role
 
-        return "EXPERIMENTS"
+        return "TEST"
 
     @staticmethod
     def _tokenize(value: str) -> set[str]:

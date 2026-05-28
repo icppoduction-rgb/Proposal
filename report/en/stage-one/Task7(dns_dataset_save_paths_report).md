@@ -1,4 +1,4 @@
-﻿# Report: export sorted DNS dataset paths to JSON (stage 7)
+# Report: export sorted DNS dataset paths to JSON (stage 7)
 
 ## Task description
 Implemented a handler that exports paths of sorted DNS datasets into JSON.

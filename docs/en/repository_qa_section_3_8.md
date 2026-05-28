@@ -17,12 +17,10 @@ Important context: this repository currently implements dataset inventory/filter
   - TRAIN: `ADFA IDS`, `LID-DS 2021`, `Maintainable Log Dataset`
   - VALIDATION: `LID-DS 2019`, `LANL Dataset`, `Windows-Event-Log -OTRF-Security-Datasets`
   - TEST: `Dynamic-Malware-Analysis-Dataset`, `ISOT-Cloud-IDS-Dataset`, `Unified-Host-Network-Dataset -LANL`
-  - EXPERIMENTS: `HDFS-Log-Dataset`
 
 **Q:** For each dataset: how many samples total, how many benign vs. malicious, how many features?  
 **A:** Not fully specified in this repository. Confirmed values found:
 - `CIC-Bell-DNS-2021`: about 1,000,000 domains, about 99% benign (document claim).
-- `BCCC-CIC-Bell-DNS-2024` (planned in strategy docs, not present in current processed paths): 120 features, 6 attack types (document claim).
 - For other datasets, sample counts / class split / feature counts are not provided in repo files.
 
 **Q:** Did you use separate datasets for network and host data, or one dataset?  
@@ -101,14 +99,14 @@ Important context: this repository currently implements dataset inventory/filter
 **A:** Not specified.
 
 **Q:** DeepSHAP or KernelSHAP for CNN/LSTM?  
-**A:** Not specified. Only generic “SHAP-based feature attribution” is documented.
+**A:** Not specified. Only generic "SHAP-based feature attribution" is documented.
 
 ---
 
 ## 8. Experimental Environment (Section 3.8)
 
 **Q:** Number of cross-validation folds?  
-**A:** “Stratified k-fold cross-validation” is mentioned, but the exact k is not specified.
+**A:** "Stratified k-fold cross-validation" is mentioned, but the exact k is not specified.
 
 **Q:** Statistical significance tests used?  
 **A:** Not specified (no paired t-test/Wilcoxon config found).
@@ -136,4 +134,3 @@ No pinned versions and no ML libraries listed.
 **A:**
 - DNS sorted/exported files: 35 (`temp_data/sort-path-dns-file-summary.json`)
 - Host filtered kept file paths: 361,646 (`report/en/stage-one/Task3...` and `temp_data/sort-path-host-file-summary.json`)
-

@@ -1,4 +1,4 @@
-﻿# Report: Host dataset format sorting (stage 4)
+# Report: Host dataset format sorting (stage 4)
 
 ## Task description
 Implemented sorting of filtered Host datasets by file formats.
@@ -22,7 +22,6 @@ The handler always creates role sections:
 - `TRAIN`
 - `TEST`
 - `VALIDATION`
-- `EXPERIMENTS`
 
 Then it creates format folders inside each role, for example:
 
@@ -48,7 +47,6 @@ PATH_HOST_DATASETS_FILTER/
     cap/
     pcap/
     pcapng/
-  EXPERIMENTS/
     csv/
     log/
     npz/
