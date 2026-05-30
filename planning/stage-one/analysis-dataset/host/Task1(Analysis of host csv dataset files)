@@ -394,8 +394,8 @@ docs/en/analysis-dataset/host/README.md
 report/ru/
 report/en/
 Например:
-report/ru/stage-one/host/Task1(Analysis of host csv dataset files).md
-report/en/stage-one/host/Task1(Analysis of host csv dataset files).md
+report/ru/stage-one/analysis-dataset/host/Task1(Analysis of host csv dataset files)_report.md
+report/en/stage-one/analysis-dataset/host/Task1(Analysis of host csv dataset files)_report.md
 Отчёт должен содержать:
 - описание задачи;
 - какие файлы были добавлены или изменены;
