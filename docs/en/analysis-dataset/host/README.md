@@ -3,3 +3,4 @@
 | Format | File count | DNS | Host | Status | Document |
 |---|---:|---|---|---|---|
 | csv | 101 | no | yes | PARTIALLY_SUPPORTED | csv.md |
+| auth.log | 23 | no | yes | NEEDS_CUSTOM_PARSER | auth.log.md |
