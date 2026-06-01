@@ -8,3 +8,4 @@
 | diskio.log | 12 | no | yes | PARTIALLY_SUPPORTED | diskio.log.md |
 | filesystem.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | filesystem.log.md |
 | fsstat.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | fsstat.log.md |
+| ghc | 56158 | no | yes | NEEDS_CUSTOM_PARSER | ghc.md |
