@@ -35,3 +35,4 @@
 | sc | 210 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | sc.md |
 | service.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | service.log.md |
 | socket.summary.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | socket.summary.log.md |
+| syslog | 9 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | syslog.md |
