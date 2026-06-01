@@ -11,3 +11,4 @@
 | ghc | 56158 | no | yes | NEEDS_CUSTOM_PARSER | ghc.md |
 | info | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | info.md |
 | journal | 17 | no | yes | NEEDS_CUSTOM_PARSER | journal.md |
+| journal~ | 1 | no | yes | NEEDS_CUSTOM_PARSER | journal~.md |
