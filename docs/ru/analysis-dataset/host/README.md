@@ -10,3 +10,4 @@
 | fsstat.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | fsstat.log.md |
 | ghc | 56158 | РЅРµС‚ | РґР° | NEEDS_CUSTOM_PARSER | ghc.md |
 | info | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | info.md |
+| journal | 17 | РЅРµС‚ | РґР° | NEEDS_CUSTOM_PARSER | journal.md |
