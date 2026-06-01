@@ -28,3 +28,4 @@
 | memory.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | memory.log.md |
 | messages | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | messages.md |
 | messages-1 | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | messages-1.md |
+| netflow_ids | 50 | no | yes | READY_FOR_FEATURE_EXTRACTION | netflow_ids.md |
