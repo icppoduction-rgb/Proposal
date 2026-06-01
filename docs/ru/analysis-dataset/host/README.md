@@ -37,3 +37,4 @@
 | socket.summary.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | socket.summary.log.md |
 | syslog | 9 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | syslog.md |
 | syslog-1 | 10 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | syslog-1.md |
+| syslog-2 | 10 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | syslog-2.md |
