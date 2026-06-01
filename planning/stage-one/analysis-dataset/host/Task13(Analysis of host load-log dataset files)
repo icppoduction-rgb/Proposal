@@ -1,6 +1,6 @@
-# Задача: анализ содержимого файлов PATH_HOST_DATASETS_FILTER\csv  датасетов
+# Задача: анализ содержимого файлов PATH_HOST_DATASETS_FILTER\load.log  датасетов
 ## 1. Цель
-Реализовать этап анализа содержимого файлов  в PATH_HOST_DATASETS_FILTER\csv датасетов, и сохранить результат анализа в документацию.
+Реализовать этап анализа содержимого файлов  в PATH_HOST_DATASETS_FILTER\load.log датасетов, и сохранить результат анализа в документацию.
 Этап нужен для подготовки данных к дальнейшей нормализации, feature engineering и приведению датасетов к единому формату признаков.
 
 - изучи документацию docs/ru
@@ -24,7 +24,7 @@
 - ограничения и проблемы формата.
 
 ## 3. Входные данные
-Использовать уже подготовленные JSON-файлы с путями к отсортированным датасетам используй следующие файлы [TRAIN][cvs] в:
+Использовать уже подготовленные JSON-файлы с путями к отсортированным датасетам используй следующие файлы [TRAIN][load.log] в:
 
 ```text
 PATH_TEMP_DATA/sort-path-host-file.json
@@ -48,10 +48,10 @@ docs/en/analysis-dataset/host/
 
 ```text
 docs/ru/analysis-dataset/
-    csv.md
+    load.log.md
 
 docs/en/analysis-dataset/
-    csv.md
+    load.log.md
 ```
 
 ## 5. Основные требования
@@ -417,8 +417,8 @@ docs/en/analysis-dataset/host/README.md
 report/ru/
 report/en/
 Например:
-report/ru/stage-one/analysis-dataset/host/Task1(Analysis of host csv dataset files)_report.md
-report/en/stage-one/analysis-dataset/host/Task1(Analysis of host csv dataset files)_report.md
+report/ru/stage-one/analysis-dataset/host/Task13(Analysis of host load-log dataset files)_report.md
+report/en/stage-one/analysis-dataset/host/Task13(Analysis of host load-log dataset files)_report.md
 Отчёт должен содержать:
 - описание задачи;
 - какие файлы были добавлены или изменены;

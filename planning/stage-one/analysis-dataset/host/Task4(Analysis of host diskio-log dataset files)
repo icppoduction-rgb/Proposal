@@ -402,6 +402,6 @@ report/en/stage-one/analysis-dataset/host/Task4(Analysis of host diskio-log data
 ---
 ## Git
 После реализации задачи подготовь commit message.
-push запрещён.
-Пример:
-feat: <придумай название коммита для этой задачи>
+git add .
+git commit -m "feat: <придумай название коммита для этой задачи>"
+git push origin dev
