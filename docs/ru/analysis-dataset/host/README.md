@@ -29,3 +29,4 @@
 | messages | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | messages.md |
 | messages-1 | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | messages-1.md |
 | netflow_ids | 50 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | netflow_ids.md |
+| network.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | network.log.md |
