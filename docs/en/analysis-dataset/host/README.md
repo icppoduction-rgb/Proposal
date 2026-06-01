@@ -40,3 +40,4 @@
 | syslog-2 | 10 | no | yes | READY_FOR_FEATURE_EXTRACTION | syslog-2.md |
 | syslog-3 | 10 | no | yes | READY_FOR_FEATURE_EXTRACTION | syslog-3.md |
 | syslog-4 | 1 | no | yes | READY_FOR_FEATURE_EXTRACTION | syslog-4.md |
+| syslog.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | syslog.log.md |
