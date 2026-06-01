@@ -31,3 +31,4 @@
 | netflow_ids | 50 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | netflow_ids.md |
 | network.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | network.log.md |
 | process.log | 2 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | process.log.md |
+| process.summary.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | process.summary.log.md |
