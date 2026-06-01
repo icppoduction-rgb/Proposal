@@ -24,3 +24,4 @@
 | mainlog | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | mainlog.md |
 | mainlog-1 | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | mainlog-1.md |
 | mainlog-2 | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | mainlog-2.md |
+| mainlog-3 | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | mainlog-3.md |
