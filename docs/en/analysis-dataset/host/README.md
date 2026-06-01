@@ -14,3 +14,4 @@
 | journal~ | 1 | no | yes | NEEDS_CUSTOM_PARSER | journal~.md |
 | json | 219 | no | yes | NEEDS_CUSTOM_PARSER | json.md |
 | json-1 | 1 | no | yes | READY_FOR_FEATURE_EXTRACTION | json-1.md |
+| load.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | load.log.md |
