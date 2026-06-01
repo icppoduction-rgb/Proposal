@@ -36,3 +36,4 @@
 | service.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | service.log.md |
 | socket.summary.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | socket.summary.log.md |
 | syslog | 9 | no | yes | READY_FOR_FEATURE_EXTRACTION | syslog.md |
+| syslog-1 | 10 | no | yes | READY_FOR_FEATURE_EXTRACTION | syslog-1.md |
