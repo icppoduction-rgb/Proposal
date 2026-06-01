@@ -32,3 +32,4 @@
 | network.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | network.log.md |
 | process.log | 2 | no | yes | READY_FOR_FEATURE_EXTRACTION | process.log.md |
 | process.summary.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | process.summary.log.md |
+| sc | 210 | no | yes | READY_FOR_FEATURE_EXTRACTION | sc.md |
