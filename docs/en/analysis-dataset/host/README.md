@@ -12,3 +12,4 @@
 | info | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | info.md |
 | journal | 17 | no | yes | NEEDS_CUSTOM_PARSER | journal.md |
 | journal~ | 1 | no | yes | NEEDS_CUSTOM_PARSER | journal~.md |
+| json | 219 | no | yes | NEEDS_CUSTOM_PARSER | json.md |

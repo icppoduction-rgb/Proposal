@@ -44,6 +44,9 @@ from scripts.handlers.analyze_host_journal_dataset_handler import (
 from scripts.handlers.analyze_host_journal_tilde_dataset_handler import (
     HostJournalTildeContentAnalysisHandler,
 )
+from scripts.handlers.analyze_host_json_dataset_handler import (
+    HostJSONContentAnalysisHandler,
+)
 
 
 load_dotenv()
@@ -371,6 +374,26 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
+        case ("host", "dataset", "analyze-json-content"):
+            handler = HostJSONContentAnalysisHandler(
+                temp_data_path=PATH_TEMP_DATA,
+                project_root=PROJECT_ROOT,
+            )
+            result = handler.analyze_and_generate_docs()
+            console.print(
+                "Host json content analysis completed.\n"
+                f"Summary JSON: {result.summary_json_file}\n"
+                f"RU doc: {result.docs_ru_file}\n"
+                f"EN doc: {result.docs_en_file}\n"
+                f"RU index: {result.docs_ru_readme_file}\n"
+                f"EN index: {result.docs_en_readme_file}\n"
+                f"RU report: {result.report_ru_file}\n"
+                f"EN report: {result.report_en_file}\n"
+                f"Total files: {result.total_files_count}\n"
+                f"Sampled files: {result.sampled_files_count}\n"
+                f"Status: {result.status}"
+            )
+
         case ("dns", "dataset", "sort") | ("dataset", "dns", "sort"):
             handler = DNSDatasetSortHandler(
                 temp_data_path=PATH_TEMP_DATA,
@@ -424,6 +447,7 @@ def manage() -> None:
                 "python manage.py host dataset analyze-info-content\n"
                 "python manage.py host dataset analyze-journal-content\n"
                 "python manage.py host dataset analyze-journal-tilde-content\n"
+                "python manage.py host dataset analyze-json-content\n"
             )
 
 
