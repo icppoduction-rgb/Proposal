@@ -42,3 +42,4 @@
 | syslog-4 | 1 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | syslog-4.md |
 | syslog.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | syslog.log.md |
 | txt | 3170 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | txt.md |
+| uptime.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | uptime.log.md |
