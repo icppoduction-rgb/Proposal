@@ -18,3 +18,4 @@
 | log | 98 | no | yes | NEEDS_CUSTOM_PARSER | log.md |
 | log-1 | 32 | no | yes | READY_FOR_FEATURE_EXTRACTION | log-1.md |
 | log-2 | 9 | no | yes | READY_FOR_FEATURE_EXTRACTION | log-2.md |
+| log-3 | 8 | no | yes | READY_FOR_FEATURE_EXTRACTION | log-3.md |
