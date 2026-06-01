@@ -26,3 +26,4 @@
 | mainlog-2 | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | mainlog-2.md |
 | mainlog-3 | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | mainlog-3.md |
 | memory.log | 12 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | memory.log.md |
+| messages | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | messages.md |
