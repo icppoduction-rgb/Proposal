@@ -30,3 +30,4 @@
 | messages-1 | 3 | no | yes | READY_FOR_FEATURE_EXTRACTION | messages-1.md |
 | netflow_ids | 50 | no | yes | READY_FOR_FEATURE_EXTRACTION | netflow_ids.md |
 | network.log | 12 | no | yes | READY_FOR_FEATURE_EXTRACTION | network.log.md |
+| pcap | 15 | no | yes | NEEDS_CUSTOM_PARSER | pcap.md |
