@@ -22,3 +22,4 @@
 | mail-info-1 | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | mail-info-1.md |
 | mail-warn-1 | 2 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | mail-warn-1.md |
 | mainlog | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | mainlog.md |
+| mainlog-1 | 3 | РЅРµС‚ | РґР° | READY_FOR_FEATURE_EXTRACTION | mainlog-1.md |
