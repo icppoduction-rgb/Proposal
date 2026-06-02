@@ -324,15 +324,15 @@ class HostJSONContentAnalysisHandler:
         time_block = summary["time_detection"]
         examples = summary["examples"]["paths"]
         return f"""
-# Анализ формата: json
+# Анализ формата: {scope["format"]}
 
 ## 1. Назначение
-Смешанный формат `json` в `TRAIN`: сценарные JSON-документы и JSON-lines телеметрия (`eve*`, `traffic*`).
+Смешанный формат `{scope["format"]}` в `TRAIN`: сценарные JSON-документы и JSON-lines телеметрия (`eve*`, `traffic*`).
 
 ## 2. Где встречается
 | Поле | Значение |
 |---|---|
-| Формат | json |
+| Формат | {scope["format"]} |
 | Варианты расширения | `.json` |
 | DNS | нет |
 | Host | да |
@@ -431,15 +431,15 @@ class HostJSONContentAnalysisHandler:
         time_block = summary["time_detection"]
         examples = summary["examples"]["paths"]
         return f"""
-# Format Analysis: json
+# Format Analysis: {scope["format"]}
 
 ## 1. Purpose
-Mixed `json` format in `TRAIN`: scenario JSON documents and JSON-lines telemetry (`eve*`, `traffic*`).
+Mixed `{scope["format"]}` format in `TRAIN`: scenario JSON documents and JSON-lines telemetry (`eve*`, `traffic*`).
 
 ## 2. Where it appears
 | Field | Value |
 |---|---|
-| Format | json |
+| Format | {scope["format"]} |
 | Extension variants | `.json` |
 | DNS | no |
 | Host | yes |

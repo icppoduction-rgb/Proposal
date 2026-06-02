@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import re
@@ -454,132 +454,132 @@ class HostInfoContentAnalysisHandler:
         quality = summary["data_quality"]
         examples = summary["examples"]["paths"]
 
-        fields_table = """| РџРѕР»Рµ | РўРёРї | РќР°Р·РЅР°С‡РµРЅРёРµ | РџСЂРёРјРµСЂ |
+        fields_table = """| Поле | Тип | Назначение | Пример |
 |---|---|---|---|
-| message | string | С‚РµРєСЃС‚ auth/syslog СЃРѕР±С‹С‚РёСЏ | `Jan 16 06:25:13 ... session closed for user root` |
-| @timestamp | datetime | С‚РѕС‡РєР° РІСЂРµРјРµРЅРё ingest (JSON lines) | `2022-01-13T14:31:36.097Z` |
-| event.dataset | string | С‚РёРї СЃРѕР±С‹С‚РёСЏ РІ РѕР±РµСЂС‚РєРµ | `mail.info/dovecot` |
-| host.name | string | С…РѕСЃС‚-РёСЃС‚РѕС‡РЅРёРє СЃРѕР±С‹С‚РёСЏ | `internal-share` |
-| log.file.path | string | РёСЃС…РѕРґРЅС‹Р№ РїСѓС‚СЊ Р»РѕРіР° | `/var/log/info` |"""
+| message | string | текст auth/syslog события | `Jan 16 06:25:13 ... session closed for user root` |
+| @timestamp | datetime | точка времени ingest (JSON lines) | `2022-01-13T14:31:36.097Z` |
+| event.dataset | string | тип события в обертке | `mail.info/dovecot` |
+| host.name | string | хост-источник события | `internal-share` |
+| log.file.path | string | исходный путь лога | `/var/log/info` |"""
 
         top_actions = (
             "\n".join(
                 f"- `{name}`: {count}"
                 for name, count in list(content["top_actions"].items())[:8]
             )
-            or "- РґР°РЅРЅС‹С… РЅРµС‚"
+            or "- данных нет"
         )
         top_processes = (
             "\n".join(
                 f"- `{name}`: {count}"
                 for name, count in list(content["top_processes"].items())[:8]
             )
-            or "- РґР°РЅРЅС‹С… РЅРµС‚"
+            or "- данных нет"
         )
 
         return f"""
-# РђРЅР°Р»РёР· С„РѕСЂРјР°С‚Р°: info
+# Анализ формата: info
 
-## 1. РќР°Р·РЅР°С‡РµРЅРёРµ
-Р¤Р°Р№Р»С‹ `info` РІ `TRAIN` СЃРѕРґРµСЂР¶Р°С‚ СЃРѕР±С‹С‚РёСЏ Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё Рё СЃРµСЃСЃРёР№ (sudo/cron/systemd/useradd/sshd), РїСЂРёРіРѕРґРЅС‹Рµ РґР»СЏ РїРѕСЃС‚СЂРѕРµРЅРёСЏ host-РїРѕРІРµРґРµРЅС‡РµСЃРєРёС… РїСЂРёР·РЅР°РєРѕРІ.
+## 1. Назначение
+Файлы `info` в `TRAIN` содержат события аутентификации и сессий (sudo/cron/systemd/useradd/sshd), пригодные для построения host-поведенческих признаков.
 
-## 2. Р“РґРµ РІСЃС‚СЂРµС‡Р°РµС‚СЃСЏ
-| РџРѕР»Рµ | Р—РЅР°С‡РµРЅРёРµ |
+## 2. Где встречается
+| Поле | Значение |
 |---|---|
-| Р¤РѕСЂРјР°С‚ | info |
-| Р’Р°СЂРёР°РЅС‚С‹ СЂР°СЃС€РёСЂРµРЅРёСЏ | `.log` (РіСЂСѓРїРїР° `info`) |
-| DNS | РЅРµС‚ |
-| Host | РґР° |
-| Р РѕР»Рё | {scope['role']} |
-| РљРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ | {scope['total_files_count']} |
+| Формат | info |
+| Варианты расширения | `.log` (группа `info`) |
+| DNS | нет |
+| Host | да |
+| Роли | {scope['role']} |
+| Количество файлов | {scope['total_files_count']} |
 
-## 3. РџСЂРёРјРµСЂС‹ С„Р°Р№Р»РѕРІ
+## 3. Примеры файлов
 ```text
 {examples[0] if len(examples) > 0 else '-'}
 {examples[1] if len(examples) > 1 else '-'}
 {examples[2] if len(examples) > 2 else '-'}
 ```
 
-## 4. РўРµС…РЅРёС‡РµСЃРєР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР°
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+## 4. Техническая структура
+| Проверка | Результат |
 |---|---|
-| РўРёРї С„Р°Р№Р»Р° | text |
-| Р§С‚РµРЅРёРµ РїРѕСЃС‚СЂРѕС‡РЅРѕ | РґР° |
-| РўР°Р±Р»РёС‡РЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | РЅРµС‚ |
-| Р—Р°РіРѕР»РѕРІРѕРє | РЅРµС‚ |
-| Р Р°Р·РґРµР»РёС‚РµР»СЊ | none (line-oriented logs / JSON-lines) |
-| РљРѕРґРёСЂРѕРІРєР° | {', '.join(f"{k} ({v})" for k, v in technical['encoding_counts'].items())} |
-| Р’Р»РѕР¶РµРЅРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | РґР° (JSON-lines + РІР»РѕР¶РµРЅРЅС‹Рµ РѕР±СЉРµРєС‚С‹) |
-| Sample-С„Р°Р№Р»РѕРІ РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅРѕ | {scope['sampled_files_count']} |
-| Sample-СЃС‚СЂРѕРє РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅРѕ | {technical['total_sample_lines']} |
+| Тип файла | text |
+| Чтение построчно | да |
+| Табличная структура | нет |
+| Заголовок | нет |
+| Разделитель | none (line-oriented logs / JSON-lines) |
+| Кодировка | {', '.join(f"{k} ({v})" for k, v in technical['encoding_counts'].items())} |
+| Вложенная структура | да (JSON-lines + вложенные объекты) |
+| Sample-файлов проанализировано | {scope['sampled_files_count']} |
+| Sample-строк проанализировано | {technical['total_sample_lines']} |
 | JSON lines | {technical['json_lines']} |
 | Raw syslog lines | {technical['raw_lines']} |
 
-## 5. РЎРѕРґРµСЂР¶Р°С‚РµР»СЊРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР°
-Р’РЅСѓС‚СЂРё `TRAIN/info` РѕР±РЅР°СЂСѓР¶РµРЅС‹ РґРІРµ РїРѕРґСЃС‚СЂСѓРєС‚СѓСЂС‹:
+## 5. Содержательная структура
+Внутри `TRAIN/info` обнаружены две подструктуры:
 - raw syslog (`Jan 16 06:25:13 host CRON[...] ...`);
-- JSON-lines РѕР±РµСЂС‚РєР° (Filebeat/ECS) СЃ РєР»СЋС‡Р°РјРё `message`, `@timestamp`, `event`, `host`, `agent`, `log`.
+- JSON-lines обертка (Filebeat/ECS) с ключами `message`, `@timestamp`, `event`, `host`, `agent`, `log`.
 
-РџСЂРёРјРµСЂС‹ Р°РєС‚РёРІРЅРѕСЃС‚РµР№:
+Примеры активностей:
 {top_actions}
 
-РџСЂРёРјРµСЂС‹ РёСЃС‚РѕС‡РЅРёРєРѕРІ/РїСЂРѕС†РµСЃСЃРѕРІ:
+Примеры источников/процессов:
 {top_processes}
 
-## 6. РќР°Р№РґРµРЅРЅС‹Рµ РїРѕР»СЏ / РєРѕР»РѕРЅРєРё
+## 6. Найденные поля / колонки
 {fields_table}
 
 ## 7. Label / class indicators
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+| Проверка | Результат |
 |---|---|
-| Label РЅР°Р№РґРµРЅ | {"РґР°" if label['label_found'] else "РЅРµС‚"} |
-| РќР°Р·РІР°РЅРёРµ РїРѕР»СЏ | {label['label_field_name']} |
-| Р—РЅР°С‡РµРЅРёСЏ label | {label['label_values']} |
-| РњРѕР¶РЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґР»СЏ supervised learning | {label['supports_supervised_learning']} |
+| Label найден | {"да" if label['label_found'] else "нет"} |
+| Название поля | {label['label_field_name']} |
+| Значения label | {label['label_values']} |
+| Можно использовать для supervised learning | {label['supports_supervised_learning']} |
 
-## 8. Р’СЂРµРјРµРЅРЅС‹Рµ РїСЂРёР·РЅР°РєРё
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+## 8. Временные признаки
+| Проверка | Результат |
 |---|---|
-| Timestamp РЅР°Р№РґРµРЅ | {"РґР°" if time_block['timestamp_found'] else "РЅРµС‚"} |
-| РќР°Р·РІР°РЅРёРµ РїРѕР»СЏ | {', '.join(time_block['timestamp_fields'])} |
-| Р¤РѕСЂРјР°С‚ РІСЂРµРјРµРЅРё | {time_block['timestamp_format']} |
+| Timestamp найден | {"да" if time_block['timestamp_found'] else "нет"} |
+| Название поля | {', '.join(time_block['timestamp_fields'])} |
+| Формат времени | {time_block['timestamp_format']} |
 | Timezone | {time_block['timezone']} |
-| РњРѕР¶РЅРѕ СЃС‚СЂРѕРёС‚СЊ sequence | {"РґР°" if time_block['sequence_ready'] else "РЅРµС‚"} |
-| РњРѕР¶РЅРѕ РїСЂРёРјРµРЅСЏС‚СЊ sliding window | {"РґР°" if time_block['sliding_window_ready'] else "РЅРµС‚"} |
+| Можно строить sequence | {"да" if time_block['sequence_ready'] else "нет"} |
+| Можно применять sliding window | {"да" if time_block['sliding_window_ready'] else "нет"} |
 
-## 9. РџРѕС‚РµРЅС†РёР°Р»СЊРЅС‹Рµ РїСЂРёР·РЅР°РєРё РґР»СЏ feature extraction
-### DNS-РїСЂРёР·РЅР°РєРё
-- РЅРµ РїСЂРёРјРµРЅРёРјРѕ.
+## 9. Потенциальные признаки для feature extraction
+### DNS-признаки
+- не применимо.
 
-### Host-РїСЂРёР·РЅР°РєРё
-- С‡Р°СЃС‚РѕС‚С‹ `login/logged_out/disconnected`;
-- С‡Р°СЃС‚РѕС‚С‹ `sudo`, `cron`, `systemd`, `sshd` РґРµР№СЃС‚РІРёР№;
-- user-level РїСЂРёР·РЅР°РєРё (login/session Р°РєС‚РёРІРЅРѕСЃС‚Рё РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№);
-- source IP frequency Рё Р°РЅРѕРјР°Р»РёРё РїРѕ РёСЃС‚РѕС‡РЅРёРєР°Рј;
-- РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚Рё auth-СЃРѕР±С‹С‚РёР№ РІРѕ РІСЂРµРјРµРЅРё.
+### Host-признаки
+- частоты `login/logged_out/disconnected`;
+- частоты `sudo`, `cron`, `systemd`, `sshd` действий;
+- user-level признаки (login/session активности пользователей);
+- source IP frequency и аномалии по источникам;
+- последовательности auth-событий во времени.
 
-### Network / hybrid-РїСЂРёР·РЅР°РєРё
-- РєРѕСЂСЂРµР»СЏС†РёСЏ source IP РёР· auth-СЃРѕР±С‹С‚РёР№ СЃ СЃРµС‚РµРІС‹РјРё flow-РїСЂРёР·РЅР°РєР°РјРё.
+### Network / hybrid-признаки
+- корреляция source IP из auth-событий с сетевыми flow-признаками.
 
-## 10. РџСЂРѕР±Р»РµРјС‹ РєР°С‡РµСЃС‚РІР° РґР°РЅРЅС‹С…
-| РџСЂРѕР±Р»РµРјР° | РќР°Р№РґРµРЅР° | РљРѕРјРјРµРЅС‚Р°СЂРёР№ |
+## 10. Проблемы качества данных
+| Проблема | Найдена | Комментарий |
 |---|---|---|
-| РџСѓСЃС‚С‹Рµ С„Р°Р№Р»С‹ | {"РґР°" if quality['empty_files_count'] > 0 else "РЅРµС‚"} | count: {quality['empty_files_count']} |
-| РџРѕРІСЂРµР¶РґС‘РЅРЅС‹Рµ С„Р°Р№Р»С‹ | {"РґР°" if quality['read_error_files_count'] > 0 else "РЅРµС‚"} | read errors: {quality['read_error_files_count']} |
-| Missing values | {"РґР°" if quality['missing_message_count'] > 0 else "РЅРµС‚"} | missing `message`: {quality['missing_message_count']} |
-| РќРµСЃС‚Р°Р±РёР»СЊРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | {"РґР°" if quality['mixed_schema_detected'] else "РЅРµС‚"} | СЃРјРµС€Р°РЅС‹ raw syslog Рё JSON-lines |
-| РЎРјРµС€Р°РЅРЅС‹Рµ СЃС…РµРјС‹ | {"РґР°" if quality['mixed_schema_detected'] else "РЅРµС‚"} | json_only={technical['json_only_files']}, raw_only={technical['raw_only_files']} |
-| Р”СѓР±Р»Рё СЃС‚СЂРѕРє | {"РґР°" if quality['duplicate_lines_count'] > 0 else "РЅРµС‚"} | duplicate lines in sample: {quality['duplicate_lines_count']} |
+| Пустые файлы | {"да" if quality['empty_files_count'] > 0 else "нет"} | count: {quality['empty_files_count']} |
+| Повреждённые файлы | {"да" if quality['read_error_files_count'] > 0 else "нет"} | read errors: {quality['read_error_files_count']} |
+| Missing values | {"да" if quality['missing_message_count'] > 0 else "нет"} | missing `message`: {quality['missing_message_count']} |
+| Нестабильная структура | {"да" if quality['mixed_schema_detected'] else "нет"} | смешаны raw syslog и JSON-lines |
+| Смешанные схемы | {"да" if quality['mixed_schema_detected'] else "нет"} | json_only={technical['json_only_files']}, raw_only={technical['raw_only_files']} |
+| Дубли строк | {"да" if quality['duplicate_lines_count'] > 0 else "нет"} | duplicate lines in sample: {quality['duplicate_lines_count']} |
 
-## 11. РС‚РѕРіРѕРІР°СЏ РїСЂРёРіРѕРґРЅРѕСЃС‚СЊ
-| РџРѕР»Рµ | Р—РЅР°С‡РµРЅРёРµ |
+## 11. Итоговая пригодность
+| Поле | Значение |
 |---|---|
-| РЎС‚Р°С‚СѓСЃ | {summary['final_status']} |
-| РќСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ РїР°СЂСЃРµСЂ | {"РґР°" if summary['needs_custom_parser'] else "РЅРµС‚"} |
-| РџСЂРёРѕСЂРёС‚РµС‚ РѕР±СЂР°Р±РѕС‚РєРё | {summary['priority']} |
+| Статус | {summary['final_status']} |
+| Нужен отдельный парсер | {"да" if summary['needs_custom_parser'] else "нет"} |
+| Приоритет обработки | {summary['priority']} |
 
-## 12. Р’С‹РІРѕРґ
-`TRAIN/info` СЃРѕРґРµСЂР¶РёС‚ РїРѕР»РµР·РЅС‹Рµ mail service logs Рё РїСЂРёРіРѕРґРµРЅ РґР»СЏ feature extraction, РЅРѕ РІРЅСѓС‚СЂРё СЂР°СЃС€РёСЂРµРЅРёСЏ РµСЃС‚СЊ РґРІР° СЂР°Р·РЅС‹С… РїСЂРµРґСЃС‚Р°РІР»РµРЅРёСЏ (raw syslog Рё JSON-lines). Р”Р»СЏ РєРѕСЂСЂРµРєС‚РЅРѕР№ РїСЂРѕРјС‹С€Р»РµРЅРЅРѕР№ РѕР±СЂР°Р±РѕС‚РєРё РЅСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ parser СЃ РІРµС‚РІР»РµРЅРёРµРј РїРѕ СЃС‚СЂСѓРєС‚СѓСЂРµ РІС…РѕРґРЅРѕР№ СЃС‚СЂРѕРєРё.
+## 12. Вывод
+`TRAIN/info` содержит полезные mail service logs и пригоден для feature extraction, но внутри расширения есть два разных представления (raw syslog и JSON-lines). Для корректной промышленной обработки нужен отдельный parser с ветвлением по структуре входной строки.
 """
 
     def _build_en_markdown(self, summary: dict[str, Any]) -> str:
@@ -740,18 +740,18 @@ Example process sources:
         info_status = info_summary["final_status"]
 
         return f"""
-# РђРЅР°Р»РёР· СЃРѕРґРµСЂР¶РёРјРѕРіРѕ С„Р°Р№Р»РѕРІ РґР°С‚Р°СЃРµС‚РѕРІ (Host)
+# Анализ содержимого файлов датасетов (Host)
 
-| Р¤РѕСЂРјР°С‚ | РљРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ | DNS | Host | РЎС‚Р°С‚СѓСЃ | Р”РѕРєСѓРјРµРЅС‚ |
+| Формат | Количество файлов | DNS | Host | Статус | Документ |
 |---|---:|---|---|---|---|
-| csv | {csv_count} | РЅРµС‚ | РґР° | {csv_status} | csv.md |
-| auth.log | {auth_count} | РЅРµС‚ | РґР° | {auth_status} | auth.log.md |
-| cpu.log | {cpu_count} | РЅРµС‚ | РґР° | {cpu_status} | cpu.log.md |
-| diskio.log | {diskio_count} | РЅРµС‚ | РґР° | {diskio_status} | diskio.log.md |
-| filesystem.log | {filesystem_count} | РЅРµС‚ | РґР° | {filesystem_status} | filesystem.log.md |
-| fsstat.log | {fsstat_count} | РЅРµС‚ | РґР° | {fsstat_status} | fsstat.log.md |
-| ghc | {ghc_count} | РЅРµС‚ | РґР° | {ghc_status} | ghc.md |
-| info | {info_count} | РЅРµС‚ | РґР° | {info_status} | info.md |
+| csv | {csv_count} | нет | да | {csv_status} | csv.md |
+| auth.log | {auth_count} | нет | да | {auth_status} | auth.log.md |
+| cpu.log | {cpu_count} | нет | да | {cpu_status} | cpu.log.md |
+| diskio.log | {diskio_count} | нет | да | {diskio_status} | diskio.log.md |
+| filesystem.log | {filesystem_count} | нет | да | {filesystem_status} | filesystem.log.md |
+| fsstat.log | {fsstat_count} | нет | да | {fsstat_status} | fsstat.log.md |
+| ghc | {ghc_count} | нет | да | {ghc_status} | ghc.md |
+| info | {info_count} | нет | да | {info_status} | info.md |
 """
 
     def _build_en_readme(self, info_summary: dict[str, Any]) -> str:
@@ -801,12 +801,12 @@ Example process sources:
         status: str,
     ) -> str:
         return f"""
-# РћС‚С‡С‘С‚: Task8 (Analysis of host info dataset files)
+# Отчёт: Task8 (Analysis of host info dataset files)
 
-## РћРїРёСЃР°РЅРёРµ Р·Р°РґР°С‡Рё
-Р РµР°Р»РёР·РѕРІР°РЅ СЌС‚Р°Рї Р°РЅР°Р»РёР·Р° С„РѕСЂРјР°С‚Р° `TRAIN/info` РЅР° РѕСЃРЅРѕРІРµ `temp_data/sort-path-host-file.json` СЃ СЃРѕС…СЂР°РЅРµРЅРёРµРј СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РІ РґРѕРєСѓРјРµРЅС‚Р°С†РёСЋ RU/EN.
+## Описание задачи
+Реализован этап анализа формата `TRAIN/info` на основе `temp_data/sort-path-host-file.json` с сохранением результатов в документацию RU/EN.
 
-## РљР°РєРёРµ С„Р°Р№Р»С‹ Р±С‹Р»Рё РґРѕР±Р°РІР»РµРЅС‹/РёР·РјРµРЅРµРЅС‹
+## Какие файлы были добавлены/изменены
 - `scripts/handlers/analyze_host_info_dataset_handler.py`
 - `manage.py`
 - `docs/ru/analysis-dataset/host/info.md`
@@ -817,19 +817,19 @@ Example process sources:
 - `report/en/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
 - `temp_data/analysis-host-info-summary.json`
 
-## Р›РѕРіРёРєР°
-1. Р—Р°РіСЂСѓР¶РµРЅС‹ РїСѓС‚Рё `TRAIN/info` РёР· `sort-path-host-file.json`.
-2. Р’С‹РїРѕР»РЅРµРЅ sampling С„Р°Р№Р»РѕРІ Рё РїРѕСЃС‚СЂРѕС‡РЅС‹Р№ Р°РЅР°Р»РёР·.
-3. Р’С‹СЏРІР»РµРЅС‹ РґРІРµ РІРЅСѓС‚СЂРµРЅРЅРёРµ СЃС…РµРјС‹: raw syslog Рё JSON-lines.
-4. РџСЂРѕРІРµСЂРµРЅС‹ timestamp, РїРѕР»СЏ, РёРЅРґРёРєР°С‚РѕСЂС‹ label, РєР°С‡РµСЃС‚РІРѕ РґР°РЅРЅС‹С….
-5. РЎС„РѕСЂРјРёСЂРѕРІР°РЅС‹ markdown-РґРѕРєСѓРјРµРЅС‚С‹ Рё РѕР±РЅРѕРІР»С‘РЅ README-РёРЅРґРµРєСЃ.
+## Логика
+1. Загружены пути `TRAIN/info` из `sort-path-host-file.json`.
+2. Выполнен sampling файлов и построчный анализ.
+3. Выявлены две внутренние схемы: raw syslog и JSON-lines.
+4. Проверены timestamp, поля, индикаторы label, качество данных.
+5. Сформированы markdown-документы и обновлён README-индекс.
 
-## Р РµР·СѓР»СЊС‚Р°С‚
-- Р’СЃРµРіРѕ С„Р°Р№Р»РѕРІ С„РѕСЂРјР°С‚Р°: `{total_files_count}`.
-- Sample-С„Р°Р№Р»РѕРІ РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅРѕ: `{sampled_files_count}`.
-- РС‚РѕРіРѕРІС‹Р№ СЃС‚Р°С‚СѓСЃ: `{status}`.
+## Результат
+- Всего файлов формата: `{total_files_count}`.
+- Sample-файлов проанализировано: `{sampled_files_count}`.
+- Итоговый статус: `{status}`.
 
-## РђСЂС‚РµС„Р°РєС‚С‹
+## Артефакты
 - Summary JSON: `{summary_json_path}`
 - RU doc: `{docs_ru_path}`
 - EN doc: `{docs_en_path}`

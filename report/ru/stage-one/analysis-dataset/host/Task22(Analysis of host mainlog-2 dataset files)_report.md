@@ -1,9 +1,9 @@
-# РћС‚С‡С‘С‚: Task22 (Analysis of host mainlog-2 dataset files)
+# Отчёт: Task22 (Analysis of host mainlog-2 dataset files)
 
-## РћРїРёСЃР°РЅРёРµ Р·Р°РґР°С‡Рё
-РџРµСЂРµРґРµР»Р°РЅ СЌС‚Р°Рї Р°РЅР°Р»РёР·Р° `TRAIN/mainlog-2` СЃ РіРµРЅРµСЂР°С†РёРµР№ RU/EN-РґРѕРєСѓРјРµРЅС‚Р°С†РёРё Рё РѕР±РЅРѕРІР»РµРЅРёРµРј README РёРЅРґРµРєСЃРѕРІ.
+## Описание задачи
+Переделан этап анализа `TRAIN/mainlog-2` с генерацией RU/EN-документации и обновлением README индексов.
 
-## РљР°РєРёРµ С„Р°Р№Р»С‹ Р±С‹Р»Рё РґРѕР±Р°РІР»РµРЅС‹ РёР»Рё РёР·РјРµРЅРµРЅС‹
+## Какие файлы были добавлены или изменены
 - `scripts/handlers/analyze_host_mainlog_2_dataset_handler.py`
 - `manage.py`
 - `docs/ru/analysis-dataset/host/mainlog-2.md`
@@ -14,18 +14,18 @@
 - `report/en/stage-one/analysis-dataset/host/Task22(Analysis of host mainlog-2 dataset files)_report.md`
 - `temp_data/analysis-host-mainlog-2-summary.json`
 
-## РћРїРёСЃР°РЅРёРµ СЃС‚СЂСѓРєС‚СѓСЂС‹ JSON
+## Описание структуры JSON
 - json_document: `0`
 - json_lines: `0`
 - unparsed: `0`
 
-## Р›РѕРіРёРєР° РіСЂСѓРїРїРёСЂРѕРІРєРё РїСѓС‚РµР№
-1. Р—Р°РіСЂСѓР¶РµРЅ `sort-path-host-file.json`.
-2. Р’С‹Р±СЂР°РЅ bucket `TRAIN -> mainlog-2`.
-3. РџСЂРёРјРµРЅРµРЅР° СЂР°РІРЅРѕРјРµСЂРЅР°СЏ РІС‹Р±РѕСЂРєР° С„Р°Р№Р»РѕРІ РїРѕ РІСЃРµРјСѓ РґРёР°РїР°Р·РѕРЅСѓ РёРјРµРЅ.
-4. Р”Р»СЏ РєР°Р¶РґРѕРіРѕ sample-С„Р°Р№Р»Р° РІС‹РїРѕР»РЅРµРЅ Р°РЅР°Р»РёР· РєР°Рє `json document`, Р·Р°С‚РµРј fallback РІ `json-lines`.
+## Логика группировки путей
+1. Загружен `sort-path-host-file.json`.
+2. Выбран bucket `TRAIN -> mainlog-2`.
+3. Применена равномерная выборка файлов по всему диапазону имен.
+4. Для каждого sample-файла выполнен анализ как `json document`, затем fallback в `json-lines`.
 
-## РџСЂРёРјРµСЂ РёС‚РѕРіРѕРІРѕРіРѕ JSON
+## Пример итогового JSON
 ```json
 {
   "scope": {

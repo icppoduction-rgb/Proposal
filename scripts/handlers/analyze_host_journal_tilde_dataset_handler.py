@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from dataclasses import dataclass
@@ -344,97 +344,97 @@ class HostJournalTildeContentAnalysisHandler:
         examples = summary["examples"]["paths"]
 
         return f"""
-# РђРЅР°Р»РёР· С„РѕСЂРјР°С‚Р°: journal~
+# Анализ формата: journal~
 
-## 1. РќР°Р·РЅР°С‡РµРЅРёРµ
-`journal~` РІ `TRAIN` РїСЂРµРґСЃС‚Р°РІР»РµРЅ Р±РёРЅР°СЂРЅС‹Рј РєРѕРЅС‚РµР№РЅРµСЂРѕРј systemd journal Рё С‚СЂРµР±СѓРµС‚ РѕС‚РґРµР»СЊРЅРѕРіРѕ РїР°СЂСЃРµСЂР° РґР»СЏ РёР·РІР»РµС‡РµРЅРёСЏ СЃРѕР±С‹С‚РёР№.
+## 1. Назначение
+`journal~` в `TRAIN` представлен бинарным контейнером systemd journal и требует отдельного парсера для извлечения событий.
 
-## 2. Р“РґРµ РІСЃС‚СЂРµС‡Р°РµС‚СЃСЏ
-| РџРѕР»Рµ | Р—РЅР°С‡РµРЅРёРµ |
+## 2. Где встречается
+| Поле | Значение |
 |---|---|
-| Р¤РѕСЂРјР°С‚ | journal~ |
-| Р’Р°СЂРёР°РЅС‚С‹ СЂР°СЃС€РёСЂРµРЅРёСЏ | `.journal~` |
-| DNS | РЅРµС‚ |
-| Host | РґР° |
-| Р РѕР»Рё | {scope['role']} |
-| РљРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ | {scope['total_files_count']} |
+| Формат | journal~ |
+| Варианты расширения | `.journal~` |
+| DNS | нет |
+| Host | да |
+| Роли | {scope['role']} |
+| Количество файлов | {scope['total_files_count']} |
 
-## 3. РџСЂРёРјРµСЂС‹ С„Р°Р№Р»РѕРІ
+## 3. Примеры файлов
 ```text
 {examples[0] if len(examples) > 0 else '-'}
 {examples[1] if len(examples) > 1 else '-'}
 {examples[2] if len(examples) > 2 else '-'}
 ```
 
-## 4. РўРµС…РЅРёС‡РµСЃРєР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР°
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+## 4. Техническая структура
+| Проверка | Результат |
 |---|---|
-| РўРёРї С„Р°Р№Р»Р° | binary |
-| Р§С‚РµРЅРёРµ РїРѕСЃС‚СЂРѕС‡РЅРѕ | РЅРµС‚ |
-| РўР°Р±Р»РёС‡РЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | РЅРµС‚ |
-| Р—Р°РіРѕР»РѕРІРѕРє | РµСЃС‚СЊ Р±РёРЅР°СЂРЅР°СЏ СЃРёРіРЅР°С‚СѓСЂР° |
-| Р Р°Р·РґРµР»РёС‚РµР»СЊ | none |
-| РљРѕРґРёСЂРѕРІРєР° | unknown (container bytes) |
-| Р’Р»РѕР¶РµРЅРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | РґР° |
-| Sample-С„Р°Р№Р»РѕРІ РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅРѕ | {scope['sampled_files_count']} |
-| Р¤Р°Р№Р»РѕРІ СЃ СЃРёРіРЅР°С‚СѓСЂРѕР№ `LPKSHHRH` | {technical['systemd_signature_files']} |
+| Тип файла | binary |
+| Чтение построчно | нет |
+| Табличная структура | нет |
+| Заголовок | есть бинарная сигнатура |
+| Разделитель | none |
+| Кодировка | unknown (container bytes) |
+| Вложенная структура | да |
+| Sample-файлов проанализировано | {scope['sampled_files_count']} |
+| Файлов с сигнатурой `LPKSHHRH` | {technical['systemd_signature_files']} |
 
-## 5. РЎРѕРґРµСЂР¶Р°С‚РµР»СЊРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР°
-Р¤РѕСЂРјР°С‚ РїРѕС…РѕР¶ РЅР° РєРѕРЅС‚РµР№РЅРµСЂ systemd journal: РґР°РЅРЅС‹Рµ С…СЂР°РЅСЏС‚СЃСЏ Р±РёРЅР°СЂРЅРѕ Рё РЅРµ РїСЂРµРґРЅР°Р·РЅР°С‡РµРЅС‹ РґР»СЏ РїСЂСЏРјРѕРіРѕ С‚РµРєСЃС‚РѕРІРѕРіРѕ С‡С‚РµРЅРёСЏ.
+## 5. Содержательная структура
+Формат похож на контейнер systemd journal: данные хранятся бинарно и не предназначены для прямого текстового чтения.
 
-## 6. РќР°Р№РґРµРЅРЅС‹Рµ РїРѕР»СЏ / РєРѕР»РѕРЅРєРё
-| РџРѕР»Рµ | РўРёРї | РќР°Р·РЅР°С‡РµРЅРёРµ | РџСЂРёРјРµСЂ Р·РЅР°С‡РµРЅРёСЏ |
+## 6. Найденные поля / колонки
+| Поле | Тип | Назначение | Пример значения |
 |---|---|---|---|
-| header_signature_hex | string | СЃРёРіРЅР°С‚СѓСЂР° РїРµСЂРІС‹С… 8 Р±Р°Р№С‚ | `4c504b5348485248` |
-| size_bytes | integer | СЂР°Р·РјРµСЂ С„Р°Р№Р»Р° | `16777216` |
-| printable_ratio | float | РґРѕР»СЏ РїРµС‡Р°С‚РЅС‹С… Р±Р°Р№С‚ РІ sample-header | `0.12` |
+| header_signature_hex | string | сигнатура первых 8 байт | `4c504b5348485248` |
+| size_bytes | integer | размер файла | `16777216` |
+| printable_ratio | float | доля печатных байт в sample-header | `0.12` |
 
 ## 7. Label / class indicators
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+| Проверка | Результат |
 |---|---|
-| Label РЅР°Р№РґРµРЅ | {'РґР°' if label['label_found'] else 'РЅРµС‚'} |
-| РќР°Р·РІР°РЅРёРµ РїРѕР»СЏ | {label['label_field_name']} |
-| Р—РЅР°С‡РµРЅРёСЏ label | - |
-| РњРѕР¶РЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґР»СЏ supervised learning | {label['supports_supervised_learning']} |
+| Label найден | {'да' if label['label_found'] else 'нет'} |
+| Название поля | {label['label_field_name']} |
+| Значения label | - |
+| Можно использовать для supervised learning | {label['supports_supervised_learning']} |
 
-## 8. Р’СЂРµРјРµРЅРЅС‹Рµ РїСЂРёР·РЅР°РєРё
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+## 8. Временные признаки
+| Проверка | Результат |
 |---|---|
-| Timestamp РЅР°Р№РґРµРЅ | {'РґР°' if time_block['timestamp_found'] else 'РЅРµС‚'} |
-| РќР°Р·РІР°РЅРёРµ РїРѕР»СЏ | - |
-| Р¤РѕСЂРјР°С‚ РІСЂРµРјРµРЅРё | {time_block['timestamp_format']} |
-| РњРѕР¶РЅРѕ СЃС‚СЂРѕРёС‚СЊ sequence | {'РґР°' if time_block['sequence_ready'] else 'РЅРµС‚'} |
-| РњРѕР¶РЅРѕ РїСЂРёРјРµРЅСЏС‚СЊ sliding window | {'РґР°' if time_block['sliding_window_ready'] else 'РЅРµС‚'} |
+| Timestamp найден | {'да' if time_block['timestamp_found'] else 'нет'} |
+| Название поля | - |
+| Формат времени | {time_block['timestamp_format']} |
+| Можно строить sequence | {'да' if time_block['sequence_ready'] else 'нет'} |
+| Можно применять sliding window | {'да' if time_block['sliding_window_ready'] else 'нет'} |
 
-## 9. РџРѕС‚РµРЅС†РёР°Р»СЊРЅС‹Рµ РїСЂРёР·РЅР°РєРё РґР»СЏ feature extraction
-### DNS-РїСЂРёР·РЅР°РєРё
-- РЅРµ РїСЂРёРјРµРЅРёРјРѕ РЅР° СЌС‚Р°РїРµ СЃС‹СЂРѕРіРѕ Р±РёРЅР°СЂРЅРѕРіРѕ С‡С‚РµРЅРёСЏ.
+## 9. Потенциальные признаки для feature extraction
+### DNS-признаки
+- не применимо на этапе сырого бинарного чтения.
 
-### Host-РїСЂРёР·РЅР°РєРё
-- РѕР±СЉС‘Рј Р¶СѓСЂРЅР°Р»Р° Рё С‚РµРјРї СЂРѕСЃС‚Р°;
-- РєРѕР»РёС‡РµСЃС‚РІРѕ Р·Р°РїРёСЃРµР№ Рё С‚РёРїС‹ СЃРѕР±С‹С‚РёР№ РїРѕСЃР»Рµ РїР°СЂСЃРёРЅРіР° `journalctl`.
+### Host-признаки
+- объём журнала и темп роста;
+- количество записей и типы событий после парсинга `journalctl`.
 
-### Network / hybrid-РїСЂРёР·РЅР°РєРё
-- РєРѕСЂСЂРµР»СЏС†РёСЏ РёР·РІР»РµС‡С‘РЅРЅС‹С… journal-СЃРѕР±С‹С‚РёР№ СЃ СЃРµС‚РµРІС‹РјРё/РїСЂРѕС†РµСЃСЃРЅС‹РјРё Р»РѕРіР°РјРё РїРѕСЃР»Рµ РЅРѕСЂРјР°Р»РёР·Р°С†РёРё.
+### Network / hybrid-признаки
+- корреляция извлечённых journal-событий с сетевыми/процессными логами после нормализации.
 
-## 10. РџСЂРѕР±Р»РµРјС‹ РєР°С‡РµСЃС‚РІР° РґР°РЅРЅС‹С…
-| РџСЂРѕР±Р»РµРјР° | РќР°Р№РґРµРЅР° | РљРѕРјРјРµРЅС‚Р°СЂРёР№ |
+## 10. Проблемы качества данных
+| Проблема | Найдена | Комментарий |
 |---|---|---|
-| РџСѓСЃС‚С‹Рµ С„Р°Р№Р»С‹ | {'РґР°' if quality['empty_files_count'] > 0 else 'РЅРµС‚'} | count: {quality['empty_files_count']} |
-| РџРѕРІСЂРµР¶РґС‘РЅРЅС‹Рµ С„Р°Р№Р»С‹ | {'РґР°' if quality['parse_error_files_count'] > 0 else 'РЅРµС‚'} | parse/read errors: {quality['parse_error_files_count']} |
-| Missing values | РЅРµС‚ | РєРѕРЅС‚РµР№РЅРµСЂРЅС‹Р№ Р±РёРЅР°СЂРЅС‹Р№ С„РѕСЂРјР°С‚ |
-| РќРµСЃС‚Р°Р±РёР»СЊРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | {'РґР°' if quality['mixed_schema_detected'] else 'РЅРµС‚'} | СЃРјРµС€РµРЅРёРµ Р±РёРЅР°СЂРЅС‹С… Рё text-like С„Р°Р№Р»РѕРІ |
-| РЎРјРµС€Р°РЅРЅС‹Рµ СЃС…РµРјС‹ | {'РґР°' if quality['mixed_schema_detected'] else 'РЅРµС‚'} | binary_like={technical['binary_like_files']}, text_like={technical['text_like_files']} |
+| Пустые файлы | {'да' if quality['empty_files_count'] > 0 else 'нет'} | count: {quality['empty_files_count']} |
+| Повреждённые файлы | {'да' if quality['parse_error_files_count'] > 0 else 'нет'} | parse/read errors: {quality['parse_error_files_count']} |
+| Missing values | нет | контейнерный бинарный формат |
+| Нестабильная структура | {'да' if quality['mixed_schema_detected'] else 'нет'} | смешение бинарных и text-like файлов |
+| Смешанные схемы | {'да' if quality['mixed_schema_detected'] else 'нет'} | binary_like={technical['binary_like_files']}, text_like={technical['text_like_files']} |
 
-## 11. РС‚РѕРіРѕРІР°СЏ РїСЂРёРіРѕРґРЅРѕСЃС‚СЊ
-| РџРѕР»Рµ | Р—РЅР°С‡РµРЅРёРµ |
+## 11. Итоговая пригодность
+| Поле | Значение |
 |---|---|
-| РЎС‚Р°С‚СѓСЃ | {summary['final_status']} |
-| РќСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ РїР°СЂСЃРµСЂ | {'РґР°' if summary['needs_custom_parser'] else 'РЅРµС‚'} |
-| РџСЂРёРѕСЂРёС‚РµС‚ РѕР±СЂР°Р±РѕС‚РєРё | {summary['priority']} |
+| Статус | {summary['final_status']} |
+| Нужен отдельный парсер | {'да' if summary['needs_custom_parser'] else 'нет'} |
+| Приоритет обработки | {summary['priority']} |
 
-## 12. Р’С‹РІРѕРґ
-`TRAIN/journal~` РЅРµ РґРѕР»Р¶РµРЅ РѕР±СЂР°Р±Р°С‚С‹РІР°С‚СЊСЃСЏ РєР°Рє РѕР±С‹С‡РЅС‹Р№ С‚РµРєСЃС‚РѕРІС‹Р№ Р»РѕРі. Р”Р»СЏ РєРѕСЂСЂРµРєС‚РЅРѕРіРѕ РёР·РІР»РµС‡РµРЅРёСЏ РїСЂРёР·РЅР°РєРѕРІ РЅСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ parser/toolchain РґР»СЏ systemd journal.
+## 12. Вывод
+`TRAIN/journal~` не должен обрабатываться как обычный текстовый лог. Для корректного извлечения признаков нужен отдельный parser/toolchain для systemd journal.
 """
 
     def _build_en_markdown(self, summary: dict[str, Any]) -> str:
@@ -564,20 +564,20 @@ The format matches a systemd journal-like binary container. Direct text parsing 
         journal_tilde_status = journal_summary["final_status"]
 
         return f"""
-# Р С’Р Р…Р В°Р В»Р С‘Р В· РЎРѓР С•Р Т‘Р ВµРЎР‚Р В¶Р С‘Р СР С•Р С–Р С• РЎвЂћР В°Р в„–Р В»Р С•Р Р† Р Т‘Р В°РЎвЂљР В°РЎРѓР ВµРЎвЂљР С•Р Р† (Host)
+# Анализ содержимого файлов датасетов (Host)
 
-| Р В¤Р С•РЎР‚Р СР В°РЎвЂљ | Р С™Р С•Р В»Р С‘РЎвЂЎР ВµРЎРѓРЎвЂљР Р†Р С• РЎвЂћР В°Р в„–Р В»Р С•Р Р† | DNS | Host | Р РЋРЎвЂљР В°РЎвЂљРЎС“РЎРѓ | Р вЂќР С•Р С”РЎС“Р СР ВµР Р…РЎвЂљ |
+| Формат | Количество файлов | DNS | Host | Статус | Документ |
 |---|---:|---|---|---|---|
-| csv | {csv_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {csv_status} | csv.md |
-| auth.log | {auth_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {auth_status} | auth.log.md |
-| cpu.log | {cpu_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {cpu_status} | cpu.log.md |
-| diskio.log | {diskio_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {diskio_status} | diskio.log.md |
-| filesystem.log | {filesystem_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {filesystem_status} | filesystem.log.md |
-| fsstat.log | {fsstat_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {fsstat_status} | fsstat.log.md |
-| ghc | {ghc_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {ghc_status} | ghc.md |
-| info | {info_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {info_status} | info.md |
-| journal | {journal_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {journal_status} | journal.md |
-| journal~ | {journal_tilde_count} | Р Р…Р ВµРЎвЂљ | Р Т‘Р В° | {journal_tilde_status} | journal~.md |
+| csv | {csv_count} | нет | да | {csv_status} | csv.md |
+| auth.log | {auth_count} | нет | да | {auth_status} | auth.log.md |
+| cpu.log | {cpu_count} | нет | да | {cpu_status} | cpu.log.md |
+| diskio.log | {diskio_count} | нет | да | {diskio_status} | diskio.log.md |
+| filesystem.log | {filesystem_count} | нет | да | {filesystem_status} | filesystem.log.md |
+| fsstat.log | {fsstat_count} | нет | да | {fsstat_status} | fsstat.log.md |
+| ghc | {ghc_count} | нет | да | {ghc_status} | ghc.md |
+| info | {info_count} | нет | да | {info_status} | info.md |
+| journal | {journal_count} | нет | да | {journal_status} | journal.md |
+| journal~ | {journal_tilde_count} | нет | да | {journal_tilde_status} | journal~.md |
 """
 
     def _build_en_readme(self, journal_summary: dict[str, Any]) -> str:
@@ -641,12 +641,12 @@ The format matches a systemd journal-like binary container. Direct text parsing 
         json_structure_text = json.dumps(json_structure_sample, ensure_ascii=False, indent=2)
 
         return f"""
-# РћС‚С‡С‘С‚: Task10 (Analysis of host journal~ dataset files)
+# Отчёт: Task10 (Analysis of host journal~ dataset files)
 
-## РћРїРёСЃР°РЅРёРµ Р·Р°РґР°С‡Рё
-Р РµР°Р»РёР·РѕРІР°РЅ РѕС‚РґРµР»СЊРЅС‹Р№ СЌС‚Р°Рї Р°РЅР°Р»РёР·Р° С„РѕСЂРјР°С‚Р° `TRAIN/journal~` РЅР° РѕСЃРЅРѕРІРµ `temp_data/sort-path-host-file.json` СЃ РіРµРЅРµСЂР°С†РёРµР№ РґРѕРєСѓРјРµРЅС‚Р°С†РёРё RU/EN.
+## Описание задачи
+Реализован отдельный этап анализа формата `TRAIN/journal~` на основе `temp_data/sort-path-host-file.json` с генерацией документации RU/EN.
 
-## РљР°РєРёРµ С„Р°Р№Р»С‹ Р±С‹Р»Рё РґРѕР±Р°РІР»РµРЅС‹/РёР·РјРµРЅРµРЅС‹
+## Какие файлы были добавлены/изменены
 - `scripts/handlers/analyze_host_journal_tilde_dataset_handler.py`
 - `manage.py`
 - `docs/ru/analysis-dataset/host/journal~.md`
@@ -657,28 +657,28 @@ The format matches a systemd journal-like binary container. Direct text parsing 
 - `report/en/stage-one/analysis-dataset/host/Task10(Analysis of host journal~ dataset files)_report.md`
 - `temp_data/analysis-host-journal-tilde-summary.json`
 
-## РћРїРёСЃР°РЅРёРµ СЃС‚СЂСѓРєС‚СѓСЂС‹ JSON
-- Р±РёРЅР°СЂРЅР°СЏ СЃРёРіРЅР°С‚СѓСЂР°: `LPKSHHRH`
-- С‚РёРї: Р±РёРЅР°СЂРЅС‹Р№ container
-- СЃС‚Р°С‚СѓСЃ РїСЂРёРіРѕРґРЅРѕСЃС‚Рё: `{summary_payload['final_status']}`
+## Описание структуры JSON
+- бинарная сигнатура: `LPKSHHRH`
+- тип: бинарный container
+- статус пригодности: `{summary_payload['final_status']}`
 
-## Р›РѕРіРёРєР° РіСЂСѓРїРїРёСЂРѕРІРєРё РїСѓС‚РµР№
-1. РЎС‡РёС‚С‹РІР°РµС‚СЃСЏ `sort-path-host-file.json`.
-2. Р’С‹Р±РёСЂР°РµС‚СЃСЏ bucket: `TRAIN -> journal~`.
-3. РџР°СЂР°Р»Р»РµР»СЊРЅРѕ С‡РёС‚Р°РµС‚СЃСЏ `sort-path-dns-file.json` РґР»СЏ РІР°Р»РёРґР°С†РёРё РєРѕРЅС‚РµРєСЃС‚Р° DNS/Host Р±РµР· СЃРјРµС€РёРІР°РЅРёСЏ РґР°РЅРЅС‹С….
-4. Р”Р»СЏ Р°РЅР°Р»РёР·Р° Р±РµСЂС‘С‚СЃСЏ РѕРіСЂР°РЅРёС‡РµРЅРЅС‹Р№ sample С„Р°Р№Р»РѕРІ Рё С‚РѕР»СЊРєРѕ Р±РµР·РѕРїР°СЃРЅС‹Р№ header sample bytes.
+## Логика группировки путей
+1. Считывается `sort-path-host-file.json`.
+2. Выбирается bucket: `TRAIN -> journal~`.
+3. Параллельно читается `sort-path-dns-file.json` для валидации контекста DNS/Host без смешивания данных.
+4. Для анализа берётся ограниченный sample файлов и только безопасный header sample bytes.
 
-## РџСЂРёРјРµСЂ РёС‚РѕРіРѕРІРѕРіРѕ JSON
+## Пример итогового JSON
 ```json
 {json_structure_text}
 ```
 
-## Р РµР·СѓР»СЊС‚Р°С‚
-- Р’СЃРµРіРѕ С„Р°Р№Р»РѕРІ С„РѕСЂРјР°С‚Р°: `{total_files_count}`.
-- Sample-С„Р°Р№Р»РѕРІ РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅРѕ: `{sampled_files_count}`.
-- РС‚РѕРіРѕРІС‹Р№ СЃС‚Р°С‚СѓСЃ: `{status}`.
+## Результат
+- Всего файлов формата: `{total_files_count}`.
+- Sample-файлов проанализировано: `{sampled_files_count}`.
+- Итоговый статус: `{status}`.
 
-## РђСЂС‚РµС„Р°РєС‚С‹
+## Артефакты
 - Summary JSON: `{summary_json_path}`
 - RU doc: `{docs_ru_path}`
 - EN doc: `{docs_en_path}`

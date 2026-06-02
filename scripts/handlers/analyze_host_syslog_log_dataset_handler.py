@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from dataclasses import dataclass
@@ -338,104 +338,104 @@ class HostSyslogLogContentAnalysisHandler:
         time_block = summary["time_detection"]
         examples = summary["examples"]["paths"]
         return f"""
-# РђРЅР°Р»РёР· С„РѕСЂРјР°С‚Р°: json
+# Анализ формата: {scope["format"]}
 
-## 1. РќР°Р·РЅР°С‡РµРЅРёРµ
-РЎРјРµС€Р°РЅРЅС‹Р№ С„РѕСЂРјР°С‚ `json` РІ `TRAIN`: СЃС†РµРЅР°СЂРЅС‹Рµ JSON-РґРѕРєСѓРјРµРЅС‚С‹ Рё JSON-lines С‚РµР»РµРјРµС‚СЂРёСЏ (`eve*`, `traffic*`).
+## 1. Назначение
+Смешанный формат `{scope["format"]}` в `TRAIN`: сценарные JSON-документы и JSON-lines телеметрия (`eve*`, `traffic*`).
 
-## 2. Р“РґРµ РІСЃС‚СЂРµС‡Р°РµС‚СЃСЏ
-| РџРѕР»Рµ | Р—РЅР°С‡РµРЅРёРµ |
+## 2. Где встречается
+| Поле | Значение |
 |---|---|
-| Р¤РѕСЂРјР°С‚ | json |
-| Р’Р°СЂРёР°РЅС‚С‹ СЂР°СЃС€РёСЂРµРЅРёСЏ | `.json` |
-| DNS | РЅРµС‚ |
-| Host | РґР° |
-| Р РѕР»Рё | {scope["role"]} |
-| РљРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ | {scope["total_files_count"]} |
+| Формат | {scope["format"]} |
+| Варианты расширения | `.json` |
+| DNS | нет |
+| Host | да |
+| Роли | {scope["role"]} |
+| Количество файлов | {scope["total_files_count"]} |
 
-## 3. РџСЂРёРјРµСЂС‹ С„Р°Р№Р»РѕРІ
+## 3. Примеры файлов
 ```text
 {examples[0] if len(examples) > 0 else "-"}
 {examples[1] if len(examples) > 1 else "-"}
 {examples[2] if len(examples) > 2 else "-"}
 ```
 
-## 4. РўРµС…РЅРёС‡РµСЃРєР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР°
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+## 4. Техническая структура
+| Проверка | Результат |
 |---|---|
-| РўРёРї С„Р°Р№Р»Р° | text |
-| Р§С‚РµРЅРёРµ РїРѕСЃС‚СЂРѕС‡РЅРѕ | РґР° |
-| РўР°Р±Р»РёС‡РЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | РЅРµС‚ |
-| Р—Р°РіРѕР»РѕРІРѕРє | РЅРµС‚ |
-| Р Р°Р·РґРµР»РёС‚РµР»СЊ | JSON object / JSON-lines |
-| РљРѕРґРёСЂРѕРІРєР° | utf-8 |
-| Р’Р»РѕР¶РµРЅРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | РґР° |
+| Тип файла | text |
+| Чтение построчно | да |
+| Табличная структура | нет |
+| Заголовок | нет |
+| Разделитель | JSON object / JSON-lines |
+| Кодировка | utf-8 |
+| Вложенная структура | да |
 | JSON document | {technical["schema_counts"]["json_document"]} |
 | JSON-lines | {technical["schema_counts"]["json_lines"]} |
 | Raw text | {technical["schema_counts"]["raw_text"]} |
-| РќРµСЂР°Р·РѕР±СЂР°РЅРЅС‹Рµ | {technical["schema_counts"]["unparsed"]} |
+| Неразобранные | {technical["schema_counts"]["unparsed"]} |
 
-## 5. РЎРѕРґРµСЂР¶Р°С‚РµР»СЊРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР°
-РћР±РЅР°СЂСѓР¶РµРЅС‹ РґРІРµ СЃС…РµРјС‹: СЃС†РµРЅР°СЂРЅС‹Рµ РґРѕРєСѓРјРµРЅС‚С‹ (`container`, `exploit`, `time`) Рё JSON-lines СЃРѕР±С‹С‚РёСЏ (`timestamp`, `event_type`, `alert`, `dns`).
+## 5. Содержательная структура
+Обнаружены две схемы: сценарные документы (`container`, `exploit`, `time`) и JSON-lines события (`timestamp`, `event_type`, `alert`, `dns`).
 
-## 6. РќР°Р№РґРµРЅРЅС‹Рµ РїРѕР»СЏ / РєРѕР»РѕРЅРєРё
-| РџРѕР»Рµ | РўРёРї | РќР°Р·РЅР°С‡РµРЅРёРµ | РџСЂРёРјРµСЂ Р·РЅР°С‡РµРЅРёСЏ |
+## 6. Найденные поля / колонки
+| Поле | Тип | Назначение | Пример значения |
 |---|---|---|---|
-| exploit | bool | РёРЅРґРёРєР°С‚РѕСЂ СЃС†РµРЅР°СЂРёСЏ | `false` |
-| container.role | string | СЂРѕР»СЊ РєРѕРЅС‚РµР№РЅРµСЂР° | `normal`, `victim` |
-| time.container_ready.absolute | float | РІСЂРµРјСЏ РіРѕС‚РѕРІРЅРѕСЃС‚Рё | `1631222503.73` |
-| timestamp | string | РІСЂРµРјСЏ СЃРѕР±С‹С‚РёСЏ | `2022-01-13T14:37:36.251509+0000` |
-| event_type | string | С‚РёРї СЃРѕР±С‹С‚РёСЏ | `stats`, `dns`, `alert` |
+| exploit | bool | индикатор сценария | `false` |
+| container.role | string | роль контейнера | `normal`, `victim` |
+| time.container_ready.absolute | float | время готовности | `1631222503.73` |
+| timestamp | string | время события | `2022-01-13T14:37:36.251509+0000` |
+| event_type | string | тип события | `stats`, `dns`, `alert` |
 
 ## 7. Label / class indicators
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+| Проверка | Результат |
 |---|---|
-| Label РЅР°Р№РґРµРЅ | {"РґР°" if label["label_found"] else "РЅРµС‚"} |
-| РќР°Р·РІР°РЅРёРµ РїРѕР»СЏ | {label["label_field_name"]} |
-| Р—РЅР°С‡РµРЅРёСЏ label | {", ".join(label["label_values"])} |
-| РњРѕР¶РЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґР»СЏ supervised learning | {label["supports_supervised_learning"]} |
+| Label найден | {"да" if label["label_found"] else "нет"} |
+| Название поля | {label["label_field_name"]} |
+| Значения label | {", ".join(label["label_values"])} |
+| Можно использовать для supervised learning | {label["supports_supervised_learning"]} |
 
-## 8. Р’СЂРµРјРµРЅРЅС‹Рµ РїСЂРёР·РЅР°РєРё
-| РџСЂРѕРІРµСЂРєР° | Р РµР·СѓР»СЊС‚Р°С‚ |
+## 8. Временные признаки
+| Проверка | Результат |
 |---|---|
-| Timestamp РЅР°Р№РґРµРЅ | {"РґР°" if time_block["timestamp_found"] else "РЅРµС‚"} |
-| РќР°Р·РІР°РЅРёРµ РїРѕР»СЏ | {", ".join(time_block["timestamp_fields"])} |
-| Р¤РѕСЂРјР°С‚ РІСЂРµРјРµРЅРё | {time_block["timestamp_format"]} |
+| Timestamp найден | {"да" if time_block["timestamp_found"] else "нет"} |
+| Название поля | {", ".join(time_block["timestamp_fields"])} |
+| Формат времени | {time_block["timestamp_format"]} |
 | Timezone | {time_block["timezone"]} |
-| РњРѕР¶РЅРѕ СЃС‚СЂРѕРёС‚СЊ sequence | {"РґР°" if time_block["sequence_ready"] else "РЅРµС‚"} |
-| РњРѕР¶РЅРѕ РїСЂРёРјРµРЅСЏС‚СЊ sliding window | {"РґР°" if time_block["sliding_window_ready"] else "РЅРµС‚"} |
+| Можно строить sequence | {"да" if time_block["sequence_ready"] else "нет"} |
+| Можно применять sliding window | {"да" if time_block["sliding_window_ready"] else "нет"} |
 
-## 9. РџРѕС‚РµРЅС†РёР°Р»СЊРЅС‹Рµ РїСЂРёР·РЅР°РєРё РґР»СЏ feature extraction
-### DNS-РїСЂРёР·РЅР°РєРё
-- С‡Р°СЃС‚РѕС‚С‹ `event_type=dns`;
-- СЂР°Р·РЅРѕРѕР±СЂР°Р·РёРµ DNS-СЃРѕР±С‹С‚РёР№.
+## 9. Потенциальные признаки для feature extraction
+### DNS-признаки
+- частоты `event_type=dns`;
+- разнообразие DNS-событий.
 
-### Host-РїСЂРёР·РЅР°РєРё
-- `exploit`, СЂРѕР»Рё РєРѕРЅС‚РµР№РЅРµСЂРѕРІ, `recording_time`;
-- РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚Рё `event_type`.
+### Host-признаки
+- `exploit`, роли контейнеров, `recording_time`;
+- последовательности `event_type`.
 
-### Network / hybrid-РїСЂРёР·РЅР°РєРё
+### Network / hybrid-признаки
 - `src_ip`, `dest_ip`, `src_port`, `dest_port`, `proto`;
-- РєРѕСЂСЂРµР»СЏС†РёСЏ alert-СЃРѕР±С‹С‚РёР№ СЃ host-РєРѕРЅС‚РµРєСЃС‚РѕРј.
+- корреляция alert-событий с host-контекстом.
 
-## 10. РџСЂРѕР±Р»РµРјС‹ РєР°С‡РµСЃС‚РІР° РґР°РЅРЅС‹С…
-| РџСЂРѕР±Р»РµРјР° | РќР°Р№РґРµРЅР° | РљРѕРјРјРµРЅС‚Р°СЂРёР№ |
+## 10. Проблемы качества данных
+| Проблема | Найдена | Комментарий |
 |---|---|---|
-| РџСѓСЃС‚С‹Рµ С„Р°Р№Р»С‹ | {"РґР°" if quality["empty_files_count"] > 0 else "РЅРµС‚"} | count: {quality["empty_files_count"]} |
-| РџРѕРІСЂРµР¶РґС‘РЅРЅС‹Рµ С„Р°Р№Р»С‹ | {"РґР°" if quality["parse_error_files_count"] > 0 else "РЅРµС‚"} | parse errors: {quality["parse_error_files_count"]} |
-| Missing values | РЅРµС‚ | РєСЂРёС‚РёС‡РЅС‹С… РїСЂРѕРїСѓСЃРєРѕРІ РІ sample РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅРѕ |
-| РќРµСЃС‚Р°Р±РёР»СЊРЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° | {"РґР°" if quality["mixed_schema_detected"] else "РЅРµС‚"} | СЃРјРµС€Р°РЅС‹ JSON document Рё JSON-lines |
-| РЎРјРµС€Р°РЅРЅС‹Рµ СЃС…РµРјС‹ | {"РґР°" if quality["mixed_schema_detected"] else "РЅРµС‚"} | РЅСѓР¶РµРЅ schema-aware parser |
+| Пустые файлы | {"да" if quality["empty_files_count"] > 0 else "нет"} | count: {quality["empty_files_count"]} |
+| Повреждённые файлы | {"да" if quality["parse_error_files_count"] > 0 else "нет"} | parse errors: {quality["parse_error_files_count"]} |
+| Missing values | нет | критичных пропусков в sample не обнаружено |
+| Нестабильная структура | {"да" if quality["mixed_schema_detected"] else "нет"} | смешаны JSON document и JSON-lines |
+| Смешанные схемы | {"да" if quality["mixed_schema_detected"] else "нет"} | нужен schema-aware parser |
 
-## 11. РС‚РѕРіРѕРІР°СЏ РїСЂРёРіРѕРґРЅРѕСЃС‚СЊ
-| РџРѕР»Рµ | Р—РЅР°С‡РµРЅРёРµ |
+## 11. Итоговая пригодность
+| Поле | Значение |
 |---|---|
-| РЎС‚Р°С‚СѓСЃ | {summary["final_status"]} |
-| РќСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ РїР°СЂСЃРµСЂ | {"РґР°" if summary["needs_custom_parser"] else "РЅРµС‚"} |
-| РџСЂРёРѕСЂРёС‚РµС‚ РѕР±СЂР°Р±РѕС‚РєРё | {summary["priority"]} |
+| Статус | {summary["final_status"]} |
+| Нужен отдельный парсер | {"да" if summary["needs_custom_parser"] else "нет"} |
+| Приоритет обработки | {summary["priority"]} |
 
-## 12. Р’С‹РІРѕРґ
-`TRAIN/syslog.log` РїСЂРёРіРѕРґРµРЅ РґР»СЏ РёР·РІР»РµС‡РµРЅРёСЏ РїСЂРёР·РЅР°РєРѕРІ, РЅРѕ РёР·-Р·Р° СЃРјРµС€РµРЅРёСЏ СЃС…РµРј С‚СЂРµР±СѓРµС‚ РѕС‚РґРµР»СЊРЅРѕРіРѕ parser layer.
+## 12. Вывод
+`TRAIN/syslog.log` пригоден для извлечения признаков, но из-за смешения схем требует отдельного parser layer.
 """
 
     def _build_en_markdown(self, summary: dict[str, Any]) -> str:
@@ -548,10 +548,10 @@ Two schemas are present: scenario documents (`container`, `exploit`, `time`) and
 
     def _build_ru_readme(self, json_summary: dict[str, Any]) -> str:
         rows = self._readme_rows(json_summary)
-        body = "\n".join(f"| {name} | {count} | РЅРµС‚ | РґР° | {status} | {doc} |" for name, count, status, doc in rows)
+        body = "\n".join(f"| {name} | {count} | нет | да | {status} | {doc} |" for name, count, status, doc in rows)
         return (
-            "# РђРЅР°Р»РёР· СЃРѕРґРµСЂР¶РёРјРѕРіРѕ С„Р°Р№Р»РѕРІ РґР°С‚Р°СЃРµС‚РѕРІ (Host)\n\n"
-            "| Р¤РѕСЂРјР°С‚ | РљРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ | DNS | Host | РЎС‚Р°С‚СѓСЃ | Р”РѕРєСѓРјРµРЅС‚ |\n"
+            "# Анализ содержимого файлов датасетов (Host)\n\n"
+            "| Формат | Количество файлов | DNS | Host | Статус | Документ |\n"
             "|---|---:|---|---|---|---|\n"
             f"{body}\n"
         )
@@ -569,10 +569,10 @@ Two schemas are present: scenario documents (`container`, `exploit`, `time`) and
     def _build_ru_report(self, summary_payload: dict[str, Any], summary_json_path: Path) -> str:
         schema = summary_payload["technical"]["schema_counts"]
         return (
-            "# РћС‚С‡С‘С‚: Task40 (Analysis of host syslog-log dataset files)\n\n"
-            "## РћРїРёСЃР°РЅРёРµ Р·Р°РґР°С‡Рё\n"
-            "РџРµСЂРµРґРµР»Р°РЅ СЌС‚Р°Рї Р°РЅР°Р»РёР·Р° `TRAIN/syslog.log` СЃ РіРµРЅРµСЂР°С†РёРµР№ RU/EN-РґРѕРєСѓРјРµРЅС‚Р°С†РёРё Рё РѕР±РЅРѕРІР»РµРЅРёРµРј README РёРЅРґРµРєСЃРѕРІ.\n\n"
-            "## РљР°РєРёРµ С„Р°Р№Р»С‹ Р±С‹Р»Рё РґРѕР±Р°РІР»РµРЅС‹ РёР»Рё РёР·РјРµРЅРµРЅС‹\n"
+            "# Отчёт: Task40 (Analysis of host syslog-log dataset files)\n\n"
+            "## Описание задачи\n"
+            "Переделан этап анализа `TRAIN/syslog.log` с генерацией RU/EN-документации и обновлением README индексов.\n\n"
+            "## Какие файлы были добавлены или изменены\n"
             "- `scripts/handlers/analyze_host_syslog_log_dataset_handler.py`\n"
             "- `manage.py`\n"
             "- `docs/ru/analysis-dataset/host/syslog.log.md`\n"
@@ -582,16 +582,16 @@ Two schemas are present: scenario documents (`container`, `exploit`, `time`) and
             "- `report/ru/stage-one/analysis-dataset/host/Task40(Analysis of host syslog-log dataset files)_report.md`\n"
             "- `report/en/stage-one/analysis-dataset/host/Task40(Analysis of host syslog-log dataset files)_report.md`\n"
             "- `temp_data/analysis-host-syslog-log-summary.json`\n\n"
-            "## РћРїРёСЃР°РЅРёРµ СЃС‚СЂСѓРєС‚СѓСЂС‹ JSON\n"
+            "## Описание структуры JSON\n"
             f"- json_document: `{schema['json_document']}`\n"
             f"- json_lines: `{schema['json_lines']}`\n"
             f"- unparsed: `{schema['unparsed']}`\n\n"
-            "## Р›РѕРіРёРєР° РіСЂСѓРїРїРёСЂРѕРІРєРё РїСѓС‚РµР№\n"
-            "1. Р—Р°РіСЂСѓР¶РµРЅ `sort-path-host-file.json`.\n"
-            "2. Р’С‹Р±СЂР°РЅ bucket `TRAIN -> syslog.log`.\n"
-            "3. РџСЂРёРјРµРЅРµРЅР° СЂР°РІРЅРѕРјРµСЂРЅР°СЏ РІС‹Р±РѕСЂРєР° С„Р°Р№Р»РѕРІ РїРѕ РІСЃРµРјСѓ РґРёР°РїР°Р·РѕРЅСѓ РёРјРµРЅ.\n"
-            "4. Р”Р»СЏ РєР°Р¶РґРѕРіРѕ sample-С„Р°Р№Р»Р° РІС‹РїРѕР»РЅРµРЅ Р°РЅР°Р»РёР· РєР°Рє `json document`, Р·Р°С‚РµРј fallback РІ `json-lines`.\n\n"
-            "## РџСЂРёРјРµСЂ РёС‚РѕРіРѕРІРѕРіРѕ JSON\n"
+            "## Логика группировки путей\n"
+            "1. Загружен `sort-path-host-file.json`.\n"
+            "2. Выбран bucket `TRAIN -> syslog.log`.\n"
+            "3. Применена равномерная выборка файлов по всему диапазону имен.\n"
+            "4. Для каждого sample-файла выполнен анализ как `json document`, затем fallback в `json-lines`.\n\n"
+            "## Пример итогового JSON\n"
             "```json\n"
             + json.dumps(
                 {

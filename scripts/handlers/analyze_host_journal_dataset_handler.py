@@ -561,19 +561,19 @@ The format matches a systemd journal-like binary container. Direct text parsing 
         journal_status = journal_summary["final_status"]
 
         return f"""
-# РђРЅР°Р»РёР· СЃРѕРґРµСЂР¶РёРјРѕРіРѕ С„Р°Р№Р»РѕРІ РґР°С‚Р°СЃРµС‚РѕРІ (Host)
+# Анализ содержимого файлов датасетов (Host)
 
-| Р¤РѕСЂРјР°С‚ | РљРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ | DNS | Host | РЎС‚Р°С‚СѓСЃ | Р”РѕРєСѓРјРµРЅС‚ |
+| Формат | Количество файлов | DNS | Host | Статус | Документ |
 |---|---:|---|---|---|---|
-| csv | {csv_count} | РЅРµС‚ | РґР° | {csv_status} | csv.md |
-| auth.log | {auth_count} | РЅРµС‚ | РґР° | {auth_status} | auth.log.md |
-| cpu.log | {cpu_count} | РЅРµС‚ | РґР° | {cpu_status} | cpu.log.md |
-| diskio.log | {diskio_count} | РЅРµС‚ | РґР° | {diskio_status} | diskio.log.md |
-| filesystem.log | {filesystem_count} | РЅРµС‚ | РґР° | {filesystem_status} | filesystem.log.md |
-| fsstat.log | {fsstat_count} | РЅРµС‚ | РґР° | {fsstat_status} | fsstat.log.md |
-| ghc | {ghc_count} | РЅРµС‚ | РґР° | {ghc_status} | ghc.md |
-| info | {info_count} | РЅРµС‚ | РґР° | {info_status} | info.md |
-| journal | {journal_count} | РЅРµС‚ | РґР° | {journal_status} | journal.md |
+| csv | {csv_count} | нет | да | {csv_status} | csv.md |
+| auth.log | {auth_count} | нет | да | {auth_status} | auth.log.md |
+| cpu.log | {cpu_count} | нет | да | {cpu_status} | cpu.log.md |
+| diskio.log | {diskio_count} | нет | да | {diskio_status} | diskio.log.md |
+| filesystem.log | {filesystem_count} | нет | да | {filesystem_status} | filesystem.log.md |
+| fsstat.log | {fsstat_count} | нет | да | {fsstat_status} | fsstat.log.md |
+| ghc | {ghc_count} | нет | да | {ghc_status} | ghc.md |
+| info | {info_count} | нет | да | {info_status} | info.md |
+| journal | {journal_count} | нет | да | {journal_status} | journal.md |
 """
 
     def _build_en_readme(self, journal_summary: dict[str, Any]) -> str:

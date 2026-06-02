@@ -10,8 +10,8 @@ Implemented `TRAIN/auth.log` content analysis using `temp_data/sort-path-host-fi
 - `docs/en/analysis-dataset/host/auth.log.md`
 - `docs/ru/analysis-dataset/host/README.md`
 - `docs/en/analysis-dataset/host/README.md`
-- `report/ru/stage-one/analysis-dataset/host/Task1(Analysis of host auth-log dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/host/Task1(Analysis of host auth-log dataset files)_report.md`
+- `report/ru/stage-one/analysis-dataset/host/Task2(Analysis of host auth-log dataset files)_report.md`
+- `report/en/stage-one/analysis-dataset/host/Task2(Analysis of host auth-log dataset files)_report.md`
 - `temp_data/analysis-host-auth-log-summary.json`
 
 ## Logic

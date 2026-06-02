@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from dataclasses import dataclass
@@ -702,16 +702,16 @@ Primary flow: `system.fsstat` records with fields:
         fsstat_status = fsstat_summary["final_status"]
 
         return f"""
-# РђРЅР°Р»РёР· СЃРѕРґРµСЂР¶РёРјРѕРіРѕ С„Р°Р№Р»РѕРІ РґР°С‚Р°СЃРµС‚РѕРІ (Host)
+# Анализ содержимого файлов датасетов (Host)
 
-| Р¤РѕСЂРјР°С‚ | РљРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ | DNS | Host | РЎС‚Р°С‚СѓСЃ | Р”РѕРєСѓРјРµРЅС‚ |
+| Формат | Количество файлов | DNS | Host | Статус | Документ |
 |---|---:|---|---|---|---|
-| csv | {csv_count} | РЅРµС‚ | РґР° | {csv_status} | csv.md |
-| auth.log | {auth_count} | РЅРµС‚ | РґР° | {auth_status} | auth.log.md |
-| cpu.log | {cpu_count} | РЅРµС‚ | РґР° | {cpu_status} | cpu.log.md |
-| diskio.log | {diskio_count} | РЅРµС‚ | РґР° | {diskio_status} | diskio.log.md |
-| filesystem.log | {filesystem_count} | РЅРµС‚ | РґР° | {filesystem_status} | filesystem.log.md |
-| fsstat.log | {fsstat_count} | РЅРµС‚ | РґР° | {fsstat_status} | fsstat.log.md |
+| csv | {csv_count} | нет | да | {csv_status} | csv.md |
+| auth.log | {auth_count} | нет | да | {auth_status} | auth.log.md |
+| cpu.log | {cpu_count} | нет | да | {cpu_status} | cpu.log.md |
+| diskio.log | {diskio_count} | нет | да | {diskio_status} | diskio.log.md |
+| filesystem.log | {filesystem_count} | нет | да | {filesystem_status} | filesystem.log.md |
+| fsstat.log | {fsstat_count} | нет | да | {fsstat_status} | fsstat.log.md |
 """
 
     def _build_en_readme(self, fsstat_summary: dict[str, Any]) -> str:
@@ -764,12 +764,12 @@ Primary flow: `system.fsstat` records with fields:
         json_structure_text = json.dumps(json_structure_sample, ensure_ascii=False, indent=2)
 
         return f"""
-# РћС‚С‡С‘С‚: Task6 (Analysis of host fsstat-log dataset files)
+# Отчёт: Task6 (Analysis of host fsstat-log dataset files)
 
-## РћРїРёСЃР°РЅРёРµ Р·Р°РґР°С‡Рё
-Р РµР°Р»РёР·РѕРІР°РЅ РѕС‚РґРµР»СЊРЅС‹Р№ СЌС‚Р°Рї Р°РЅР°Р»РёР·Р° С„РѕСЂРјР°С‚Р° `TRAIN/fsstat.log` РЅР° РѕСЃРЅРѕРІРµ `temp_data/sort-path-host-file.json` СЃ РіРµРЅРµСЂР°С†РёРµР№ РґРѕРєСѓРјРµРЅС‚Р°С†РёРё РЅР° RU/EN.
+## Описание задачи
+Реализован отдельный этап анализа формата `TRAIN/fsstat.log` на основе `temp_data/sort-path-host-file.json` с генерацией документации на RU/EN.
 
-## РљР°РєРёРµ С„Р°Р№Р»С‹ Р±С‹Р»Рё РґРѕР±Р°РІР»РµРЅС‹/РёР·РјРµРЅРµРЅС‹
+## Какие файлы были добавлены/изменены
 - `scripts/handlers/analyze_host_fsstat_log_dataset_handler.py`
 - `manage.py`
 - `docs/ru/analysis-dataset/host/fsstat.log.md`
@@ -780,28 +780,28 @@ Primary flow: `system.fsstat` records with fields:
 - `report/en/stage-one/analysis-dataset/host/Task6(Analysis of host fsstat-log dataset files)_report.md`
 - `temp_data/analysis-host-fsstat-log-summary.json`
 
-## РћРїРёСЃР°РЅРёРµ СЃС‚СЂСѓРєС‚СѓСЂС‹ JSON
+## Описание структуры JSON
 - top-level keys: {", ".join(top_keys.keys())}
 - dataset: `system.fsstat`
-- РІР»РѕР¶РµРЅРЅС‹Рµ РїРѕР»СЏ: `system.fsstat.count/total_files/total_size.used/total_size.free/total_size.total`.
+- вложенные поля: `system.fsstat.count/total_files/total_size.used/total_size.free/total_size.total`.
 
-## Р›РѕРіРёРєР° РіСЂСѓРїРїРёСЂРѕРІРєРё РїСѓС‚РµР№
-1. РЎС‡РёС‚С‹РІР°РµС‚СЃСЏ `sort-path-host-file.json`.
-2. Р’С‹Р±РёСЂР°РµС‚СЃСЏ bucket: `TRAIN -> fsstat.log`.
-3. РџР°СЂР°Р»Р»РµР»СЊРЅРѕ С‡РёС‚Р°РµС‚СЃСЏ `sort-path-dns-file.json` РґР»СЏ РІР°Р»РёРґР°С†РёРё РєРѕРЅС‚РµРєСЃС‚Р° DNS/Host Р±РµР· СЃРјРµС€РёРІР°РЅРёСЏ РґР°РЅРЅС‹С….
-4. Р”Р»СЏ Р°РЅР°Р»РёР·Р° Р±РµСЂС‘С‚СЃСЏ РѕРіСЂР°РЅРёС‡РµРЅРЅС‹Р№ sample С„Р°Р№Р»РѕРІ Рё СЃС‚СЂРѕРє.
+## Логика группировки путей
+1. Считывается `sort-path-host-file.json`.
+2. Выбирается bucket: `TRAIN -> fsstat.log`.
+3. Параллельно читается `sort-path-dns-file.json` для валидации контекста DNS/Host без смешивания данных.
+4. Для анализа берётся ограниченный sample файлов и строк.
 
-## РџСЂРёРјРµСЂ РёС‚РѕРіРѕРІРѕРіРѕ JSON
+## Пример итогового JSON
 ```json
 {json_structure_text}
 ```
 
-## Р РµР·СѓР»СЊС‚Р°С‚
-- Р’СЃРµРіРѕ С„Р°Р№Р»РѕРІ С„РѕСЂРјР°С‚Р°: `{total_files_count}`.
-- Sample-С„Р°Р№Р»РѕРІ РїСЂРѕР°РЅР°Р»РёР·РёСЂРѕРІР°РЅРѕ: `{sampled_files_count}`.
-- РС‚РѕРіРѕРІС‹Р№ СЃС‚Р°С‚СѓСЃ: `{status}`.
+## Результат
+- Всего файлов формата: `{total_files_count}`.
+- Sample-файлов проанализировано: `{sampled_files_count}`.
+- Итоговый статус: `{status}`.
 
-## РђСЂС‚РµС„Р°РєС‚С‹
+## Артефакты
 - Summary JSON: `{summary_json_path}`
 - RU doc: `{docs_ru_path}`
 - EN doc: `{docs_en_path}`
