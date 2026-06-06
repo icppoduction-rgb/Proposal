@@ -7,5 +7,5 @@
 | json | 7071 | no | yes | NEEDS_CUSTOM_PARSER | json.md |
 | log | 4086 | no | yes | READY_FOR_FEATURE_EXTRACTION | log.md |
 | netflow_day | 2 | no | yes | READY_FOR_FEATURE_EXTRACTION | netflow_day.md |
-| txt | 274419 | no | yes | not analyzed yet | - |
+| txt | 274419 | no | yes | READY_FOR_FEATURE_EXTRACTION | txt.md |
 | wls_day | 3 | no | yes | not analyzed yet | - |
