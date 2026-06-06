@@ -7,6 +7,6 @@
 | json | 130 | нет | да | READY_FOR_FEATURE_EXTRACTION | json.md |
 | netflow_day | 2 | нет | да | READY_FOR_FEATURE_EXTRACTION | netflow_day.md |
 | pcap | 1 | нет | да | NEEDS_CUSTOM_PARSER | pcap.md |
-| pcapng | 5 | нет | да | ещё не анализировалось | - |
+| pcapng | 5 | нет | да | NEEDS_CUSTOM_PARSER | pcapng.md |
 | txt | 6495 | нет | да | ещё не анализировалось | - |
 | wls_day | 3 | нет | да | ещё не анализировалось | - |
