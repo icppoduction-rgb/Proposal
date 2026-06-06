@@ -8,5 +8,5 @@
 | netflow_day | 2 | no | yes | READY_FOR_FEATURE_EXTRACTION | netflow_day.md |
 | pcap | 1 | no | yes | NEEDS_CUSTOM_PARSER | pcap.md |
 | pcapng | 5 | no | yes | NEEDS_CUSTOM_PARSER | pcapng.md |
-| txt | 6495 | no | yes | not analyzed yet | - |
+| txt | 6495 | no | yes | READY_FOR_FEATURE_EXTRACTION | txt.md |
 | wls_day | 3 | no | yes | not analyzed yet | - |
