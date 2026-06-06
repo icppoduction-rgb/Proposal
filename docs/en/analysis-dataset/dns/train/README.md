@@ -4,4 +4,4 @@
 |---|---:|---|---|---|---|
 | csv | 8 | yes | no | PARTIALLY_SUPPORTED | csv.md |
 | pcap | 4 | yes | no | NEEDS_CUSTOM_PARSER | pcap.md |
-| pcap.csv | 14 | yes | no | not analyzed yet | - |
+| pcap.csv | 14 | yes | no | READY_FOR_FEATURE_EXTRACTION | pcap.csv.md |
