@@ -4,7 +4,7 @@
 |---|---:|---|---|---|---|
 | bson | 9005 | no | yes | NEEDS_CUSTOM_PARSER | bson.md |
 | csv | 3 | no | yes | PARTIALLY_SUPPORTED | csv.md |
-| json | 7071 | no | yes | not analyzed yet | - |
+| json | 7071 | no | yes | NEEDS_CUSTOM_PARSER | json.md |
 | log | 4086 | no | yes | not analyzed yet | - |
 | netflow_day | 2 | no | yes | not analyzed yet | - |
 | txt | 274419 | no | yes | not analyzed yet | - |
