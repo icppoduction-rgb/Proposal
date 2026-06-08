@@ -1,0 +1,1012 @@
+ЭТАП 2. НОРМАЛИЗАЦИЯ ДАННЫХ ДЛЯ ОБУЧЕНИЯ И ТЕСТИРОВАНИЯ МОДЕЛИ
+
+1. Цель этапа
+
+Реализовать этап нормализации данных после анализа датасетов, выполненного на ЭТАПЕ 1.
+
+Основная цель этапа — привести разнородные DNS, Host, Network, Syscall, EventLog, NetFlow, PCAP, BSON, JSON, CSV, LOG, TXT и другие данные к единому управляемому представлению без потери исходной информации.
+
+На данном этапе необходимо:
+- сохранить исходные данные без изменений;
+- реализовать parser-ы для каждого поддерживаемого формата;
+- преобразовать данные в нормализованную событийную структуру;
+- сохранить нормализованные данные в Parquet;
+- использовать PostgreSQL как каталог метаданных и контроль pipeline;
+- использовать DuckDB для аналитических SQL-запросов по Parquet;
+- подготовить основу для feature engineering, sequence modelling, обучения, валидации и тестирования ML/DL моделей.
+
+Важно:
+Этап 2 не должен уничтожать, перезаписывать или упрощать исходные данные с потерей информации. Все raw-файлы должны оставаться неизменными, а нормализованные данные должны ссылаться на исходный файл, parser, версию схемы и роль датасета.
+
+
+# =======
+2. Основные задачи
+
+1. Зафиксировать архитектуру хранения данных:
+   - PostgreSQL — каталог, метаданные, статусы обработки, связи между слоями;
+   - Parquet — нормализованные события, признаки и model-ready таблицы;
+   - DuckDB — аналитический SQL-доступ к Parquet.
+
+2. Реализовать catalog ingestion:
+   - просканировать raw datasets;
+   - зарегистрировать все файлы в PostgreSQL;
+   - сохранить путь, размер, hash, формат, роль и ветку датасета;
+   - зафиксировать статус обработки каждого файла.
+
+3. Реализовать parser routing:
+   - определить parser по формату файла;
+   - использовать отдельные parser strategy для сложных форматов;
+   - фиксировать parser version;
+   - сохранять ошибки обработки без удаления исходных данных.
+
+4. Реализовать normalized event layer:
+   - привести данные разных форматов к единой normalized event schema;
+   - сохранить результат в Parquet;
+   - зарегистрировать Parquet-артефакты в PostgreSQL.
+
+5. Обеспечить сохранение данных без потерь:
+   - сохранять ссылки на raw_file_path;
+   - сохранять file_id и dataset_id;
+   - сохранять parser_name, parser_version и schema_version;
+   - сохранять raw_event_name;
+   - сохранять features_json или raw_fields_json для полей, которые не вошли в стандартные колонки;
+   - сохранять timestamp_source и label_source;
+   - фиксировать количество прочитанных, обработанных и ошибочных строк.
+
+6. Разделить данные по ролям:
+   - TRAIN;
+   - VALIDATION;
+   - TEST;
+   - EXPERIMENTS, если используется.
+
+7. Исключить data leakage:
+   - не смешивать TRAIN, VALIDATION и TEST;
+   - не использовать TEST для обучения scaler, encoder, feature selector или модели;
+   - не использовать статистику TEST для заполнения missing values;
+   - не использовать TEST для настройки threshold.
+
+8. Подготовить данные для feature engineering:
+   - DNS features;
+   - Host syscall/API features;
+   - Windows EventLog/Sysmon features;
+   - NetFlow/network features;
+   - Metricbeat/system metrics;
+   - hybrid host+network features;
+   - sequence windows для LSTM.
+
+9. Подготовить отчёты качества:
+   - parsing report;
+   - normalization report;
+   - data quality report;
+   - data leakage check report;
+   - schema mismatch report.
+
+
+# =======
+3. Общая логика этапа
+
+Этап нормализации должен выполняться после анализа датасетов.
+
+Общая схема:
+
+RAW DATASETS
+    ↓
+CATALOG INGESTION
+    ↓
+PARSER ROUTING
+    ↓
+NORMALIZED EVENTS
+    ↓
+PARQUET STORAGE
+    ↓
+FEATURE EXTRACTION
+    ↓
+MODEL-READY DATASETS
+    ↓
+TRAIN / VALIDATION / TEST
+
+Ключевая идея:
+Не нужно превращать все исходные файлы в один общий CSV, JSON или одну большую таблицу PostgreSQL.
+
+Правильный подход:
+- исходные файлы остаются в raw layer;
+- parser извлекает данные из каждого формата;
+- результат сохраняется в normalized event layer;
+- большие нормализованные данные хранятся в Parquet;
+- PostgreSQL хранит только каталог, метаданные, статусы, связи и ссылки на артефакты;
+- DuckDB используется для запросов и аналитики по Parquet.
+
+
+# =======
+4. Архитектурное решение по хранению данных
+
+4.1. PostgreSQL
+
+PostgreSQL используется как центральная база метаданных.
+
+В PostgreSQL нужно хранить:
+- список датасетов;
+- роли датасетов;
+- список исходных файлов;
+- формат каждого файла;
+- размер файла;
+- hash файла;
+- путь к raw-файлу;
+- статус обработки;
+- parser_name;
+- parser_version;
+- schema_version;
+- количество прочитанных строк/событий;
+- количество успешно обработанных строк/событий;
+- количество ошибок;
+- путь к normalized Parquet;
+- путь к feature Parquet;
+- путь к model-ready artifacts;
+- информацию о label_source;
+- информацию о timestamp_source;
+- отчёты об ошибках;
+- результаты data quality checks;
+- результаты model runs и метрики модели, если этап будет связан с экспериментами.
+
+PostgreSQL не должен использоваться для хранения:
+- всех raw PCAP packets;
+- всех BSON event streams в исходном виде;
+- всех syslog строк без нормализации;
+- всех широких feature matrix;
+- всех sequence windows;
+- больших промежуточных batch-таблиц.
+
+Назначение PostgreSQL:
+PostgreSQL должен быть не хранилищем всех больших данных, а управляющим каталогом проекта.
+
+
+# =======
+4.2. Parquet
+
+Parquet используется как основной формат хранения больших нормализованных данных.
+
+В Parquet нужно хранить:
+- normalized DNS events;
+- normalized host events;
+- normalized network events;
+- normalized syscall/API events;
+- parsed Windows EventLog/Sysmon events;
+- parsed NetFlow events;
+- parsed packet/flow summaries;
+- DNS feature tables;
+- host syscall feature tables;
+- host eventlog feature tables;
+- host metrics feature tables;
+- network flow feature tables;
+- hybrid feature tables;
+- model-ready tabular datasets.
+
+Преимущества Parquet:
+- колонночное хранение;
+- эффективное сжатие;
+- быстрое чтение отдельных колонок;
+- удобная интеграция с Python ML stack;
+- удобная работа с pandas, Polars, PyArrow, DuckDB, scikit-learn, PyTorch/TensorFlow;
+- подходит для больших датасетов;
+- снижает нагрузку на PostgreSQL.
+
+
+# =======
+4.3. DuckDB
+
+DuckDB используется как аналитический SQL-движок поверх Parquet.
+
+DuckDB нужен для:
+- SQL-запросов к Parquet без загрузки данных в PostgreSQL;
+- проверки качества данных;
+- агрегаций перед feature engineering;
+- анализа распределений;
+- проверки количества строк;
+- проверки TRAIN/VALIDATION/TEST split;
+- объединения нескольких Parquet-файлов;
+- построения промежуточных аналитических выборок.
+
+Пример использования:
+
+SELECT *
+FROM read_parquet('storage/normalized/dns/train/*.parquet')
+WHERE event_type = 'dns_query';
+
+SELECT dataset_role, source_format, COUNT(*)
+FROM read_parquet('storage/features/host/*.parquet')
+GROUP BY dataset_role, source_format;
+
+
+# =======
+5. Слои данных
+
+5.1. Raw layer
+
+Raw layer содержит исходные файлы датасетов.
+
+Правила raw layer:
+- исходные файлы не изменять;
+- не удалять строки;
+- не перезаписывать файлы;
+- не исправлять raw-файлы вручную;
+- не смешивать raw TRAIN, VALIDATION и TEST;
+- хранить hash файла для контроля неизменности;
+- в PostgreSQL хранить путь, размер, формат, роль и hash файла.
+
+Назначение raw layer:
+- обеспечить воспроизводимость;
+- сохранить возможность повторной нормализации;
+- сохранить доказательство, что данные не были изменены;
+- обеспечить traceability от model-ready данных к исходному файлу.
+
+
+# =======
+5.2. Catalog layer
+
+Catalog layer хранится в PostgreSQL.
+
+Назначение:
+- управлять всеми файлами и артефактами;
+- отслеживать статус обработки;
+- связывать raw, normalized, features и model-ready слои;
+- хранить parser/version/schema metadata;
+- хранить отчёты об ошибках и качестве.
+
+Основные сущности:
+- datasets;
+- dataset_files;
+- parser_runs;
+- normalized_artifacts;
+- feature_artifacts;
+- model_ready_artifacts;
+- data_quality_reports;
+- model_runs.
+
+
+# =======
+5.3. Normalized layer
+
+Normalized layer содержит данные, приведённые к единой событийной структуре.
+
+Формат хранения:
+- Parquet.
+
+Назначение:
+- унифицировать доступ к разным форматам;
+- подготовить данные для feature extraction;
+- сохранить исходный контекст события;
+- обеспечить анализ последовательностей;
+- обеспечить проверку качества данных.
+
+Важно:
+Если часть исходных полей не попадает в стандартные колонки normalized schema, их нужно сохранить в features_json, raw_fields_json или metadata_json, чтобы не потерять данные.
+
+
+# =======
+5.4. Feature layer
+
+Feature layer содержит признаки, извлечённые из normalized events.
+
+Примеры feature groups:
+- dns_features;
+- host_syscall_features;
+- host_eventlog_features;
+- host_metrics_features;
+- network_flow_features;
+- hybrid_features;
+- sequence_features.
+
+Формат хранения:
+- Parquet.
+
+Назначение:
+- подготовить данные для ML/DL моделей;
+- построить признаки для классификации;
+- построить признаки для sequence modelling;
+- подготовить данные для SHAP/explainability анализа.
+
+
+# =======
+5.5. Model-ready layer
+
+Model-ready layer содержит финальные данные для моделей.
+
+Примеры:
+- X_train.parquet;
+- y_train.parquet;
+- X_validation.parquet;
+- y_validation.parquet;
+- X_test.parquet;
+- y_test.parquet;
+- train_sequences.npz;
+- validation_sequences.npz;
+- test_sequences.npz.
+
+Правила:
+- model-ready данные должны быть разделены по TRAIN, VALIDATION и TEST;
+- scaler и encoder должны быть обучены только на TRAIN;
+- TEST должен использоваться только для финальной оценки;
+- sequence windows должны иметь связь с исходными normalized events.
+
+
+# =======
+6. Каноническая структура normalized_events
+
+Для нормализованных событий рекомендуется использовать следующую базовую структуру:
+
+- event_uid — уникальный идентификатор события;
+- dataset_id — ссылка на датасет в PostgreSQL;
+- file_id — ссылка на исходный файл в PostgreSQL;
+- dataset_name — название датасета;
+- dataset_role — TRAIN / VALIDATION / TEST / EXPERIMENTS;
+- branch — dns / host / network / hybrid;
+- source_format — csv / json / log / txt / pcap / pcapng / bson / netflow_day / wls_day / etc.;
+- parser_name — имя parser-а;
+- parser_version — версия parser-а;
+- schema_version — версия normalized schema;
+- timestamp — нормализованное время события;
+- timestamp_source — исходное поле времени;
+- timestamp_type — absolute / relative / event_order / missing;
+- event_index — порядковый номер события, если timestamp отсутствует;
+- entity_type — domain / host / ip / user / process / flow / packet / syscall / eventlog;
+- entity_id — основной идентификатор сущности;
+- event_type — тип события;
+- raw_event_name — исходное имя события;
+- modality — dns / syscall / eventlog / netflow / packet / metric / auth / process;
+- features_json — структурированные признаки события;
+- raw_fields_json — исходные поля, не вошедшие в стандартную схему;
+- label — benign / malicious / unknown / attack type;
+- label_source — column / filename / external_mapping / metadata / unknown;
+- raw_file_path — путь к исходному файлу;
+- normalized_path — путь к Parquet-файлу;
+- created_at — время создания normalized записи.
+
+Главное требование:
+Ни одно важное поле из исходного файла не должно теряться. Если поле нельзя привести к стандартной колонке, оно должно быть сохранено в raw_fields_json или features_json.
+
+
+# =======
+7. Рекомендуемые таблицы PostgreSQL
+
+7.1. datasets
+
+Назначение:
+Хранение информации о датасетах.
+
+Поля:
+- id;
+- name;
+- branch;
+- role;
+- source_group;
+- description;
+- is_active;
+- created_at.
+
+
+# =======
+7.2. dataset_files
+
+Назначение:
+Хранение информации об исходных файлах.
+
+Поля:
+- id;
+- dataset_id;
+- file_path;
+- file_name;
+- source_format;
+- file_size_bytes;
+- file_hash;
+- role;
+- branch;
+- status;
+- created_at.
+
+
+# =======
+7.3. parser_runs
+
+Назначение:
+Фиксация запусков parser-ов.
+
+Поля:
+- id;
+- file_id;
+- parser_name;
+- parser_version;
+- started_at;
+- finished_at;
+- status;
+- rows_read;
+- rows_parsed;
+- rows_failed;
+- error_message;
+- output_parquet_path.
+
+
+# =======
+7.4. normalized_artifacts
+
+Назначение:
+Связь raw-файлов с normalized Parquet.
+
+Поля:
+- id;
+- dataset_id;
+- file_id;
+- role;
+- branch;
+- source_format;
+- normalized_path;
+- schema_version;
+- row_count;
+- status;
+- created_at.
+
+
+# =======
+7.5. feature_artifacts
+
+Назначение:
+Хранение информации о feature tables.
+
+Поля:
+- id;
+- dataset_id;
+- role;
+- branch;
+- feature_group;
+- feature_path;
+- feature_schema_version;
+- row_count;
+- feature_count;
+- created_at.
+
+
+# =======
+7.6. model_ready_artifacts
+
+Назначение:
+Хранение информации о финальных данных для модели.
+
+Поля:
+- id;
+- role;
+- data_type;
+- artifact_path;
+- sample_count;
+- feature_count;
+- label_distribution;
+- scaler_version;
+- encoder_version;
+- created_at.
+
+
+# =======
+7.7. data_quality_reports
+
+Назначение:
+Хранение результатов проверок качества данных.
+
+Поля:
+- id;
+- artifact_id;
+- artifact_type;
+- rows_total;
+- rows_valid;
+- rows_failed;
+- missing_values_count;
+- duplicate_rows_count;
+- schema_mismatch_count;
+- label_distribution;
+- timestamp_coverage;
+- report_path;
+- created_at.
+
+
+# =======
+8. Нормализация по типам данных
+
+8.1. DNS datasets
+
+Цель:
+Привести DNS/domain/network данные к единой структуре для дальнейшего feature engineering.
+
+Нужно нормализовать:
+- domain;
+- query_domain;
+- qtype;
+- qclass;
+- TTL;
+- IP;
+- ASN;
+- entropy;
+- timestamp;
+- label;
+- source file;
+- dataset role.
+
+Потенциальные признаки:
+- длина домена;
+- длина поддомена;
+- количество labels;
+- TLD/SLD;
+- entropy;
+- TTL statistics;
+- query type distribution;
+- inter-query intervals;
+- domain frequency;
+- DNS tunneling indicators.
+
+Хранение:
+- storage/normalized/dns/{role}/
+- storage/features/dns/
+
+
+# =======
+8.2. Host syscall/API datasets
+
+Цель:
+Привести syscall/API события к последовательной структуре для feature engineering и sequence modelling.
+
+Нужно нормализовать:
+- process;
+- pid;
+- syscall/method name;
+- event index;
+- timestamp или relative time;
+- args;
+- direction;
+- user id;
+- process path;
+- label, если есть.
+
+Потенциальные признаки:
+- syscall frequencies;
+- syscall n-grams;
+- syscall transitions;
+- trace length;
+- process activity;
+- argument tokens;
+- sequence windows for LSTM.
+
+Хранение:
+- storage/normalized/host/{role}/syscall/
+- storage/features/host_syscall/
+- storage/model_ready/sequences/
+
+
+# =======
+8.3. Windows EventLog / Sysmon datasets
+
+Цель:
+Привести Windows/Sysmon/EventLog события к единой eventlog-схеме.
+
+Нужно нормализовать:
+- EventID;
+- Channel;
+- SourceName;
+- Hostname;
+- UserName;
+- ProcessName;
+- ParentProcessName;
+- CommandLine;
+- LogonType;
+- Source/Destination;
+- timestamp;
+- label или scenario context, если есть.
+
+Потенциальные признаки:
+- EventID frequencies;
+- logon success/failure ratio;
+- process creation patterns;
+- parent-child process chains;
+- command-line entropy;
+- authentication package distribution;
+- user-host interaction frequency.
+
+Хранение:
+- storage/normalized/host/{role}/eventlog/
+- storage/features/host_eventlog/
+
+
+# =======
+8.4. NetFlow / network datasets
+
+Цель:
+Привести network flow данные к единой flow-схеме.
+
+Нужно нормализовать:
+- src_host;
+- dst_host;
+- src_ip;
+- dst_ip;
+- protocol;
+- src_port;
+- dst_port;
+- packets;
+- bytes;
+- duration;
+- timestamp;
+- label, если есть.
+
+Потенциальные признаки:
+- flow duration;
+- packets/bytes ratio;
+- source/destination fan-in/fan-out;
+- protocol distribution;
+- port distribution;
+- burst features;
+- time-window network activity.
+
+Хранение:
+- storage/normalized/network/{role}/
+- storage/features/network_flow/
+
+
+# =======
+8.5. PCAP / PCAPNG / CAP datasets
+
+Цель:
+Извлечь packet-level, flow-level и DNS-level признаки без хранения всего payload в PostgreSQL.
+
+Нужно нормализовать:
+- packet timestamp;
+- src_ip;
+- dst_ip;
+- src_port;
+- dst_port;
+- protocol;
+- packet size;
+- TCP flags;
+- DNS query/response fields, если есть;
+- flow id;
+- label из filename/scenario/external metadata, если есть.
+
+Потенциальные признаки:
+- packet counts;
+- byte counts;
+- flow duration;
+- inter-arrival time;
+- DNS qname/qtype;
+- response size;
+- RCODE/NXDOMAIN distribution;
+- burst indicators.
+
+Хранение:
+- raw PCAP остаётся в raw layer;
+- parsed packet/flow summaries сохраняются в Parquet;
+- PostgreSQL хранит metadata и ссылки на output Parquet.
+
+
+# =======
+8.6. BSON / sandbox telemetry
+
+Цель:
+Привести BSON event streams к последовательной структуре host behaviour events.
+
+Нужно нормализовать:
+- descriptor id;
+- event id;
+- event name;
+- category;
+- process/thread context;
+- relative time;
+- args;
+- command line;
+- module path;
+- file artifacts;
+- label или malware family, если доступно из внешних метаданных.
+
+Потенциальные признаки:
+- API/syscall frequencies;
+- event n-grams;
+- event transitions;
+- command-line tokens;
+- module/path entropy;
+- process context;
+- trace length;
+- sandbox lifecycle events.
+
+Хранение:
+- storage/normalized/host/{role}/bson/
+- storage/features/host_syscall/
+- storage/model_ready/sequences/
+
+
+# =======
+8.7. Metricbeat/system logs
+
+Цель:
+Привести системные метрики host к единой metric-схеме.
+
+Нужно нормализовать:
+- host;
+- timestamp;
+- metric type;
+- CPU usage;
+- memory usage;
+- disk I/O;
+- filesystem usage;
+- network interface stats;
+- process summary;
+- service status.
+
+Потенциальные признаки:
+- rolling mean;
+- rolling max;
+- burst indicators;
+- baseline deviation;
+- CPU/memory/disk pressure;
+- service state changes;
+- correlation with auth/process/network events.
+
+Хранение:
+- storage/normalized/host/{role}/metrics/
+- storage/features/host_metrics/
+
+
+# =======
+8.8. Raw syslog/auth/mail logs
+
+Цель:
+Привести raw text logs и JSON-lines log wrappers к единой log event-схеме.
+
+Нужно нормализовать:
+- timestamp;
+- host;
+- process/source;
+- service;
+- log level, если есть;
+- message;
+- parsed action;
+- user;
+- source IP;
+- session state;
+- label, если доступен.
+
+Потенциальные признаки:
+- login/logout frequency;
+- failed authentication ratio;
+- session_opened/session_closed counts;
+- service event frequencies;
+- source IP anomalies;
+- time-window event counts.
+
+Хранение:
+- storage/normalized/host/{role}/logs/
+- storage/features/host_eventlog/
+
+
+# =======
+9. Контроль сохранения данных без потерь
+
+Чтобы исключить потерю данных, нужно соблюдать следующие правила:
+
+1. Raw-файлы не изменять.
+2. Для каждого файла вычислять hash до обработки.
+3. Каждому raw-файлу назначать file_id.
+4. Каждому normalized event назначать event_uid.
+5. В каждом normalized event хранить file_id.
+6. В каждом normalized event хранить raw_file_path.
+7. В каждом normalized event хранить source_format.
+8. В каждом normalized event хранить parser_name и parser_version.
+9. В каждом normalized event хранить schema_version.
+10. Все исходные поля, которые не вошли в основные колонки, сохранять в raw_fields_json.
+11. Все извлечённые признаки события сохранять в features_json.
+12. Для каждого parser run фиксировать rows_read, rows_parsed, rows_failed.
+13. Ошибочные строки сохранять в error report, а не терять молча.
+14. Для больших бинарных форматов хранить raw file reference и parsed summary.
+15. Для TEST данных не выполнять обучающие преобразования.
+16. Для каждого Parquet artifact хранить row_count.
+17. Для каждого этапа формировать report.
+18. Любая агрегация должна быть воспроизводимой через ссылку на source artifact.
+19. Если данные невозможно разобрать полностью, статус должен быть PARTIALLY_PARSED, а не SUCCESS.
+20. Нельзя удалять unknown поля без сохранения в raw_fields_json.
+
+
+# =======
+10. Data quality checks
+
+Для каждого parser-а и normalized artifact нужно проверять:
+
+- количество файлов;
+- количество прочитанных строк/событий;
+- количество успешно обработанных строк/событий;
+- количество ошибок;
+- количество пустых строк;
+- количество missing values;
+- количество duplicate rows;
+- schema mismatch count;
+- timestamp coverage;
+- label coverage;
+- label distribution;
+- наличие TRAIN/VALIDATION/TEST role;
+- наличие branch;
+- наличие source_format;
+- наличие file_id;
+- наличие raw_file_path;
+- наличие parser_version;
+- наличие schema_version;
+- output parquet path.
+
+Минимальные статусы обработки:
+- NEW;
+- PARSING;
+- PARSED;
+- PARTIALLY_PARSED;
+- FAILED;
+- SKIPPED;
+- NORMALIZED;
+- FEATURE_EXTRACTED;
+- MODEL_READY.
+
+
+# =======
+11. Предотвращение data leakage
+
+Критичные правила:
+
+1. TRAIN используется для обучения scaler, encoder, feature selector и модели.
+2. VALIDATION используется для настройки threshold, проверки false positives и выбора конфигурации.
+3. TEST используется только для финальной оценки.
+4. TEST нельзя использовать для fit scaler.
+5. TEST нельзя использовать для fit encoder.
+6. TEST нельзя использовать для feature selection.
+7. TEST нельзя использовать для настройки threshold.
+8. TEST нельзя использовать для заполнения missing values на основе общей статистики.
+9. Нельзя объединять TRAIN и TEST перед preprocessing fit.
+10. Нельзя смешивать DNS и Host данные без явного поля branch/modality.
+11. Нельзя менять role датасета после создания model-ready artifacts без пересборки pipeline.
+12. Все preprocessing objects должны сохраняться с версией.
+
+Правильный порядок:
+
+1. Load TRAIN features.
+2. Fit scaler/encoder on TRAIN only.
+3. Transform TRAIN.
+4. Transform VALIDATION using TRAIN-fitted objects.
+5. Transform TEST using TRAIN-fitted objects.
+6. Save preprocessing artifacts.
+7. Register artifacts in PostgreSQL.
+
+
+# =======
+12. Что не входит в этап 2
+
+На этапе нормализации не нужно:
+
+- обучать модель;
+- подбирать гиперпараметры;
+- проводить финальную оценку модели;
+- строить SHAP-отчёты;
+- выполнять окончательный feature selection;
+- объединять все данные в один общий CSV;
+- загружать все события в одну таблицу PostgreSQL;
+- изменять raw datasets;
+- удалять проблемные raw-файлы;
+- смешивать TRAIN, VALIDATION и TEST;
+- использовать TEST для обучения preprocessing;
+- сохранять полный packet payload в PostgreSQL;
+- вручную исправлять исходные файлы.
+
+
+# =======
+13. Ожидаемый результат этапа
+
+После выполнения второго этапа должны быть получены следующие результаты:
+
+1. PostgreSQL catalog:
+   - datasets;
+   - dataset_files;
+   - parser_runs;
+   - normalized_artifacts;
+   - feature_artifacts;
+   - model_ready_artifacts;
+   - data_quality_reports.
+
+2. Normalized Parquet:
+   - DNS normalized events;
+   - Host normalized events;
+   - Network normalized events;
+   - TRAIN / VALIDATION / TEST разделены физически и логически.
+
+3. Feature-ready foundation:
+   - данные подготовлены для DNS feature engineering;
+   - данные подготовлены для Host syscall/API feature engineering;
+   - данные подготовлены для EventLog/Sysmon feature engineering;
+   - данные подготовлены для NetFlow/network feature engineering;
+   - данные подготовлены для hybrid host+network features;
+   - данные подготовлены для sequence windows.
+
+4. Reports:
+   - parser report;
+   - normalization report;
+   - data quality report;
+   - schema mismatch report;
+   - data leakage check report.
+
+5. Traceability:
+   - каждое normalized event связано с исходным файлом;
+   - каждый feature artifact связан с normalized artifact;
+   - каждый model-ready artifact связан с feature artifact;
+   - все связи зафиксированы в PostgreSQL.
+
+6. Сохранение данных без потерь:
+   - raw-файлы не изменены;
+   - unknown поля сохранены в raw_fields_json;
+   - ошибки сохранены в reports;
+   - частично обработанные файлы имеют статус PARTIALLY_PARSED;
+   - все артефакты имеют row_count, parser_version и schema_version.
+
+
+# =======
+14. Документация этапа 2
+
+Результаты этапа должны быть задокументированы в директориях:
+
+- docs/ru/normalization/
+- docs/en/normalization/
+
+Рекомендуемые документы:
+
+1. docs/ru/normalization/README.md
+   - общее описание этапа нормализации.
+
+2. docs/ru/normalization/storage_architecture.md
+   - PostgreSQL + Parquet + DuckDB архитектура.
+
+3. docs/ru/normalization/normalized_event_schema.md
+   - каноническая структура normalized_events.
+
+4. docs/ru/normalization/postgresql_catalog_schema.md
+   - описание таблиц PostgreSQL.
+
+5. docs/ru/normalization/parser_strategy.md
+   - правила выбора parser-а по формату файла.
+
+6. docs/ru/normalization/data_quality_checks.md
+   - проверки качества данных.
+
+7. docs/ru/normalization/data_leakage_prevention.md
+   - правила предотвращения data leakage.
+
+8. docs/ru/normalization/output_artifacts.md
+   - описание выходных Parquet/NPZ/model-ready артефактов.
+
+Аналогичные документы нужно подготовить на английском языке в:
+
+- docs/en/normalization/
+
+
+# =======
+15. Итоговая суть этапа
+
+Этап 2 нужен для того, чтобы перейти от простого анализа и сортировки датасетов к управляемой подготовке данных для ML/DL pipeline.
+
+Итоговая логика этапа:
+
+- ЭТАП 1 отвечает на вопрос: какие файлы есть, какие форматы найдены, что внутри файлов и пригодны ли они к обработке.
+- ЭТАП 2 отвечает на вопрос: как безопасно, воспроизводимо и без потери данных привести эти файлы к единой нормализованной структуре.
+
+Главный результат ЭТАПА 2:
+должен появиться нормализованный слой данных, который сохраняет связь с исходными файлами, поддерживает TRAIN/VALIDATION/TEST разделение, хранится в Parquet, управляется через PostgreSQL и анализируется через DuckDB.
+
+Финальный вердикт:
+
+Для дипломного проекта используется архитектура:
+
+PostgreSQL + Parquet/DuckDB
+
+где:
+
+- PostgreSQL хранит метаданные, статусы, связи и контроль pipeline;
+- Parquet хранит большие нормализованные события и feature tables;
+- DuckDB обеспечивает SQL-доступ и аналитику по Parquet;
+- raw-файлы остаются неизменными;
+- данные не теряются, потому что все нестандартные поля сохраняются в raw_fields_json/features_json;
+- TRAIN, VALIDATION и TEST не смешиваются;
+- TEST не используется для обучения preprocessing и модели.
+
+Этап считается выполненным, если после него можно надежно перейти к feature engineering, sequence modelling, обучению моделей, тестированию и explainability analysis без повторного ручного анализа исходных файлов.
