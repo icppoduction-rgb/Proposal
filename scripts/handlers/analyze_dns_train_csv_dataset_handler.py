@@ -631,10 +631,13 @@ DNS TRAIN CSV is partially ready for feature extraction: domain-list and PhishTa
                 selected.append(field)
             if len(selected) >= 18:
                 break
-        return "\n".join(
-            f"| {field['field']} | {field['type']} | {purposes.get(field['field'], 'DNS/domain feature')} | {str(field['example']).replace('|', '\\|')} |"
-            for field in selected[:18]
-        )
+        rows = []
+        for field in selected[:18]:
+            example = str(field["example"]).replace("|", "\\|")
+            rows.append(
+                f"| {field['field']} | {field['type']} | {purposes.get(field['field'], 'DNS/domain feature')} | {example} |"
+            )
+        return "\n".join(rows)
 
     def _build_readme(self, summary: dict[str, Any], language: str) -> str:
         title = "# Анализ содержимого файлов датасетов" if language == "ru" else "# Dataset File Content Analysis"
