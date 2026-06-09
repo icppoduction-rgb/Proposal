@@ -384,19 +384,11 @@ alembic revision --autogenerate -m "create catalog schema"
 
 Затем вручную проверить migration.
 
-Альтернативный стартовый вариант:
-
-scripts/db/migrations/001_create_catalog_schema.sql
-
 Шаг 5. Применить migration
 
 Через Alembic:
 
 alembic upgrade head
-
-Или через psql, если используется SQL-файл:
-
-docker exec -i proposal-postgres psql -U proposal_user -d proposal_catalog < scripts/db/migrations/001_create_catalog_schema.sql
 
 Шаг 6. Реализовать repository layer
 
