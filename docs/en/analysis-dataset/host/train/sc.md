@@ -15,9 +15,9 @@ Mixed `sc` format in `TRAIN`: scenario JSON documents and JSON-lines telemetry (
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\sc\abundant_buck_7911.sc
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\sc\abundant_jang_1984.sc
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\sc\abundant_moser_1096.sc
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\sc\abundant_buck_7911.sc
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\sc\abundant_jang_1984.sc
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\sc\abundant_moser_1096.sc
 ```
 
 ## 4. Technical structure

@@ -15,9 +15,9 @@ Mixed `messages` format in `TRAIN`: scenario JSON documents and JSON-lines telem
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\messages\messages
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\messages\messages__0f8a1d8071
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\messages\messages__de412018b2
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\messages\messages
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\messages\messages__0f8a1d8071
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\messages\messages__de412018b2
 ```
 
 ## 4. Technical structure

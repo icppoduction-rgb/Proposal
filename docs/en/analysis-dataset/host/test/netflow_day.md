@@ -15,8 +15,8 @@
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\netflow_day\netflow_day-02
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\netflow_day\netflow_day-90
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\netflow_day\netflow_day-02
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\netflow_day\netflow_day-90
 ```
 
 ## 4. Technical Structure

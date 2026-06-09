@@ -15,9 +15,9 @@
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\ghc\S1-1-Full_1040-0.GHC
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\ghc\S1-1-Full_1040-1.GHC
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\ghc\S1-1-Full_1040-10.GHC
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\ghc\S1-1-Full_1040-0.GHC
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\ghc\S1-1-Full_1040-1.GHC
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\ghc\S1-1-Full_1040-10.GHC
 ```
 
 ## 4. Technical structure

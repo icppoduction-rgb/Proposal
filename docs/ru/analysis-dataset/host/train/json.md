@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\json\abundant_buck_7911.json
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\json\abundant_jang_1984.json
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\json\abundant_moser_1096.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\json\abundant_buck_7911.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\json\abundant_jang_1984.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\json\abundant_moser_1096.json
 ```
 
 ## 4. Техническая структура

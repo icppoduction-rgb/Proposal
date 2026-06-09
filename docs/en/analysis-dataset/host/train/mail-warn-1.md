@@ -15,8 +15,8 @@ Mixed `mail-warn-1` format in `TRAIN`: scenario JSON documents and JSON-lines te
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\mail-warn-1\mail.warn.1
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\mail-warn-1\mail.warn__3fed34c246.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\mail-warn-1\mail.warn.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\mail-warn-1\mail.warn__3fed34c246.1
 -
 ```
 

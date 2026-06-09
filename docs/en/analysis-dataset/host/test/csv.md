@@ -15,9 +15,9 @@ Host TEST CSV files contain packet/network metadata and separate CSV attack-labe
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_dataset.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels_sbseg.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_dataset.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels_sbseg.csv
 ```
 
 ## 4. Technical Structure

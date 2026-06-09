@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\socket.summary.log\2022-01-13-system.socket.summary.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\socket.summary.log\2022-01-13-system.socket.summary__ee3c7fe60e.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\socket.summary.log\2022-01-14-system.socket.summary.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\socket.summary.log\2022-01-13-system.socket.summary.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\socket.summary.log\2022-01-13-system.socket.summary__ee3c7fe60e.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\socket.summary.log\2022-01-14-system.socket.summary.log
 ```
 
 ## 4. Техническая структура

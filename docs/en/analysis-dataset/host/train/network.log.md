@@ -15,9 +15,9 @@ Mixed `network.log` format in `TRAIN`: scenario JSON documents and JSON-lines te
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\network.log\2022-01-13-system.network.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\network.log\2022-01-13-system.network__3342ea8eb0.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\network.log\2022-01-14-system.network.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\network.log\2022-01-13-system.network.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\network.log\2022-01-13-system.network__3342ea8eb0.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\network.log\2022-01-14-system.network.log
 ```
 
 ## 4. Technical structure

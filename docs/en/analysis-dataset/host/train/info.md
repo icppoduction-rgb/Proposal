@@ -15,9 +15,9 @@
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\info\mail.info
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\info\mail__b37332a09e.info
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\info\mail__f74e14508c.info
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\info\mail.info
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\info\mail__b37332a09e.info
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\info\mail__f74e14508c.info
 ```
 
 ## 4. Technical structure

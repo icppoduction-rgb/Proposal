@@ -15,9 +15,9 @@
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\wls_day\wls_day-01
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\wls_day\wls_day-57
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\wls_day\wls_day-85
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\wls_day\wls_day-01
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\wls_day\wls_day-57
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\wls_day\wls_day-85
 ```
 
 ## 4. Technical Structure

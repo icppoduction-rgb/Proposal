@@ -15,9 +15,9 @@ TXT-файлы DNS VALIDATION содержат доменные списки д�
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\benign_domains.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains__bdb83c6bf8.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\benign_domains.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains__bdb83c6bf8.txt
 ```
 
 ## 4. Техническая структура

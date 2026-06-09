@@ -15,9 +15,9 @@ Host VALIDATION CSV files contain scenario run metadata: image, scenario name, e
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\csv\runs.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\csv\runs__02fd419ec8.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\csv\runs__0f6fa8a7a1.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\csv\runs.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\csv\runs__02fd419ec8.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\csv\runs__0f6fa8a7a1.csv
 ```
 
 ## 4. Technical Structure

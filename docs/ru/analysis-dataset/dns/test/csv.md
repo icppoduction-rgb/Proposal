@@ -15,7 +15,7 @@ CSV-файл DNS TEST содержит крупную табличную выб�
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TEST\csv\dataset.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TEST\csv\dataset.csv
 ```
 
 ## 4. Техническая структура

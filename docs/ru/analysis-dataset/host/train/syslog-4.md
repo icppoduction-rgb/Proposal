@@ -15,7 +15,7 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-4\syslog.4
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-4\syslog.4
 -
 -
 ```

@@ -15,10 +15,10 @@ DNS TRAIN PCAP files contain packet capture traffic for benign, malware, phishin
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\benign.pcap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\malware.pcap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\phishing.pcap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\spam.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\benign.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\malware.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\phishing.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\spam.pcap
 ```
 
 ## 4. Technical Structure

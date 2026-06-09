@@ -15,7 +15,7 @@ The DNS TEST CSV file contains a large tabular sample of DNS/domain features for
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TEST\csv\dataset.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TEST\csv\dataset.csv
 ```
 
 ## 4. Technical Structure

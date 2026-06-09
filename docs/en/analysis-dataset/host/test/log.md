@@ -15,9 +15,9 @@ Host TEST log files contain Cuckoo/analyzer sandbox execution logs. The format i
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\log\analysis.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\log\analysis__13148e1b98.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\log\analysis__26c4060830.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\log\analysis.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\log\analysis__13148e1b98.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\log\analysis__26c4060830.log
 ```
 
 ## 4. Technical Structure

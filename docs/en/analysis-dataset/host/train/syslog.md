@@ -15,9 +15,9 @@ Mixed `syslog` format in `TRAIN`: scenario JSON documents and JSON-lines telemet
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog\syslog
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog\syslog__072490aa2f
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog\syslog__07c7f78139
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog\syslog
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog\syslog__072490aa2f
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog\syslog__07c7f78139
 ```
 
 ## 4. Technical structure

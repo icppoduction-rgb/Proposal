@@ -15,9 +15,9 @@
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\cap\covenant_copy_smb_CreateRequest_2020-09-22145302.cap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\cap\covenant_dcom_executeexcel4macro_allowed_2020-09-17174542.cap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\cap\covenant_dcom_iertutil_dll_hijack_WORKSTATION5_2020-10-09183000.cap
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\cap\covenant_copy_smb_CreateRequest_2020-09-22145302.cap
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\cap\covenant_dcom_executeexcel4macro_allowed_2020-09-17174542.cap
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\cap\covenant_dcom_iertutil_dll_hijack_WORKSTATION5_2020-10-09183000.cap
 ```
 
 ## 4. Technical Structure

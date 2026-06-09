@@ -15,9 +15,9 @@ Mixed `log-1` format in `TRAIN`: scenario JSON documents and JSON-lines telemetr
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\log-1\auth.log.1
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\log-1\auth.log__2c25d4bfe3.1
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\log-1\auth.log__5869f86552.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\log-1\auth.log.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\log-1\auth.log__2c25d4bfe3.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\log-1\auth.log__5869f86552.1
 ```
 
 ## 4. Technical structure

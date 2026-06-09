@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\uptime.log\2022-01-13-system.uptime.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\uptime.log\2022-01-13-system.uptime__bb8fbe0154.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\uptime.log\2022-01-14-system.uptime.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\uptime.log\2022-01-13-system.uptime.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\uptime.log\2022-01-13-system.uptime__bb8fbe0154.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\uptime.log\2022-01-14-system.uptime.log
 ```
 
 ## 4. Техническая структура

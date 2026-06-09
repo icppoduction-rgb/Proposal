@@ -15,9 +15,9 @@ Mixed `mainlog-2` format in `TRAIN`: scenario JSON documents and JSON-lines tele
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\mainlog-2\mainlog.2
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\mainlog-2\mainlog__240133fe49.2
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\mainlog-2\mainlog__cd47151943.2
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\mainlog-2\mainlog.2
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\mainlog-2\mainlog__240133fe49.2
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\mainlog-2\mainlog__cd47151943.2
 ```
 
 ## 4. Technical structure

@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\log-3\cloud.smith.santos.com-access.log.3
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\log-3\error.log.3
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\log-3\error.log__37add883a7.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\log-3\cloud.smith.santos.com-access.log.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\log-3\error.log.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\log-3\error.log__37add883a7.3
 ```
 
 ## 4. Техническая структура

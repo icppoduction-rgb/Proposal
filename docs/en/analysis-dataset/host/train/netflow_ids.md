@@ -15,9 +15,9 @@ Mixed `netflow_ids` format in `TRAIN`: scenario JSON documents and JSON-lines te
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri.netflow_ids
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri__dd3db04938.netflow_ids
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_mon.netflow_ids
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri.netflow_ids
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri__dd3db04938.netflow_ids
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_mon.netflow_ids
 ```
 
 ## 4. Technical structure

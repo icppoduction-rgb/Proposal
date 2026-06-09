@@ -15,7 +15,7 @@
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\pcap\pcap_log4shell_cve2021_44228_jndi_reference_2022-05-11181020.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\pcap\pcap_log4shell_cve2021_44228_jndi_reference_2022-05-11181020.pcap
 ```
 
 ## 4. Technical Structure

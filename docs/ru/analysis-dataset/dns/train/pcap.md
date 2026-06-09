@@ -15,10 +15,10 @@ PCAP-файлы DNS TRAIN содержат packet capture трафик для be
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\benign.pcap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\malware.pcap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\phishing.pcap
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\spam.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\benign.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\malware.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\phishing.pcap
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap\spam.pcap
 ```
 
 ## 4. Техническая структура

@@ -15,9 +15,9 @@ CSV-файлы Host TEST содержат packet/network metadata и отдел�
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_dataset.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels_sbseg.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_dataset.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\csv\attack_labels_sbseg.csv
 ```
 
 ## 4. Техническая структура

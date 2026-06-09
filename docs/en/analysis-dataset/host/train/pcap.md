@@ -15,9 +15,9 @@
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\pcap\log.pcap.1642084616
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\pcap\log.pcap.1642084634
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\pcap\log.pcap.1642084645
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\pcap\log.pcap.1642084616
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\pcap\log.pcap.1642084634
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\pcap\log.pcap.1642084645
 ```
 
 ## 4. Technical structure

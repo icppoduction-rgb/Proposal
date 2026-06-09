@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri.netflow_ids
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri__dd3db04938.netflow_ids
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_mon.netflow_ids
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri.netflow_ids
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_fri__dd3db04938.netflow_ids
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\netflow_ids\week1_mon.netflow_ids
 ```
 
 ## 4. Техническая структура

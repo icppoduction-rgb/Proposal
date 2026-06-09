@@ -15,9 +15,9 @@ BSON-файлы в Host TEST содержат бинарные трассы по
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\bson\1000.bson
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\bson\120__7c0ccef00c.bson
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\bson\1372__1d508ea03c.bson
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\bson\1000.bson
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\bson\120__7c0ccef00c.bson
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\bson\1372__1d508ea03c.bson
 ```
 
 ## 4. Техническая структура

@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\diskio.log\2022-01-13-system.diskio.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\diskio.log\2022-01-13-system.diskio__6ab638e312.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\diskio.log\2022-01-14-system.diskio.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\diskio.log\2022-01-13-system.diskio.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\diskio.log\2022-01-13-system.diskio__6ab638e312.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\diskio.log\2022-01-14-system.diskio.log
 ```
 
 ## 4. Техническая структура

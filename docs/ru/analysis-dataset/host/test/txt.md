@@ -15,9 +15,9 @@ TXT-файлы Host TEST содержат line-oriented трассы Windows NT 
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\txt\name.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\txt\NtSetEventBoostPriority__a1e94de9b9.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\txt\ZwAccessCheckByTypeAndAuditAlarm__45f5f1fa41.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\txt\name.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\txt\NtSetEventBoostPriority__a1e94de9b9.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\txt\ZwAccessCheckByTypeAndAuditAlarm__45f5f1fa41.txt
 ```
 
 ## 4. Техническая структура

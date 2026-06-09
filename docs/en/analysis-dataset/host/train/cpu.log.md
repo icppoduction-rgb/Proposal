@@ -15,9 +15,9 @@
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\cpu.log\2022-01-13-system.cpu.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\cpu.log\2022-01-13-system.cpu__e874294b43.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\cpu.log\2022-01-14-system.cpu.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\cpu.log\2022-01-13-system.cpu.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\cpu.log\2022-01-13-system.cpu__e874294b43.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\cpu.log\2022-01-14-system.cpu.log
 ```
 
 ## 4. Technical structure

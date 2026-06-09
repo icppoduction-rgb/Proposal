@@ -15,14 +15,14 @@ DNS TRAIN CSV files contain domain lists and tabular DNS/domain features for ben
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\benign_domains.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_benign.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_malware.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_phishing.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_spam.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\malware_domains.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\phishing_domains.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\spam_domains.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\benign_domains.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_benign.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_malware.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_phishing.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\CSV_spam.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\malware_domains.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\phishing_domains.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\csv\spam_domains.csv
 ```
 
 ## 4. Technical Structure

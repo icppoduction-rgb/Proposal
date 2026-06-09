@@ -15,7 +15,7 @@ Mixed `json-1` format in `TRAIN`: scenario JSON documents and JSON-lines telemet
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\json-1\eve.json.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\json-1\eve.json.1
 -
 -
 ```

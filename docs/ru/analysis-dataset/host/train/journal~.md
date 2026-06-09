@@ -15,7 +15,7 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\journal~\system@0005d5746689b192-0aaa58de307081cb.journal~
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\journal~\system@0005d5746689b192-0aaa58de307081cb.journal~
 -
 -
 ```

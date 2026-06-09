@@ -15,9 +15,9 @@ Host TEST JSON files contain several malware sandbox telemetry schemas: event tr
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\json\1808.json
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\json\files__1e940db677.json
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TEST\json\files__3c66d805a1.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\json\1808.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\json\files__1e940db677.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TEST\json\files__3c66d805a1.json
 ```
 
 ## 4. Technical Structure

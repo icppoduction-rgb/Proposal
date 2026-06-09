@@ -15,16 +15,16 @@ DNS TRAIN `pcap.csv` files contain tabular features already extracted from pcap 
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_audio.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_benign.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_compressed.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_exe.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_image.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_text.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_video.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateless_features-light_audio.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateless_features-light_benign.pcap.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateless_features-light_compressed.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_audio.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_benign.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_compressed.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_exe.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_image.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_text.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateful_features-light_video.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateless_features-light_audio.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateless_features-light_benign.pcap.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\TRAIN\pcap.csv\stateless_features-light_compressed.pcap.csv
 ```
 
 ## 4. Technical Structure

@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\txt\ADFA-LD+Syscall+List.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\txt\fox_alerts.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\txt\harrison_alerts.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\txt\ADFA-LD+Syscall+List.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\txt\fox_alerts.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\txt\harrison_alerts.txt
 ```
 
 ## 4. Техническая структура

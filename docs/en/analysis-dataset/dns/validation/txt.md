@@ -15,9 +15,9 @@ DNS VALIDATION TXT files contain domain lists for DNS/domain feature extraction,
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\benign_domains.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains__bdb83c6bf8.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\benign_domains.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\dns\VALIDATION\txt\domains__bdb83c6bf8.txt
 ```
 
 ## 4. Technical Structure

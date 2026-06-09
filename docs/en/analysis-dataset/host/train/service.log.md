@@ -15,9 +15,9 @@ Mixed `service.log` format in `TRAIN`: scenario JSON documents and JSON-lines te
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\service.log\2022-01-13-system.service.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\service.log\2022-01-13-system.service__ea8ef3f753.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\service.log\2022-01-14-system.service.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\service.log\2022-01-13-system.service.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\service.log\2022-01-13-system.service__ea8ef3f753.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\service.log\2022-01-14-system.service.log
 ```
 
 ## 4. Technical structure

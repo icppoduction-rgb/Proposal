@@ -15,9 +15,9 @@ CSV-файлы в Host TRAIN используются как основной и
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\csv\1.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\csv\10.csv
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\csv\11.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\csv\1.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\csv\10.csv
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\csv\11.csv
 ```
 
 ## 4. Техническая структура

@@ -15,9 +15,9 @@ Mixed `xml` format in `TRAIN`: scenario JSON documents and JSON-lines telemetry 
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\xml\S1-1.XML
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\xml\S1-10.XML
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\xml\S1-2.XML
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\xml\S1-1.XML
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\xml\S1-10.XML
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\xml\S1-2.XML
 ```
 
 ## 4. Technical structure

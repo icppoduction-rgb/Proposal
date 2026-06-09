@@ -15,9 +15,9 @@ JSON-файлы Host VALIDATION содержат Windows Security/Sysmon/Eventlo
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\json\aadinternals_export_adfsdatabaseconfig_remotely_2021-04-27040833.json
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\json\cmd_bitsadmin_download_psh_script_2020-10-2302365189.json
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\json\cmd_lsass_memory_dumpert_syscalls_2020-10-1822561997.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\json\aadinternals_export_adfsdatabaseconfig_remotely_2021-04-27040833.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\json\cmd_bitsadmin_download_psh_script_2020-10-2302365189.json
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\json\cmd_lsass_memory_dumpert_syscalls_2020-10-1822561997.json
 ```
 
 ## 4. Техническая структура

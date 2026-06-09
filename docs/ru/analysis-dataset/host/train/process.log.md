@@ -15,8 +15,8 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\process.log\2022-01-13-system.process.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\process.log\2022-01-13-system.process__1b19d2a0f4.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\process.log\2022-01-13-system.process.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\process.log\2022-01-13-system.process__1b19d2a0f4.log
 -
 ```
 

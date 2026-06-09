@@ -15,9 +15,9 @@
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\fsstat.log\2022-01-13-system.fsstat.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\fsstat.log\2022-01-13-system.fsstat__2a7b781935.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\fsstat.log\2022-01-14-system.fsstat.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\fsstat.log\2022-01-13-system.fsstat.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\fsstat.log\2022-01-13-system.fsstat__2a7b781935.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\fsstat.log\2022-01-14-system.fsstat.log
 ```
 
 ## 4. Technical structure

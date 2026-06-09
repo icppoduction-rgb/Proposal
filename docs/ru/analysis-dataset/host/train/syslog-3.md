@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog.3
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__08b69a348f.3
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__1ff252de29.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__08b69a348f.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__1ff252de29.3
 ```
 
 ## 4. Техническая структура

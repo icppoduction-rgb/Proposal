@@ -15,9 +15,9 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\messages-1\messages.1
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\messages-1\messages__4260d24d73.1
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\messages-1\messages__4e26791260.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\messages-1\messages.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\messages-1\messages__4260d24d73.1
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\messages-1\messages__4e26791260.1
 ```
 
 ## 4. Техническая структура

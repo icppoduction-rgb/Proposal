@@ -15,11 +15,11 @@
 
 ## 3. Примеры файлов
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\aadinternals_export_adfsdatabaseconfig_remotely_20210427020247.pcapng
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\empire_ninjacopy_dumping_ntds_dit_file.pcapng
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\pcap_log4shell_cve2021_44228_java_serialized_2022-05-13045800.pcapng
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\schtask_create_2020-12-1907003032.pcapng
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\schtask_modification_2020-12-1907505969.pcapng
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\aadinternals_export_adfsdatabaseconfig_remotely_20210427020247.pcapng
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\empire_ninjacopy_dumping_ntds_dit_file.pcapng
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\pcap_log4shell_cve2021_44228_java_serialized_2022-05-13045800.pcapng
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\schtask_create_2020-12-1907003032.pcapng
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\pcapng\schtask_modification_2020-12-1907505969.pcapng
 ```
 
 ## 4. Техническая структура

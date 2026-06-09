@@ -15,7 +15,7 @@ Mixed `syslog-4` format in `TRAIN`: scenario JSON documents and JSON-lines telem
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-4\syslog.4
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-4\syslog.4
 -
 -
 ```

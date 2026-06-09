@@ -15,9 +15,9 @@ Mixed `syslog-3` format in `TRAIN`: scenario JSON documents and JSON-lines telem
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog.3
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__08b69a348f.3
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__1ff252de29.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__08b69a348f.3
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\syslog-3\syslog__1ff252de29.3
 ```
 
 ## 4. Technical structure

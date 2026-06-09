@@ -15,9 +15,9 @@ Mixed `memory.log` format in `TRAIN`: scenario JSON documents and JSON-lines tel
 
 ## 3. Example files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\memory.log\2022-01-13-system.memory.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\memory.log\2022-01-13-system.memory__c01f1006f7.log
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\TRAIN\memory.log\2022-01-14-system.memory.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\memory.log\2022-01-13-system.memory.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\memory.log\2022-01-13-system.memory__c01f1006f7.log
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\TRAIN\memory.log\2022-01-14-system.memory.log
 ```
 
 ## 4. Technical structure

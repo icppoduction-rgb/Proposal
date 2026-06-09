@@ -15,11 +15,11 @@ Host VALIDATION TXT files contain line-oriented syscall traces in a sysdig-like 
 
 ## 3. Example Files
 ```text
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\abundant_bell_8827.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\attractive_northcutt_4737.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\blue_sammet_2668.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\chubby_mayer_3250.txt
-C:\Users\fmark\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\creamy_sinoussi_7198.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\abundant_bell_8827.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\attractive_northcutt_4737.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\blue_sammet_2668.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\chubby_mayer_3250.txt
+C:\Users\Public\PythonProjects\storages\datasets-filter\host\VALIDATION\txt\creamy_sinoussi_7198.txt
 ```
 
 ## 4. Technical Structure
