@@ -19,7 +19,7 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4:8
-    container_name: proposal_pgadmin
+    container_name: proposal-pgadmin
     restart: unless-stopped
     depends_on:
       postgres:
