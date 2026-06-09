@@ -1,37 +1,3 @@
-ОБЩАЯ СТРУКТУРА ХРАНЕНИЯ ЧЕРЕЗ PATH_DATA_STORAGE
-
-# ==========================
-${PATH_DATA_STORAGE}/
-├── postgres/
-├── pgadmin/
-├── parquet/
-│   ├── normalized/
-│   ├── features/
-│   └── model_ready/
-├── duckdb/
-├── reports/
-├── logs/
-├── backups/
-└── temp_data/
-# ==========================
-
-.env
-# ==========================
-PATH_DATA_STORAGE=C:\Users\Public\PythonProjects\storage
-
-POSTGRES_DB=proposal_catalog
-POSTGRES_USER=proposal_user
-POSTGRES_PASSWORD=proposal_password
-POSTGRES_PORT=5432
-
-PGADMIN_PORT=5050
-PGADMIN_DEFAULT_EMAIL=admin@example.com
-PGADMIN_DEFAULT_PASSWORD=admin
-# ==========================
-
-
-docker-compose.yml
-# ==========================
 services:
   postgres:
     image: postgres:16
@@ -80,4 +46,3 @@ volumes:
       type: none
       o: bind
       device: ${PATH_DATA_STORAGE}/pgadmin
-# ==========================
