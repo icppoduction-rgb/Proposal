@@ -81,17 +81,19 @@ class DNSTestCSVContentAnalysisHandler:
         self,
         temp_data_path: str | Path,
         project_root: str | Path,
+        report_path: str | Path | None = None,
         max_files_per_format: int = DEFAULT_MAX_FILES_PER_FORMAT,
         max_rows_per_file: int = DEFAULT_MAX_ROWS_PER_FILE,
     ) -> None:
         self.temp_data_path = Path(temp_data_path).expanduser()
         self.project_root = Path(project_root).expanduser()
+        self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_rows_per_file = max(1, max_rows_per_file)
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "test"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "test"
-        self.report_ru_dir = self.project_root / "report" / "ru" / "stage-one" / "analysis-dataset" / "dns" / "test"
-        self.report_en_dir = self.project_root / "report" / "en" / "stage-one" / "analysis-dataset" / "dns" / "test"
+        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "test"
+        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "test"
 
     def analyze_and_generate_docs(self) -> DNSTestCSVContentAnalysisResult:
         all_paths = self._extract_paths(self._read_source_json())
@@ -585,8 +587,8 @@ DNS TEST csv is suitable for downstream processing, but because it is headerless
 - `docs/en/analysis-dataset/dns/test/csv.md`
 - `docs/ru/analysis-dataset/dns/test/README.md`
 - `docs/en/analysis-dataset/dns/test/README.md`
-- `report/ru/stage-one/analysis-dataset/dns/test/Task1(Analysis of dns test csv dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/dns/test/Task1(Analysis of dns test csv dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/dns/test/Task1(Analysis of dns test csv dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/dns/test/Task1(Analysis of dns test csv dataset files)_report.md`
 
 ## {'Структура JSON' if ru else 'JSON Structure'}
 `{self.DNS_INPUT_JSON_FILE}`: `role -> format -> list[path]`; bucket: `TEST.csv`.

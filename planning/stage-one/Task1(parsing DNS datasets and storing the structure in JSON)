@@ -93,12 +93,12 @@ manage.py должен быть только точкой входа. Основ
 ---
 ## Отчёт о проделанной работе
 После реализации создай два Markdown-отчёта:
-report/ru/
-report/en/
+PATH_REPORT/ru/
+PATH_REPORT/en/
 Названия файлов должны соответствовать выполненной работе.
 Например:
-report/ru/dns_dataset_analysis_report.md
-report/en/dns_dataset_analysis_report.md
+PATH_REPORT/ru/dns_dataset_analysis_report.md
+PATH_REPORT/en/dns_dataset_analysis_report.md
 Отчёт должен содержать:
 - краткое описание выполненной задачи;
 - какие файлы были добавлены или изменены;

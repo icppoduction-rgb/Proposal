@@ -1,4 +1,4 @@
-﻿# Задача: анализ содержимого файлов PATH_HOST_DATASETS_FILTER\TEST\bson  датасетов
+# Задача: анализ содержимого файлов PATH_HOST_DATASETS_FILTER\TEST\bson  датасетов
 ## 1. Цель
 Реализовать этап анализа содержимого файлов  в PATH_HOST_DATASETS_FILTER\TEST\bson датасетов, и сохранить результат анализа в документацию.
 Этап нужен для подготовки данных к дальнейшей нормализации, feature engineering и приведению датасетов к единому формату признаков.
@@ -388,11 +388,11 @@ docs/en/analysis-dataset/host/test/README.md
 
 ## 13. Отчёт о проделанной работе
 После реализации создай отчёты:
-report/ru/
-report/en/
+PATH_REPORT/ru/
+PATH_REPORT/en/
 Например:
-report/ru/stage-one/analysis-dataset/host/test/Task44(Analysis of host test bson dataset files)_report.md
-report/en/stage-one/analysis-dataset/host/test/Task44(Analysis of host test bson dataset files)_report.md
+PATH_REPORT/ru/stage-one/analysis-dataset/host/test/Task44(Analysis of host test bson dataset files)_report.md
+PATH_REPORT/en/stage-one/analysis-dataset/host/test/Task44(Analysis of host test bson dataset files)_report.md
 Отчёт должен содержать:
 - описание задачи;
 - какие файлы были добавлены или изменены;

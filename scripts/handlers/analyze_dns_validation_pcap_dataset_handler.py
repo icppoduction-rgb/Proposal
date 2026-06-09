@@ -31,6 +31,7 @@ class DNSValidationPCAPContentAnalysisHandler(DNSTrainPCAPContentAnalysisHandler
         self,
         temp_data_path: str | Path,
         project_root: str | Path,
+        report_path: str | Path | None = None,
         max_files_per_format: int = DNSTrainPCAPContentAnalysisHandler.DEFAULT_MAX_FILES_PER_FORMAT,
         max_packets_per_file: int = DNSTrainPCAPContentAnalysisHandler.DEFAULT_MAX_PACKETS_PER_FILE,
         max_blocks_per_file: int = DNSTrainPCAPContentAnalysisHandler.DEFAULT_MAX_BLOCKS_PER_FILE,
@@ -44,8 +45,8 @@ class DNSValidationPCAPContentAnalysisHandler(DNSTrainPCAPContentAnalysisHandler
         )
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "validation"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "validation"
-        self.report_ru_dir = self.project_root / "report" / "ru" / "stage-one" / "analysis-dataset" / "dns" / "validation"
-        self.report_en_dir = self.project_root / "report" / "en" / "stage-one" / "analysis-dataset" / "dns" / "validation"
+        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "validation"
+        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "validation"
 
     def analyze_and_generate_docs(self) -> DNSValidationPCAPContentAnalysisResult:
         all_paths = self._extract_paths(self._read_source_json())
@@ -331,8 +332,8 @@ DNS VALIDATION pcap is useful for validating a DNS amplification detection pipel
 - `docs/en/analysis-dataset/dns/validation/pcap.md`
 - `docs/ru/analysis-dataset/dns/validation/README.md`
 - `docs/en/analysis-dataset/dns/validation/README.md`
-- `report/ru/stage-one/analysis-dataset/dns/validation/Task1(Analysis of dns validation pcap dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/dns/validation/Task1(Analysis of dns validation pcap dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/dns/validation/Task1(Analysis of dns validation pcap dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/dns/validation/Task1(Analysis of dns validation pcap dataset files)_report.md`
 
 ## {'Структура JSON' if ru else 'JSON Structure'}
 `{self.DNS_INPUT_JSON_FILE}`: `role -> format -> list[path]`; bucket: `VALIDATION.pcap`.

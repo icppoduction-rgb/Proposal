@@ -54,28 +54,32 @@ class DNSTrainPCAPContentAnalysisHandler:
         self,
         temp_data_path: str | Path,
         project_root: str | Path,
+        report_path: str | Path | None = None,
         max_files_per_format: int = DEFAULT_MAX_FILES_PER_FORMAT,
         max_packets_per_file: int = DEFAULT_MAX_PACKETS_PER_FILE,
         max_blocks_per_file: int = DEFAULT_MAX_BLOCKS_PER_FILE,
     ) -> None:
         self.temp_data_path = Path(temp_data_path).expanduser()
         self.project_root = Path(project_root).expanduser()
+        self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_packets_per_file = max(1, max_packets_per_file)
         self.max_blocks_per_file = max(1, max_blocks_per_file)
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "train"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "train"
-        self.report_ru_dir = self.project_root / "report" / "ru" / "stage-one" / "analysis-dataset" / "dns" / "train"
-        self.report_en_dir = self.project_root / "report" / "en" / "stage-one" / "analysis-dataset" / "dns" / "train"
+        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "train"
+        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "train"
         self._classic_probe = HostValidationCAPContentAnalysisHandler(
             temp_data_path=temp_data_path,
             project_root=project_root,
+            report_path=report_path,
             max_files_per_format=max_files_per_format,
             max_packets_per_file=max_packets_per_file,
         )
         self._pcapng_probe = HostValidationPCAPNGContentAnalysisHandler(
             temp_data_path=temp_data_path,
             project_root=project_root,
+            report_path=report_path,
             max_files_per_format=max_files_per_format,
             max_blocks_per_file=max_blocks_per_file,
             max_packets_per_file=max_packets_per_file,
@@ -489,8 +493,8 @@ DNS TRAIN pcap is useful for network/DNS feature extraction, but the production 
 - `docs/en/analysis-dataset/dns/train/pcap.md`
 - `docs/ru/analysis-dataset/dns/train/README.md`
 - `docs/en/analysis-dataset/dns/train/README.md`
-- `report/ru/stage-one/analysis-dataset/dns/train/Task2(Analysis of dns train pcap dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/dns/train/Task2(Analysis of dns train pcap dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/dns/train/Task2(Analysis of dns train pcap dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/dns/train/Task2(Analysis of dns train pcap dataset files)_report.md`
 
 ## {'Структура JSON' if ru else 'JSON Structure'}
 `{self.DNS_INPUT_JSON_FILE}`: `role -> format -> list[path]`; bucket: `TRAIN.pcap`.

@@ -31,13 +31,19 @@ class DNSTestPCAPContentAnalysisHandler:
 
     STATUS_BROKEN = "BROKEN_OR_EMPTY"
 
-    def __init__(self, temp_data_path: str | Path, project_root: str | Path) -> None:
+    def __init__(
+        self,
+        temp_data_path: str | Path,
+        project_root: str | Path,
+        report_path: str | Path | None = None,
+    ) -> None:
         self.temp_data_path = Path(temp_data_path).expanduser()
         self.project_root = Path(project_root).expanduser()
+        self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "test"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "test"
-        self.report_ru_dir = self.project_root / "report" / "ru" / "stage-one" / "analysis-dataset" / "dns" / "test"
-        self.report_en_dir = self.project_root / "report" / "en" / "stage-one" / "analysis-dataset" / "dns" / "test"
+        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "test"
+        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "test"
 
     def analyze_and_generate_docs(self) -> DNSTestPCAPContentAnalysisResult:
         payload = self._read_source_json()
@@ -345,8 +351,8 @@ DNS TEST pcap cannot be analyzed at this stage because the prepared JSON has no 
 - `docs/en/analysis-dataset/dns/test/pcap.md`
 - `docs/ru/analysis-dataset/dns/test/README.md`
 - `docs/en/analysis-dataset/dns/test/README.md`
-- `report/ru/stage-one/analysis-dataset/dns/test/Task2(Analysis of dns test pcap dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/dns/test/Task2(Analysis of dns test pcap dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/dns/test/Task2(Analysis of dns test pcap dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/dns/test/Task2(Analysis of dns test pcap dataset files)_report.md`
 
 ## {'Структура JSON' if ru else 'JSON Structure'}
 `{self.DNS_INPUT_JSON_FILE}`: `role -> format -> list[path]`; expected bucket: `TEST.pcap`.

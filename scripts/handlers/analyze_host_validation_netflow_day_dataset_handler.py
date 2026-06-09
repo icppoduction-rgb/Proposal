@@ -32,6 +32,7 @@ class HostValidationNetflowDayContentAnalysisHandler(HostTestNetflowDayContentAn
         self,
         temp_data_path: str | Path,
         project_root: str | Path,
+        report_path: str | Path | None = None,
         max_files_per_format: int = HostTestNetflowDayContentAnalysisHandler.DEFAULT_MAX_FILES_PER_FORMAT,
         max_lines_per_file: int = HostTestNetflowDayContentAnalysisHandler.DEFAULT_MAX_LINES_PER_FILE,
     ) -> None:
@@ -39,10 +40,10 @@ class HostValidationNetflowDayContentAnalysisHandler(HostTestNetflowDayContentAn
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "host" / "validation"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "host" / "validation"
         self.report_ru_dir = (
-            self.project_root / "report" / "ru" / "stage-one" / "analysis-dataset" / "host" / "validation"
+            self.report_path / "ru" / "stage-one" / "analysis-dataset" / "host" / "validation"
         )
         self.report_en_dir = (
-            self.project_root / "report" / "en" / "stage-one" / "analysis-dataset" / "host" / "validation"
+            self.report_path / "en" / "stage-one" / "analysis-dataset" / "host" / "validation"
         )
 
     def analyze_and_generate_docs(self) -> HostValidationNetflowDayContentAnalysisResult:
@@ -153,8 +154,8 @@ class HostValidationNetflowDayContentAnalysisHandler(HostTestNetflowDayContentAn
 - `docs/en/analysis-dataset/host/validation/netflow_day.md`
 - `docs/ru/analysis-dataset/host/validation/README.md`
 - `docs/en/analysis-dataset/host/validation/README.md`
-- `report/ru/stage-one/analysis-dataset/host/validation/Task4(Analysis of host validation netflow_day dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/host/validation/Task4(Analysis of host validation netflow_day dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/host/validation/Task4(Analysis of host validation netflow_day dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/host/validation/Task4(Analysis of host validation netflow_day dataset files)_report.md`
 
 ## {'Структура JSON' if ru else 'JSON Structure'}
 `{self.HOST_INPUT_JSON_FILE}`: `role -> format -> list[path]`; bucket: `VALIDATION.netflow_day`.

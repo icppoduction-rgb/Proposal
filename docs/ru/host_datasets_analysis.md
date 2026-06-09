@@ -485,7 +485,7 @@ TEST:
 
 - быстрых экспериментов;
 - проверки log anomaly методов;
-- feature engineering РЅР° structured log sequences;
+- feature engineering на structured log sequences;
 - сравнения anomaly detection подходов.
 
 > **Ограничение:** Это не security-focused dataset. Он полезен для проверки log anomaly методов, но не должен быть основным источником для host intrusion detection.

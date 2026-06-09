@@ -92,17 +92,19 @@ class DNSTrainPCAPCSVContentAnalysisHandler:
         self,
         temp_data_path: str | Path,
         project_root: str | Path,
+        report_path: str | Path | None = None,
         max_files_per_format: int = DEFAULT_MAX_FILES_PER_FORMAT,
         max_rows_per_file: int = DEFAULT_MAX_ROWS_PER_FILE,
     ) -> None:
         self.temp_data_path = Path(temp_data_path).expanduser()
         self.project_root = Path(project_root).expanduser()
+        self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_rows_per_file = max(1, max_rows_per_file)
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "train"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "train"
-        self.report_ru_dir = self.project_root / "report" / "ru" / "stage-one" / "analysis-dataset" / "dns" / "train"
-        self.report_en_dir = self.project_root / "report" / "en" / "stage-one" / "analysis-dataset" / "dns" / "train"
+        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "train"
+        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "train"
 
     def analyze_and_generate_docs(self) -> DNSTrainPCAPCSVContentAnalysisResult:
         all_paths = self._extract_paths(self._read_source_json())
@@ -651,8 +653,8 @@ DNS TRAIN `pcap.csv` is ready for feature extraction: CSV structure is stable, h
 - `docs/en/analysis-dataset/dns/train/pcap.csv.md`
 - `docs/ru/analysis-dataset/dns/train/README.md`
 - `docs/en/analysis-dataset/dns/train/README.md`
-- `report/ru/stage-one/analysis-dataset/dns/train/Task3(Analysis of dns train pcap.csv dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/dns/train/Task3(Analysis of dns train pcap.csv dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/dns/train/Task3(Analysis of dns train pcap.csv dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/dns/train/Task3(Analysis of dns train pcap.csv dataset files)_report.md`
 
 ## {'Структура JSON' if ru else 'JSON Structure'}
 `{self.DNS_INPUT_JSON_FILE}`: `role -> format -> list[path]`; bucket: `TRAIN.pcap.csv`.

@@ -85,11 +85,11 @@ manage.py должен быть только точкой входа.
 ---
 ## Отчёт о проделанной работе
 После реализации создай отчёты:
-report/ru/
-report/en/
+PATH_REPORT/ru/
+PATH_REPORT/en/
 Например:
-report/ru/dns_dataset_sort_report.md
-report/en/dns_dataset_sort_report.md
+PATH_REPORT/ru/dns_dataset_sort_report.md
+PATH_REPORT/en/dns_dataset_sort_report.md
 Отчёт должен содержать:
 - описание задачи;
 - какие файлы были добавлены;

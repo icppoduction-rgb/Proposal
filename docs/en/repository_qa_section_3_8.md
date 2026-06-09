@@ -133,4 +133,4 @@ No pinned versions and no ML libraries listed.
 **Q:** Current processed volume from repository artifacts?  
 **A:**
 - DNS sorted/exported files: 35 (`temp_data/sort-path-dns-file-summary.json`)
-- Host filtered kept file paths: 361,646 (`report/en/stage-one/Task3...` and `temp_data/sort-path-host-file-summary.json`)
+- Host filtered kept file paths: 361,646 (`PATH_REPORT/en/stage-one/Task3...` and `temp_data/sort-path-host-file-summary.json`)

@@ -58,18 +58,20 @@ class HostInfoContentAnalysisHandler:
         self,
         temp_data_path: str | Path,
         project_root: str | Path,
+        report_path: str | Path | None = None,
         max_files_per_format: int = DEFAULT_MAX_FILES_PER_FORMAT,
         max_lines_per_file: int = DEFAULT_MAX_LINES_PER_FILE,
     ) -> None:
         self.temp_data_path = Path(temp_data_path).expanduser()
         self.project_root = Path(project_root).expanduser()
+        self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_lines_per_file = max(100, max_lines_per_file)
 
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "host"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "host"
-        self.report_ru_dir = self.project_root / "report" / "ru" / "stage-one" / "analysis-dataset" / "host"
-        self.report_en_dir = self.project_root / "report" / "en" / "stage-one" / "analysis-dataset" / "host"
+        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "host"
+        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "host"
 
     def analyze_and_generate_docs(self) -> HostInfoContentAnalysisResult:
         """Runs info analysis and writes docs/report files."""
@@ -813,8 +815,8 @@ Example process sources:
 - `docs/en/analysis-dataset/host/info.md`
 - `docs/ru/analysis-dataset/host/README.md`
 - `docs/en/analysis-dataset/host/README.md`
-- `report/ru/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
 - `temp_data/analysis-host-info-summary.json`
 
 ## Логика
@@ -861,8 +863,8 @@ Implemented `TRAIN/info` content analysis using `temp_data/sort-path-host-file.j
 - `docs/en/analysis-dataset/host/info.md`
 - `docs/ru/analysis-dataset/host/README.md`
 - `docs/en/analysis-dataset/host/README.md`
-- `report/ru/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/host/Task8(Analysis of host info dataset files)_report.md`
 - `temp_data/analysis-host-info-summary.json`
 
 ## Logic

@@ -137,8 +137,8 @@ class HostValidationPCAPContentAnalysisHandler(HostValidationCAPContentAnalysisH
 - `docs/en/analysis-dataset/host/validation/pcap.md`
 - `docs/ru/analysis-dataset/host/validation/README.md`
 - `docs/en/analysis-dataset/host/validation/README.md`
-- `report/ru/stage-one/analysis-dataset/host/validation/Task5(Analysis of host validation pcap dataset files)_report.md`
-- `report/en/stage-one/analysis-dataset/host/validation/Task5(Analysis of host validation pcap dataset files)_report.md`
+- `PATH_REPORT/ru/stage-one/analysis-dataset/host/validation/Task5(Analysis of host validation pcap dataset files)_report.md`
+- `PATH_REPORT/en/stage-one/analysis-dataset/host/validation/Task5(Analysis of host validation pcap dataset files)_report.md`
 
 ## {'Структура JSON' if ru else 'JSON Structure'}
 `{self.HOST_INPUT_JSON_FILE}`: `role -> format -> list[path]`; bucket: `VALIDATION.pcap`.

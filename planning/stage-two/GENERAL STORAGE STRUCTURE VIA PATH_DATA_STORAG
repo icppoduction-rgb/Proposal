@@ -15,9 +15,7 @@ ${PATH_DATA_STORAGE}/
 └── temp_data/
 # ==========================
 
-
 .env
-
 # ==========================
 PATH_DATA_STORAGE=C:\Users\Public\PythonProjects\storage
 
@@ -33,7 +31,6 @@ PGADMIN_DEFAULT_PASSWORD=admin
 
 
 docker-compose.yml
-
 # ==========================
 services:
   postgres:

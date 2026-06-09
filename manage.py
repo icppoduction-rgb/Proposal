@@ -1,4 +1,6 @@
-ï»¿import os
+# -*- coding: cp1251 -*-
+
+import os
 import argparse
 
 from pathlib import Path
@@ -9,7 +11,7 @@ try:
     from rich.console import Console
 except ModuleNotFoundError:
     class Console:  # type: ignore[override]
-        """Fallback-ÐºÐ¾Ð½ÑÐ¾Ð»ÑŒ, ÐµÑÐ»Ð¸ Ð¿Ð°ÐºÐµÑ‚ rich Ð½Ðµ ÑƒÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½."""
+        """Fallback-êîíñîëü, åñëè ïàêåò rich íå óñòàíîâëåí."""
 
         @staticmethod
         def print(message: str) -> None:
@@ -218,13 +220,17 @@ load_dotenv()
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parent
 
-# ---------------------- Variables for working with data sets ---------------------- #
+# ---------------------- PATHS FOLDERS ---------------------- #
+
+PATH_DATA_STORAGE: str = os.getenv("PATH_DATA_STORAGE", "")
+
+PATH_REPORT: str = f"{PATH_DATA_STORAGE}/reports"
 
 PATH_FOLDER_DATASETS: str = os.getenv("PATH_FOLDER_DATASETS", "")
 
 PATH_FOLDER_DATASETS_FILTER: str = os.getenv('PATH_FOLDER_DATASETS_FILTER', "")
 
-PATH_TEMP_DATA: str = os.getenv("PATH_TEMP_DATA", fr"{PROJECT_ROOT}\temp_data")
+PATH_TEMP_DATA: str = f"{PATH_DATA_STORAGE}/temp_data"
 
 PATH_HOST_DATASETS: str = os.getenv(
     "PATH_HOST_DATASETS",
@@ -255,16 +261,16 @@ parser.add_argument("service", nargs="?")
 parser.add_argument("action", nargs="?")
 
 
-# Ð¤ÑƒÐ½ÐºÑ†Ð¸Ñ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ
+# Ôóíêöèÿ óïðàâëåíèÿ
 def manage() -> None:
     """
-    Ð£Ð¿Ñ€Ð°Ð²Ð»ÑÐµÑ‚ Ð·Ð°Ð¿ÑƒÑÐºÐ¾Ð¼ ÑÐºÑ€Ð¸Ð¿Ñ‚Ð¾Ð² Ð¿Ñ€Ð¾ÐµÐºÑ‚Ð° Ñ‡ÐµÑ€ÐµÐ· Ð°Ñ€Ð³ÑƒÐ¼ÐµÐ½Ñ‚Ñ‹ ÐºÐ¾Ð¼Ð°Ð½Ð´Ð½Ð¾Ð¹ ÑÑ‚Ñ€Ð¾ÐºÐ¸.
+    Óïðàâëÿåò çàïóñêîì ñêðèïòîâ ïðîåêòà ÷åðåç àðãóìåíòû êîìàíäíîé ñòðîêè.
     """
 
     args, _unknown = parser.parse_known_args()
 
     match (args.module, args.service, args.action):
-        # Ð¿Ñ€Ð¸Ð¼ÐµÑ€
+        # ïðèìåð
         case ("handler", "example", "work_example"):
             pass
 
@@ -343,6 +349,7 @@ def manage() -> None:
             handler = HostCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -363,6 +370,7 @@ def manage() -> None:
             handler = HostAuthLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -383,6 +391,7 @@ def manage() -> None:
             handler = HostCPULogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -403,6 +412,7 @@ def manage() -> None:
             handler = HostDiskioLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -423,6 +433,7 @@ def manage() -> None:
             handler = HostFilesystemLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -443,6 +454,7 @@ def manage() -> None:
             handler = HostFSStatLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -463,6 +475,7 @@ def manage() -> None:
             handler = HostGHCContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -483,6 +496,7 @@ def manage() -> None:
             handler = HostInfoContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -503,6 +517,7 @@ def manage() -> None:
             handler = HostJournalContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -523,6 +538,7 @@ def manage() -> None:
             handler = HostJournalTildeContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -543,6 +559,7 @@ def manage() -> None:
             handler = HostJSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -563,6 +580,7 @@ def manage() -> None:
             handler = HostJSON1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -583,6 +601,7 @@ def manage() -> None:
             handler = HostLoadLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -603,6 +622,7 @@ def manage() -> None:
             handler = HostLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -623,6 +643,7 @@ def manage() -> None:
             handler = HostLog1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -643,6 +664,7 @@ def manage() -> None:
             handler = HostLog2ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -663,6 +685,7 @@ def manage() -> None:
             handler = HostLog3ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -683,6 +706,7 @@ def manage() -> None:
             handler = HostMailInfo1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -703,6 +727,7 @@ def manage() -> None:
             handler = HostMailWarn1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -723,6 +748,7 @@ def manage() -> None:
             handler = HostMainlogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -743,6 +769,7 @@ def manage() -> None:
             handler = HostMainlog1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -763,6 +790,7 @@ def manage() -> None:
             handler = HostMainlog2ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -783,6 +811,7 @@ def manage() -> None:
             handler = HostMainlog3ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -803,6 +832,7 @@ def manage() -> None:
             handler = HostMemoryLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -823,6 +853,7 @@ def manage() -> None:
             handler = HostMessagesContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -843,6 +874,7 @@ def manage() -> None:
             handler = HostMessages1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -863,6 +895,7 @@ def manage() -> None:
             handler = HostNetflowIdsContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -883,6 +916,7 @@ def manage() -> None:
             handler = HostNetworkLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -903,6 +937,7 @@ def manage() -> None:
             handler = HostPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -923,6 +958,7 @@ def manage() -> None:
             handler = HostProcessLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -943,6 +979,7 @@ def manage() -> None:
             handler = HostProcessSummaryLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -963,6 +1000,7 @@ def manage() -> None:
             handler = HostSCContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -983,6 +1021,7 @@ def manage() -> None:
             handler = HostServiceLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1003,6 +1042,7 @@ def manage() -> None:
             handler = HostSocketSummaryLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1023,6 +1063,7 @@ def manage() -> None:
             handler = HostSyslogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1043,6 +1084,7 @@ def manage() -> None:
             handler = HostSyslog1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1063,6 +1105,7 @@ def manage() -> None:
             handler = HostSyslog2ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1083,6 +1126,7 @@ def manage() -> None:
             handler = HostSyslog3ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1103,6 +1147,7 @@ def manage() -> None:
             handler = HostSyslog4ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1123,6 +1168,7 @@ def manage() -> None:
             handler = HostSyslogLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1143,6 +1189,7 @@ def manage() -> None:
             handler = HostTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1163,6 +1210,7 @@ def manage() -> None:
             handler = HostTestBSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1183,6 +1231,7 @@ def manage() -> None:
             handler = HostTestCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1203,6 +1252,7 @@ def manage() -> None:
             handler = HostTestJSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1223,6 +1273,7 @@ def manage() -> None:
             handler = HostTestLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1243,6 +1294,7 @@ def manage() -> None:
             handler = HostTestNetflowDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1263,6 +1315,7 @@ def manage() -> None:
             handler = HostTestTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1283,6 +1336,7 @@ def manage() -> None:
             handler = HostTestWLSDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1303,6 +1357,7 @@ def manage() -> None:
             handler = HostValidationCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1323,6 +1378,7 @@ def manage() -> None:
             handler = HostValidationCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1343,6 +1399,7 @@ def manage() -> None:
             handler = HostValidationJSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1363,6 +1420,7 @@ def manage() -> None:
             handler = HostValidationNetflowDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1383,6 +1441,7 @@ def manage() -> None:
             handler = HostValidationPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1403,6 +1462,7 @@ def manage() -> None:
             handler = HostValidationPCAPNGContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1423,6 +1483,7 @@ def manage() -> None:
             handler = HostValidationTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1443,6 +1504,7 @@ def manage() -> None:
             handler = HostValidationWLSDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1463,6 +1525,7 @@ def manage() -> None:
             handler = HostUptimeLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1483,6 +1546,7 @@ def manage() -> None:
             handler = HostXMLContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1534,6 +1598,7 @@ def manage() -> None:
             handler = DNSTrainCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1554,6 +1619,7 @@ def manage() -> None:
             handler = DNSTrainPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1574,6 +1640,7 @@ def manage() -> None:
             handler = DNSTrainPCAPCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1594,6 +1661,7 @@ def manage() -> None:
             handler = DNSTestCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1614,6 +1682,7 @@ def manage() -> None:
             handler = DNSTestPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1634,6 +1703,7 @@ def manage() -> None:
             handler = DNSTestPCAPCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1654,6 +1724,7 @@ def manage() -> None:
             handler = DNSValidationPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(
@@ -1674,6 +1745,7 @@ def manage() -> None:
             handler = DNSValidationTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
+                report_path=PATH_REPORT,
             )
             result = handler.analyze_and_generate_docs()
             console.print(

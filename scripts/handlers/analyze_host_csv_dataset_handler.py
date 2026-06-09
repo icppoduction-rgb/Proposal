@@ -75,18 +75,20 @@ class HostCSVContentAnalysisHandler:
         self,
         temp_data_path: str | Path,
         project_root: str | Path,
+        report_path: str | Path | None = None,
         max_files_per_format: int = DEFAULT_MAX_FILES_PER_FORMAT,
         max_lines_per_file: int = DEFAULT_MAX_LINES_PER_FILE,
     ) -> None:
         self.temp_data_path = Path(temp_data_path).expanduser()
         self.project_root = Path(project_root).expanduser()
+        self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_lines_per_file = max(50, max_lines_per_file)
 
         self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "host"
         self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "host"
-        self.report_ru_dir = self.project_root / "report" / "ru" / "stage-one" / "host"
-        self.report_en_dir = self.project_root / "report" / "en" / "stage-one" / "host"
+        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "host"
+        self.report_en_dir = self.report_path / "en" / "stage-one" / "host"
 
     def analyze_and_generate_docs(self) -> HostCSVContentAnalysisResult:
         """Runs analysis and writes docs/report files for TRAIN/csv datasets."""
@@ -990,8 +992,8 @@ Additional utility CSV files are present:
 - `docs/en/analysis-dataset/host/csv.md`;
 - `docs/ru/analysis-dataset/host/README.md`;
 - `docs/en/analysis-dataset/host/README.md`;
-- `report/ru/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
-- `report/en/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
+- `PATH_REPORT/ru/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
+- `PATH_REPORT/en/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
 - `temp_data/analysis-host-csv-summary.json` (техническая сводка анализа).
 
 ## Логика анализа
@@ -1053,8 +1055,8 @@ Goal: identify technical and semantic CSV structure, validate timestamp/label in
 - `docs/en/analysis-dataset/host/csv.md`;
 - `docs/ru/analysis-dataset/host/README.md`;
 - `docs/en/analysis-dataset/host/README.md`;
-- `report/ru/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
-- `report/en/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
+- `PATH_REPORT/ru/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
+- `PATH_REPORT/en/stage-one/host/Task1(Analysis of host csv dataset files)_report.md`;
 - `temp_data/analysis-host-csv-summary.json` (technical analysis summary).
 
 ## Analysis flow

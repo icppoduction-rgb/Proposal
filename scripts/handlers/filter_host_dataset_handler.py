@@ -10,7 +10,7 @@ from scripts.json_data import JsonDataManager
 
 @dataclass(frozen=True)
 class HostFilterResult:
-    """Р РµР·СѓР»СЊС‚Р°С‚ С„РёР»СЊС‚СЂР°С†РёРё Host-РґР°С‚Р°СЃРµС‚РѕРІ."""
+    """Результат фильтрации Host-датасетов."""
 
     path_json_file: str
     files_json_file: str
@@ -23,7 +23,7 @@ class HostFilterResult:
 
 
 class HostDatasetFilterHandler:
-    """РћР±СЂР°Р±РѕС‚С‡РёРє СЌС‚Р°РїР° С„РёР»СЊС‚СЂР°С†РёРё Host-РґР°С‚Р°СЃРµС‚РѕРІ."""
+    """Обработчик этапа фильтрации Host-датасетов."""
 
     ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION")
 
@@ -59,7 +59,7 @@ class HostDatasetFilterHandler:
 
     def filter_and_save(self) -> HostFilterResult:
         """
-        Р§РёС‚Р°РµС‚ РёСЃС…РѕРґРЅС‹Рµ host JSON, РІС‹РїРѕР»РЅСЏРµС‚ С„РёР»СЊС‚СЂР°С†РёСЋ Рё СЃРѕС…СЂР°РЅСЏРµС‚:
+        Читает исходные host JSON, выполняет фильтрацию и сохраняет:
         - filter-host-path-file.json
         - filter-host-file.json
         """
@@ -81,7 +81,7 @@ class HostDatasetFilterHandler:
         for role in self.ROLE_ORDER:
             role_items = source_paths.get(role, [])
             if not isinstance(role_items, list):
-                raise ValueError(f"РџРѕР»Рµ СЂРѕР»Рё '{role}' РІ host-path-file.json РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ СЃРїРёСЃРєРѕРј.")
+                raise ValueError(f"Поле роли '{role}' в host-path-file.json должно быть списком.")
 
             for raw_path in role_items:
                 if not isinstance(raw_path, str):
@@ -167,14 +167,14 @@ class HostDatasetFilterHandler:
         )
 
     def _build_logger(self) -> logging.Logger:
-        """РЎРѕР·РґР°С‘С‚ logger РґР»СЏ Р·Р°РїРёСЃРё РёСЃРєР»СЋС‡С‘РЅРЅС‹С… С„Р°Р№Р»РѕРІ."""
+        """Создаёт logger для записи исключённых файлов."""
         self.log_file_path.parent.mkdir(parents=True, exist_ok=True)
 
         logger = logging.getLogger("host_filter_logger")
         logger.setLevel(logging.INFO)
         logger.propagate = False
 
-        # Р’Р°Р¶РЅРѕ РѕС‡РёС‰Р°С‚СЊ СЃС‚Р°СЂС‹Рµ handlers, С‡С‚РѕР±С‹ РЅРµ РґСѓР±Р»РёСЂРѕРІР°С‚СЊ СЃС‚СЂРѕРєРё Р»РѕРіР°.
+        # Важно очищать старые handlers, чтобы не дублировать строки лога.
         logger.handlers.clear()
 
         handler = logging.FileHandler(self.log_file_path, mode="w", encoding="utf-8")
@@ -191,7 +191,7 @@ class HostDatasetFilterHandler:
         role: str,
         dataset_name: str,
     ) -> None:
-        """РЈС‡РёС‚С‹РІР°РµС‚ РёСЃРєР»СЋС‡РµРЅРёРµ Рё РїРёС€РµС‚ РµРіРѕ РІ Р»РѕРі."""
+        """Учитывает исключение и пишет его в лог."""
         excluded_by_reason[reason] = excluded_by_reason.get(reason, 0) + 1
         self._logger.info(
             "dataset_type=HOST | role=%s | dataset=%s | reason=%s | path=%s",
@@ -202,26 +202,26 @@ class HostDatasetFilterHandler:
         )
 
     def _validate_source_json(self, data: dict[str, Any], file_name: str) -> None:
-        """РџСЂРѕРІРµСЂСЏРµС‚ СЃС‚СЂСѓРєС‚СѓСЂСѓ РёСЃС…РѕРґРЅРѕРіРѕ JSON."""
+        """Проверяет структуру исходного JSON."""
         missing_roles = [role for role in self.ROLE_ORDER if role not in data]
         if missing_roles:
             roles_text = ", ".join(missing_roles)
             raise ValueError(
-                f"Р’ С„Р°Р№Р»Рµ {file_name} РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ СЂРѕР»Рё: {roles_text}."
+                f"В файле {file_name} отсутствуют обязательные роли: {roles_text}."
             )
 
     def _normalize_files_by_role(self, source_files: dict[str, Any]) -> dict[str, set[str]]:
-        """РџСЂРµРѕР±СЂР°Р·СѓРµС‚ РІС…РѕРґРЅС‹Рµ РёРјРµРЅР° С„Р°Р№Р»РѕРІ РІ РЅРѕСЂРјР°Р»РёР·РѕРІР°РЅРЅС‹Рµ РјРЅРѕР¶РµСЃС‚РІР° РїРѕ СЂРѕР»СЏРј."""
+        """Преобразует входные имена файлов в нормализованные множества по ролям."""
         normalized = self._init_role_sets()
         for role in self.ROLE_ORDER:
             role_items = source_files.get(role, [])
             if not isinstance(role_items, list):
-                raise ValueError(f"РџРѕР»Рµ СЂРѕР»Рё '{role}' РІ host-file.json РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ СЃРїРёСЃРєРѕРј.")
+                raise ValueError(f"Поле роли '{role}' в host-file.json должно быть списком.")
             normalized[role] = {str(item) for item in role_items if isinstance(item, str)}
         return normalized
 
     def _is_allowed_file(self, dataset_name: str, file_path: Path) -> tuple[bool, str]:
-        """РџСЂРѕРІРµСЂСЏРµС‚, РЅСѓР¶РµРЅ Р»Рё С„Р°Р№Р» РґР»СЏ РґР°Р»СЊРЅРµР№С€РёС… СЌС‚Р°РїРѕРІ РїРѕРґРіРѕС‚РѕРІРєРё РґР°С‚Р°СЃРµС‚РѕРІ."""
+        """Проверяет, нужен ли файл для дальнейших этапов подготовки датасетов."""
         suffix = file_path.suffix.lower()
         lower_path = str(file_path).lower()
         file_name_lower = file_path.name.lower()
@@ -276,7 +276,7 @@ class HostDatasetFilterHandler:
 
     @staticmethod
     def _extract_dataset_name(file_path: Path) -> str | None:
-        """РР·РІР»РµРєР°РµС‚ РёРјСЏ РґР°С‚Р°СЃРµС‚Р° РёР· РїРѕР»РЅРѕРіРѕ РїСѓС‚Рё."""
+        """Извлекает имя датасета из полного пути."""
         parts = file_path.parts
         for index, part in enumerate(parts):
             if part.lower() == "host" and index + 2 < len(parts):
@@ -285,10 +285,10 @@ class HostDatasetFilterHandler:
 
     @classmethod
     def _init_role_sets(cls) -> dict[str, set[str]]:
-        """РЎРѕР·РґР°С‘С‚ РїСѓСЃС‚СѓСЋ СЃС‚СЂСѓРєС‚СѓСЂСѓ СЂРѕР»РµР№ СЃ РјРЅРѕР¶РµСЃС‚РІР°РјРё."""
+        """Создаёт пустую структуру ролей с множествами."""
         return {role: set() for role in cls.ROLE_ORDER}
 
     @classmethod
     def _prepare_output(cls, role_map: dict[str, set[str]]) -> dict[str, list[str]]:
-        """РџСЂРµРѕР±СЂР°Р·СѓРµС‚ РјРЅРѕР¶РµСЃС‚РІР° СЂРѕР»РµР№ РІ РѕС‚СЃРѕСЂС‚РёСЂРѕРІР°РЅРЅС‹Рµ СЃРїРёСЃРєРё РґР»СЏ JSON."""
+        """Преобразует множества ролей в отсортированные списки для JSON."""
         return {role: sorted(role_map.get(role, set())) for role in cls.ROLE_ORDER}

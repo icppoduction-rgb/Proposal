@@ -111,7 +111,7 @@
 **Вопрос:** Какие statistical significance tests использовались?  
 **Ответ:** Не указаны (paired t-test/Wilcoxon не найдены).
 
-**Р'РѕРїСЂРѕСЃ:** Hardware (CPU/GPU/RAM)?  
+**Вопрос:** Hardware (CPU/GPU/RAM)?
 **Ответ:** Не указано. В документации есть только общий комментарий, что при необходимости можно использовать облачные ресурсы (например Colab/Kaggle).
 
 **Вопрос:** Software версии (Python/libs)?  
@@ -133,4 +133,4 @@
 **Вопрос:** Какие объёмы подтверждены артефактами репозитория?  
 **Ответ:**
 - DNS sorted/exported files: 35 (`temp_data/sort-path-dns-file-summary.json`)
-- Host filtered kept file paths: 361,646 (`report/en/stage-one/Task3...` Рё `temp_data/sort-path-host-file-summary.json`)
+- Host filtered kept file paths: 361,646 (`PATH_REPORT/en/stage-one/Task3...` и `temp_data/sort-path-host-file-summary.json`)

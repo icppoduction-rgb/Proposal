@@ -414,11 +414,11 @@ docs/en/analysis-dataset/host/README.md
 
 ## 15. Отчёт о проделанной работе
 После реализации создай отчёты:
-report/ru/
-report/en/
+PATH_REPORT/ru/
+PATH_REPORT/en/
 Например:
-report/ru/stage-one/analysis-dataset/host/Task14(Analysis of host log dataset files)_report.md
-report/en/stage-one/analysis-dataset/host/Task14(Analysis of host log dataset files)_report.md
+PATH_REPORT/ru/stage-one/analysis-dataset/host/Task14(Analysis of host log dataset files)_report.md
+PATH_REPORT/en/stage-one/analysis-dataset/host/Task14(Analysis of host log dataset files)_report.md
 Отчёт должен содержать:
 - описание задачи;
 - какие файлы были добавлены или изменены;
