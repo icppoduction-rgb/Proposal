@@ -440,10 +440,12 @@ JSON is ready for feature extraction as JSON Lines Windows/Sysmon telemetry. Pro
                 selected.append(field)
             if len(selected) >= 16:
                 break
-        return "\n".join(
-            f"| {field['field']} | {field['type']} | {purposes.get(field['field'], 'event field')} | {str(field['example']).replace('|', '\\|')} |"
-            for field in selected[:16]
-        )
+        rows = []
+        for field in selected[:16]:
+            purpose = purposes.get(field["field"], "event field")
+            example = str(field["example"]).replace("|", "\\|")
+            rows.append(f"| {field['field']} | {field['type']} | {purpose} | {example} |")
+        return "\n".join(rows)
 
     def _build_readme(self, summary: dict[str, Any], language: str) -> str:
         title = "# Анализ содержимого файлов датасетов" if language == "ru" else "# Dataset File Content Analysis"

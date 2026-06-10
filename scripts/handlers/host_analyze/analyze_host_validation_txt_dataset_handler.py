@@ -334,10 +334,12 @@ TXT is ready for feature extraction as a line-oriented syscall trace. The pipeli
                 selected.append(field)
             if len(selected) >= 14:
                 break
-        return "\n".join(
-            f"| {field['field']} | {field['type']} | {purposes.get(field['field'], 'syscall argument key')} | {str(field['example']).replace('|', '\\|')} |"
-            for field in selected[:14]
-        )
+        rows = []
+        for field in selected[:14]:
+            purpose = purposes.get(field["field"], "syscall argument key")
+            example = str(field["example"]).replace("|", "\\|")
+            rows.append(f"| {field['field']} | {field['type']} | {purpose} | {example} |")
+        return "\n".join(rows)
 
     def _build_readme(self, summary: dict[str, Any], language: str) -> str:
         title = "# Анализ содержимого файлов датасетов" if language == "ru" else "# Dataset File Content Analysis"

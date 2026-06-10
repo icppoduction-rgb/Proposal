@@ -489,10 +489,15 @@ Rows contain Windows security events: `EventID`, `UserName`, `LogHost`, `DomainN
                 selected.append(field)
             if len(selected) >= 18:
                 break
-        return "\n".join(
-            f"| {field['field']} | {field['type']} | {purposes.get(field['field'], 'event-specific field' if language == 'en' else 'event-specific field')} | {str(field['example']).replace('|', '\\|')} |"
-            for field in selected[:18]
-        )
+        rows = []
+        for field in selected[:18]:
+            purpose = purposes.get(
+                field["field"],
+                "event-specific field" if language == "en" else "event-specific field",
+            )
+            example = str(field["example"]).replace("|", "\\|")
+            rows.append(f"| {field['field']} | {field['type']} | {purpose} | {example} |")
+        return "\n".join(rows)
 
     def _build_readme(self, summary: dict[str, Any], language: str) -> str:
         title = "# Анализ содержимого файлов датасетов" if language == "ru" else "# Dataset File Content Analysis"

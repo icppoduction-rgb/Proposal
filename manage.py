@@ -3,6 +3,7 @@
 import argparse
 
 from config import *
+from scripts.handlers.host_analyze.analyze_host_cpu_log_dataset_handler import HostCPULogContentAnalysisHandler
 
 try:
     from rich.console import Console
@@ -14,8 +15,8 @@ except ModuleNotFoundError:
         def print(message: str) -> None:
             print(message)
 
-from scripts.handlers.filter_dataset.dns_dataset_handler import DNSDatasetHandler
-from scripts.handlers.filter_dataset.host_dataset_handler import HostDatasetHandler
+from scripts.handlers.analyze_dataset.dns_dataset_handler import DNSDatasetHandler
+from scripts.handlers.analyze_dataset.host_dataset_handler import HostDatasetHandler
 from scripts.handlers.filter_dataset.filter_host_dataset_handler import HostDatasetFilterHandler
 from scripts.handlers.sort.sort_host_dataset_handler import HostDatasetSortHandler
 from scripts.handlers.save_sort.save_sort_host_path_handler import HostSortedPathExportHandler
@@ -23,7 +24,6 @@ from scripts.handlers.sort.sort_dns_dataset_handler import DNSDatasetSortHandler
 from scripts.handlers.save_sort.save_sort_dns_path_handler import DNSSortedPathExportHandler
 from scripts.handlers.host_analyze.analyze_host_csv_dataset_handler import HostCSVContentAnalysisHandler
 from scripts.handlers.host_analyze.analyze_host_auth_log_dataset_handler import HostAuthLogContentAnalysisHandler
-from scripts.handlers.host_analyze.analyze_host_cpu_log_dataset_handler import HostCPULogContentAnalysisHandler
 from scripts.handlers.host_analyze.analyze_host_diskio_log_dataset_handler import HostDiskioLogContentAnalysisHandler
 from scripts.handlers.host_analyze.analyze_host_filesystem_log_dataset_handler import (
     HostFilesystemLogContentAnalysisHandler,
@@ -230,8 +230,9 @@ def manage() -> None:
 
     args, _unknown = parser.parse_known_args()
 
-    match (args.module, args.service, args.action):
+    print("# =========== ", args.module, args.service, args.action)
 
+    match (args.module, args.service, args.action):
 
         case ("dataset", "dns", "analyze"):
             handler = DNSDatasetHandler(
@@ -245,7 +246,7 @@ def manage() -> None:
                 f"Files JSON: {result.files_json_file}"
             )
 
-        case ("host", "dataset", "analyze"):
+        case ("dataset", "host", "analyze"):
             handler = HostDatasetHandler(
                 host_datasets_path=PATH_HOST_DATASETS,
                 temp_data_path=PATH_TEMP_DATA,
@@ -347,6 +348,7 @@ def manage() -> None:
             )
 
         case ("host", "dataset", "analyze-cpu-log-content"):
+            pass
             handler = HostCPULogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,

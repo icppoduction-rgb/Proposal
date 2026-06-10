@@ -50,3 +50,13 @@ PATH_DNS_DATASETS_FILTER: str = os.getenv(
     "PATH_DNS_DATASETS_FILTER",
     _child_path(PATH_FOLDER_DATASETS_FILTER, "dns"),
 )
+
+
+# dataset dns analyze -> handlers analyze-dataset dns-dataset-handler
+# dataset host analyze -> handlers analyze-dataset host-dataset-handler
+# host dataset filter_dataset -> handlers filter-dataset filter-host-dataset-handler
+# host dataset sort -> handlers sort sort-host-dataset-handler
+# host dataset save-paths -> handlers save-sort save-sort-host-dataset-handler
+# host dataset analyze-cpu-log-content -> handlers host-analyze analyze-cpu-log-content
+# host dataset analyze-csv-content -> handlers host-analyze analyze-csv-content
+# dns dataset analyze-train-pcap-csv-content -> handlers dns-analyze analyze-train-pcap-csv-content

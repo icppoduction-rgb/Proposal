@@ -492,10 +492,15 @@ TXT is ready for syscall/API sequence feature extraction. The pipeline must acco
                 selected.append(field)
             if len(selected) >= 14:
                 break
-        return "\n".join(
-            f"| {field['field']} | {field['type']} | {purposes.get(field['field'], 'method-specific argument' if language == 'en' else 'method-specific argument')} | {str(field['example']).replace('|', '\\|')} |"
-            for field in selected
-        )
+        rows = []
+        for field in selected:
+            purpose = purposes.get(
+                field["field"],
+                "method-specific argument" if language == "en" else "method-specific argument",
+            )
+            example = str(field["example"]).replace("|", "\\|")
+            rows.append(f"| {field['field']} | {field['type']} | {purpose} | {example} |")
+        return "\n".join(rows)
 
     def _build_readme(self, summary: dict[str, Any], language: str) -> str:
         title = "# Анализ содержимого файлов датасетов" if language == "ru" else "# Dataset File Content Analysis"
