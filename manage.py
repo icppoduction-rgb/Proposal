@@ -14,201 +14,201 @@ except ModuleNotFoundError:
         def print(message: str) -> None:
             print(message)
 
-from scripts.handlers.dns_dataset_handler import DNSDatasetHandler
-from scripts.handlers.host_dataset_handler import HostDatasetHandler
-from scripts.handlers.filter_host_dataset_handler import HostDatasetFilterHandler
-from scripts.handlers.sort_host_dataset_handler import HostDatasetSortHandler
-from scripts.handlers.save_sort_host_path_handler import HostSortedPathExportHandler
-from scripts.handlers.sort_dns_dataset_handler import DNSDatasetSortHandler
-from scripts.handlers.save_sort_dns_path_handler import DNSSortedPathExportHandler
-from scripts.handlers.analyze_host_csv_dataset_handler import HostCSVContentAnalysisHandler
-from scripts.handlers.analyze_host_auth_log_dataset_handler import HostAuthLogContentAnalysisHandler
-from scripts.handlers.analyze_host_cpu_log_dataset_handler import HostCPULogContentAnalysisHandler
-from scripts.handlers.analyze_host_diskio_log_dataset_handler import HostDiskioLogContentAnalysisHandler
-from scripts.handlers.analyze_host_filesystem_log_dataset_handler import (
+from scripts.handlers.filter_dataset.dns_dataset_handler import DNSDatasetHandler
+from scripts.handlers.filter_dataset.host_dataset_handler import HostDatasetHandler
+from scripts.handlers.filter_dataset.filter_host_dataset_handler import HostDatasetFilterHandler
+from scripts.handlers.sort.sort_host_dataset_handler import HostDatasetSortHandler
+from scripts.handlers.save_sort.save_sort_host_path_handler import HostSortedPathExportHandler
+from scripts.handlers.sort.sort_dns_dataset_handler import DNSDatasetSortHandler
+from scripts.handlers.save_sort.save_sort_dns_path_handler import DNSSortedPathExportHandler
+from scripts.handlers.host_analyze.analyze_host_csv_dataset_handler import HostCSVContentAnalysisHandler
+from scripts.handlers.host_analyze.analyze_host_auth_log_dataset_handler import HostAuthLogContentAnalysisHandler
+from scripts.handlers.host_analyze.analyze_host_cpu_log_dataset_handler import HostCPULogContentAnalysisHandler
+from scripts.handlers.host_analyze.analyze_host_diskio_log_dataset_handler import HostDiskioLogContentAnalysisHandler
+from scripts.handlers.host_analyze.analyze_host_filesystem_log_dataset_handler import (
     HostFilesystemLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_fsstat_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_fsstat_log_dataset_handler import (
     HostFSStatLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_ghc_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_ghc_dataset_handler import (
     HostGHCContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_info_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_info_dataset_handler import (
     HostInfoContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_journal_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_journal_dataset_handler import (
     HostJournalContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_journal_tilde_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_journal_tilde_dataset_handler import (
     HostJournalTildeContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_json_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_json_dataset_handler import (
     HostJSONContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_json_1_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_json_1_dataset_handler import (
     HostJSON1ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_load_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_load_log_dataset_handler import (
     HostLoadLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_log_dataset_handler import (
     HostLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_log_1_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_log_1_dataset_handler import (
     HostLog1ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_log_2_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_log_2_dataset_handler import (
     HostLog2ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_log_3_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_log_3_dataset_handler import (
     HostLog3ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_mail_info_1_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_mail_info_1_dataset_handler import (
     HostMailInfo1ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_mail_warn_1_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_mail_warn_1_dataset_handler import (
     HostMailWarn1ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_mainlog_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_mainlog_dataset_handler import (
     HostMainlogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_mainlog_1_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_mainlog_1_dataset_handler import (
     HostMainlog1ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_mainlog_2_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_mainlog_2_dataset_handler import (
     HostMainlog2ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_mainlog_3_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_mainlog_3_dataset_handler import (
     HostMainlog3ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_memory_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_memory_log_dataset_handler import (
     HostMemoryLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_messages_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_messages_dataset_handler import (
     HostMessagesContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_messages_1_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_messages_1_dataset_handler import (
     HostMessages1ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_netflow_ids_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_netflow_ids_dataset_handler import (
     HostNetflowIdsContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_network_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_network_log_dataset_handler import (
     HostNetworkLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_pcap_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_pcap_dataset_handler import (
     HostPCAPContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_process_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_process_log_dataset_handler import (
     HostProcessLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_process_summary_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_process_summary_log_dataset_handler import (
     HostProcessSummaryLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_sc_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_sc_dataset_handler import (
     HostSCContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_service_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_service_log_dataset_handler import (
     HostServiceLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_socket_summary_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_socket_summary_log_dataset_handler import (
     HostSocketSummaryLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_syslog_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_syslog_dataset_handler import (
     HostSyslogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_syslog_1_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_syslog_1_dataset_handler import (
     HostSyslog1ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_syslog_2_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_syslog_2_dataset_handler import (
     HostSyslog2ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_syslog_3_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_syslog_3_dataset_handler import (
     HostSyslog3ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_syslog_4_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_syslog_4_dataset_handler import (
     HostSyslog4ContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_syslog_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_syslog_log_dataset_handler import (
     HostSyslogLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_txt_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_txt_dataset_handler import (
     HostTXTContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_test_bson_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_test_bson_dataset_handler import (
     HostTestBSONContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_test_csv_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_test_csv_dataset_handler import (
     HostTestCSVContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_test_json_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_test_json_dataset_handler import (
     HostTestJSONContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_test_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_test_log_dataset_handler import (
     HostTestLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_test_netflow_day_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_test_netflow_day_dataset_handler import (
     HostTestNetflowDayContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_test_txt_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_test_txt_dataset_handler import (
     HostTestTXTContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_test_wls_day_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_test_wls_day_dataset_handler import (
     HostTestWLSDayContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_cap_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_cap_dataset_handler import (
     HostValidationCAPContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_csv_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_csv_dataset_handler import (
     HostValidationCSVContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_json_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_json_dataset_handler import (
     HostValidationJSONContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_netflow_day_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_netflow_day_dataset_handler import (
     HostValidationNetflowDayContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_pcap_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_pcap_dataset_handler import (
     HostValidationPCAPContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_pcapng_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_pcapng_dataset_handler import (
     HostValidationPCAPNGContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_txt_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_txt_dataset_handler import (
     HostValidationTXTContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_validation_wls_day_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_validation_wls_day_dataset_handler import (
     HostValidationWLSDayContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_train_csv_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_train_csv_dataset_handler import (
     DNSTrainCSVContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_train_pcap_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_train_pcap_dataset_handler import (
     DNSTrainPCAPContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_train_pcap_csv_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_train_pcap_csv_dataset_handler import (
     DNSTrainPCAPCSVContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_test_csv_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_test_csv_dataset_handler import (
     DNSTestCSVContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_test_pcap_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_test_pcap_dataset_handler import (
     DNSTestPCAPContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_test_pcap_csv_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_test_pcap_csv_dataset_handler import (
     DNSTestPCAPCSVContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_validation_pcap_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_validation_pcap_dataset_handler import (
     DNSValidationPCAPContentAnalysisHandler,
 )
-from scripts.handlers.analyze_dns_validation_txt_dataset_handler import (
+from scripts.handlers.dns_analyze.analyze_dns_validation_txt_dataset_handler import (
     DNSValidationTXTContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_uptime_log_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_uptime_log_dataset_handler import (
     HostUptimeLogContentAnalysisHandler,
 )
-from scripts.handlers.analyze_host_xml_dataset_handler import (
+from scripts.handlers.host_analyze.analyze_host_xml_dataset_handler import (
     HostXMLContentAnalysisHandler,
 )
 
@@ -257,14 +257,14 @@ def manage() -> None:
                 f"Files JSON: {result.files_json_file}"
             )
 
-        case ("host", "dataset", "filter"):
+        case ("host", "dataset", "filter_dataset"):
             handler = HostDatasetFilterHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 log_file_path=PATH_FILTER_LOG,
             )
             result = handler.filter_and_save()
             console.print(
-                "Host dataset filter completed.\n"
+                "Host dataset filter_dataset completed.\n"
                 f"Path JSON: {result.path_json_file}\n"
                 f"Files JSON: {result.files_json_file}\n"
                 f"Log file: {result.log_file}\n"
@@ -1738,7 +1738,7 @@ def manage() -> None:
                 "python manage.py dns dataset analyze-validation-pcap-content\n"
                 "python manage.py dns dataset analyze-validation-txt-content\n"
                 "python manage.py host dataset analyze\n"
-                "python manage.py host dataset filter\n"
+                "python manage.py host dataset filter_dataset\n"
                 "python manage.py host dataset sort\n"
                 "python manage.py host dataset save-paths\n"
                 "python manage.py host dataset analyze-csv-content\n"
