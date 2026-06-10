@@ -234,7 +234,7 @@ def manage() -> None:
 
     match (args.module, args.service, args.action):
 
-        case ("dataset", "dns", "analyze"):
+        case ("handlers", "analyze-dataset", "dns-dataset-handler"):
             handler = DNSDatasetHandler(
                 dns_datasets_path=PATH_DNS_DATASETS,
                 temp_data_path=PATH_TEMP_DATA,
@@ -246,7 +246,7 @@ def manage() -> None:
                 f"Files JSON: {result.files_json_file}"
             )
 
-        case ("dataset", "host", "analyze"):
+        case ("handlers", "analyze-dataset", "host-dataset-handler"):
             handler = HostDatasetHandler(
                 host_datasets_path=PATH_HOST_DATASETS,
                 temp_data_path=PATH_TEMP_DATA,
@@ -258,7 +258,7 @@ def manage() -> None:
                 f"Files JSON: {result.files_json_file}"
             )
 
-        case ("host", "dataset", "filter_dataset"):
+        case ("handlers", "filter-dataset", "filter-host-dataset-handler"):
             handler = HostDatasetFilterHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 log_file_path=PATH_FILTER_LOG,
@@ -274,7 +274,7 @@ def manage() -> None:
                 f"Excluded reasons: {result.excluded_by_reason}"
             )
 
-        case ("host", "dataset", "sort"):
+        case ("handlers", "sort", "sort-host-dataset-handler"):
             handler = HostDatasetSortHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 host_datasets_filter_path=PATH_HOST_DATASETS_FILTER,
@@ -292,7 +292,7 @@ def manage() -> None:
                 f"Formats by role: {result.files_by_role_and_format}"
             )
 
-        case ("host", "dataset", "save-paths"):
+        case ("handlers", "save-sort", "save-sort-host-dataset-handler"):
             handler = HostSortedPathExportHandler(
                 host_datasets_filter_path=PATH_HOST_DATASETS_FILTER,
                 temp_data_path=PATH_TEMP_DATA,
@@ -305,7 +305,7 @@ def manage() -> None:
                 f"Counts by role/format: {result.counts_by_role_and_format}"
             )
 
-        case ("host", "dataset", "analyze-csv-content"):
+        case ("handlers", "host-analyze", "analyze-csv-content"):
             handler = HostCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -326,7 +326,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-auth-log-content"):
+        case ("handlers", "host-analyze", "analyze-auth-log-content"):
             handler = HostAuthLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -347,7 +347,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-cpu-log-content"):
+        case ("handlers", "host-analyze", "analyze-cpu-log-content"):
             pass
             handler = HostCPULogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
@@ -369,7 +369,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-diskio-log-content"):
+        case ("handlers", "host-analyze", "analyze-diskio-log-content"):
             handler = HostDiskioLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -390,7 +390,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-filesystem-log-content"):
+        case ("handlers", "host-analyze", "analyze-filesystem-log-content"):
             handler = HostFilesystemLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -411,7 +411,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-fsstat-log-content"):
+        case ("handlers", "host-analyze", "analyze-fsstat-log-content"):
             handler = HostFSStatLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -432,7 +432,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-ghc-content"):
+        case ("handlers", "host-analyze", "analyze-ghc-content"):
             handler = HostGHCContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -453,7 +453,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-info-content"):
+        case ("handlers", "host-analyze", "analyze-info-content"):
             handler = HostInfoContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -474,7 +474,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-journal-content"):
+        case ("handlers", "host-analyze", "analyze-journal-content"):
             handler = HostJournalContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -495,7 +495,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-journal-tilde-content"):
+        case ("handlers", "host-analyze", "analyze-journal-tilde-content"):
             handler = HostJournalTildeContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -516,7 +516,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-json-content"):
+        case ("handlers", "host-analyze", "analyze-json-content"):
             handler = HostJSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -537,7 +537,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-json-1-content"):
+        case ("handlers", "host-analyze", "analyze-json-1-content"):
             handler = HostJSON1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -558,7 +558,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-load-log-content"):
+        case ("handlers", "host-analyze", "analyze-load-log-content"):
             handler = HostLoadLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -579,7 +579,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-log-content"):
+        case ("handlers", "host-analyze", "analyze-log-content"):
             handler = HostLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -600,7 +600,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-log-1-content"):
+        case ("handlers", "host-analyze", "analyze-log-1-content"):
             handler = HostLog1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -621,7 +621,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-log-2-content"):
+        case ("handlers", "host-analyze", "analyze-log-2-content"):
             handler = HostLog2ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -642,7 +642,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-log-3-content"):
+        case ("handlers", "host-analyze", "analyze-log-3-content"):
             handler = HostLog3ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -663,7 +663,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-mail-info-1-content"):
+        case ("handlers", "host-analyze", "analyze-mail-info-1-content"):
             handler = HostMailInfo1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -684,7 +684,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-mail-warn-1-content"):
+        case ("handlers", "host-analyze", "analyze-mail-warn-1-content"):
             handler = HostMailWarn1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -705,7 +705,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-mainlog-content"):
+        case ("handlers", "host-analyze", "analyze-mainlog-content"):
             handler = HostMainlogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -726,7 +726,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-mainlog-1-content"):
+        case ("handlers", "host-analyze", "analyze-mainlog-1-content"):
             handler = HostMainlog1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -747,7 +747,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-mainlog-2-content"):
+        case ("handlers", "host-analyze", "analyze-mainlog-2-content"):
             handler = HostMainlog2ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -768,7 +768,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-mainlog-3-content"):
+        case ("handlers", "host-analyze", "analyze-mainlog-3-content"):
             handler = HostMainlog3ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -789,7 +789,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-memory-log-content"):
+        case ("handlers", "host-analyze", "analyze-memory-log-content"):
             handler = HostMemoryLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -810,7 +810,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-messages-content"):
+        case ("handlers", "host-analyze", "analyze-messages-content"):
             handler = HostMessagesContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -831,7 +831,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-messages-1-content"):
+        case ("handlers", "host-analyze", "analyze-messages-1-content"):
             handler = HostMessages1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -852,7 +852,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-netflow-ids-content"):
+        case ("handlers", "host-analyze", "analyze-netflow-ids-content"):
             handler = HostNetflowIdsContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -873,7 +873,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-network-log-content"):
+        case ("handlers", "host-analyze", "analyze-network-log-content"):
             handler = HostNetworkLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -894,7 +894,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-pcap-content"):
+        case ("handlers", "host-analyze", "analyze-pcap-content"):
             handler = HostPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -915,7 +915,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-process-log-content"):
+        case ("handlers", "host-analyze", "analyze-process-log-content"):
             handler = HostProcessLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -936,7 +936,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-process-summary-log-content"):
+        case ("handlers", "host-analyze", "analyze-process-summary-log-content"):
             handler = HostProcessSummaryLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -957,7 +957,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-sc-content"):
+        case ("handlers", "host-analyze", "analyze-sc-content"):
             handler = HostSCContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -978,7 +978,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-service-log-content"):
+        case ("handlers", "host-analyze", "analyze-service-log-content"):
             handler = HostServiceLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -999,7 +999,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-socket-summary-log-content"):
+        case ("handlers", "host-analyze", "analyze-socket-summary-log-content"):
             handler = HostSocketSummaryLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1020,7 +1020,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-syslog-content"):
+        case ("handlers", "host-analyze", "analyze-syslog-content"):
             handler = HostSyslogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1041,7 +1041,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-syslog-1-content"):
+        case ("handlers", "host-analyze", "analyze-syslog-1-content"):
             handler = HostSyslog1ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1062,7 +1062,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-syslog-2-content"):
+        case ("handlers", "host-analyze", "analyze-syslog-2-content"):
             handler = HostSyslog2ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1083,7 +1083,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-syslog-3-content"):
+        case ("handlers", "host-analyze", "analyze-syslog-3-content"):
             handler = HostSyslog3ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1104,7 +1104,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-syslog-4-content"):
+        case ("handlers", "host-analyze", "analyze-syslog-4-content"):
             handler = HostSyslog4ContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1125,7 +1125,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-syslog-log-content"):
+        case ("handlers", "host-analyze", "analyze-syslog-log-content"):
             handler = HostSyslogLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1146,7 +1146,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-txt-content"):
+        case ("handlers", "host-analyze", "analyze-txt-content"):
             handler = HostTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1167,7 +1167,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-test-bson-content"):
+        case ("handlers", "host-analyze", "analyze-test-bson-content"):
             handler = HostTestBSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1188,7 +1188,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-test-csv-content"):
+        case ("handlers", "host-analyze", "analyze-test-csv-content"):
             handler = HostTestCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1209,7 +1209,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-test-json-content"):
+        case ("handlers", "host-analyze", "analyze-test-json-content"):
             handler = HostTestJSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1230,7 +1230,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-test-log-content"):
+        case ("handlers", "host-analyze", "analyze-test-log-content"):
             handler = HostTestLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1251,7 +1251,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-test-netflow-day-content"):
+        case ("handlers", "host-analyze", "analyze-test-netflow-day-content"):
             handler = HostTestNetflowDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1272,7 +1272,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-test-txt-content"):
+        case ("handlers", "host-analyze", "analyze-test-txt-content"):
             handler = HostTestTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1293,7 +1293,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-test-wls-day-content"):
+        case ("handlers", "host-analyze", "analyze-test-wls-day-content"):
             handler = HostTestWLSDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1314,7 +1314,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-cap-content"):
+        case ("handlers", "host-analyze", "analyze-validation-cap-content"):
             handler = HostValidationCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1335,7 +1335,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-csv-content"):
+        case ("handlers", "host-analyze", "analyze-validation-csv-content"):
             handler = HostValidationCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1356,7 +1356,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-json-content"):
+        case ("handlers", "host-analyze", "analyze-validation-json-content"):
             handler = HostValidationJSONContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1377,7 +1377,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-netflow-day-content"):
+        case ("handlers", "host-analyze", "analyze-validation-netflow-day-content"):
             handler = HostValidationNetflowDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1398,7 +1398,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-pcap-content"):
+        case ("handlers", "host-analyze", "analyze-validation-pcap-content"):
             handler = HostValidationPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1419,7 +1419,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-pcapng-content"):
+        case ("handlers", "host-analyze", "analyze-validation-pcapng-content"):
             handler = HostValidationPCAPNGContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1440,7 +1440,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-txt-content"):
+        case ("handlers", "host-analyze", "analyze-validation-txt-content"):
             handler = HostValidationTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1461,7 +1461,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-validation-wls-day-content"):
+        case ("handlers", "host-analyze", "analyze-validation-wls-day-content"):
             handler = HostValidationWLSDayContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1482,7 +1482,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-uptime-log-content"):
+        case ("handlers", "host-analyze", "analyze-uptime-log-content"):
             handler = HostUptimeLogContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1503,7 +1503,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("host", "dataset", "analyze-xml-content"):
+        case ("handlers", "host-analyze", "analyze-xml-content"):
             handler = HostXMLContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1524,7 +1524,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "sort") | ("dataset", "dns", "sort"):
+        case ("handlers", "sort", "sort-dns-dataset-handler"):
             handler = DNSDatasetSortHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 dns_datasets_filter_path=PATH_DNS_DATASETS_FILTER,
@@ -1542,7 +1542,7 @@ def manage() -> None:
                 f"Formats by role: {result.files_by_role_and_format}"
             )
 
-        case ("dns", "dataset", "save-paths") | ("dataset", "dns", "save-paths"):
+        case ("handlers", "save-sort", "save-sort-dns-dataset-handler"):
             handler = DNSSortedPathExportHandler(
                 dns_datasets_filter_path=PATH_DNS_DATASETS_FILTER,
                 temp_data_path=PATH_TEMP_DATA,
@@ -1555,7 +1555,7 @@ def manage() -> None:
                 f"Counts by role/format: {result.counts_by_role_and_format}"
             )
 
-        case ("dns", "dataset", "analyze-train-csv-content"):
+        case ("handlers", "dns-analyze", "analyze-train-csv-content"):
             handler = DNSTrainCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1576,7 +1576,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "analyze-train-pcap-content"):
+        case ("handlers", "dns-analyze", "analyze-train-pcap-content"):
             handler = DNSTrainPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1597,7 +1597,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "analyze-train-pcap-csv-content"):
+        case ("handlers", "dns-analyze", "analyze-train-pcap-csv-content"):
             handler = DNSTrainPCAPCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1618,7 +1618,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "analyze-test-csv-content"):
+        case ("handlers", "dns-analyze", "analyze-test-csv-content"):
             handler = DNSTestCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1639,7 +1639,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "analyze-test-pcap-content"):
+        case ("handlers", "dns-analyze", "analyze-test-pcap-content"):
             handler = DNSTestPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1660,7 +1660,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "analyze-test-pcap-csv-content"):
+        case ("handlers", "dns-analyze", "analyze-test-pcap-csv-content"):
             handler = DNSTestPCAPCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1681,7 +1681,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "analyze-validation-pcap-content"):
+        case ("handlers", "dns-analyze", "analyze-validation-pcap-content"):
             handler = DNSValidationPCAPContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1702,7 +1702,7 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("dns", "dataset", "analyze-validation-txt-content"):
+        case ("handlers", "dns-analyze", "analyze-validation-txt-content"):
             handler = DNSValidationTXTContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
                 project_root=PROJECT_ROOT,
@@ -1726,81 +1726,79 @@ def manage() -> None:
         case _:
             console.print(
                 "Commands:\n"
-                "python manage.py dataset dns analyze\n"
-                "python manage.py dataset dns sort\n"
-                "python manage.py dns dataset sort\n"
-                "python manage.py dataset dns save-paths\n"
-                "python manage.py dns dataset save-paths\n"
-                "python manage.py dns dataset analyze-train-csv-content\n"
-                "python manage.py dns dataset analyze-train-pcap-content\n"
-                "python manage.py dns dataset analyze-train-pcap-csv-content\n"
-                "python manage.py dns dataset analyze-test-csv-content\n"
-                "python manage.py dns dataset analyze-test-pcap-content\n"
-                "python manage.py dns dataset analyze-test-pcap-csv-content\n"
-                "python manage.py dns dataset analyze-validation-pcap-content\n"
-                "python manage.py dns dataset analyze-validation-txt-content\n"
-                "python manage.py host dataset analyze\n"
-                "python manage.py host dataset filter_dataset\n"
-                "python manage.py host dataset sort\n"
-                "python manage.py host dataset save-paths\n"
-                "python manage.py host dataset analyze-csv-content\n"
-                "python manage.py host dataset analyze-auth-log-content\n"
-                "python manage.py host dataset analyze-cpu-log-content\n"
-                "python manage.py host dataset analyze-diskio-log-content\n"
-                "python manage.py host dataset analyze-filesystem-log-content\n"
-                "python manage.py host dataset analyze-fsstat-log-content\n"
-                "python manage.py host dataset analyze-ghc-content\n"
-                "python manage.py host dataset analyze-info-content\n"
-                "python manage.py host dataset analyze-journal-content\n"
-                "python manage.py host dataset analyze-journal-tilde-content\n"
-                "python manage.py host dataset analyze-json-content\n"
-                "python manage.py host dataset analyze-json-1-content\n"
-                "python manage.py host dataset analyze-load-log-content\n"
-                "python manage.py host dataset analyze-log-content\n"
-                "python manage.py host dataset analyze-log-1-content\n"
-                "python manage.py host dataset analyze-log-2-content\n"
-                "python manage.py host dataset analyze-log-3-content\n"
-                "python manage.py host dataset analyze-mail-info-1-content\n"
-                "python manage.py host dataset analyze-mail-warn-1-content\n"
-                "python manage.py host dataset analyze-mainlog-content\n"
-                "python manage.py host dataset analyze-mainlog-1-content\n"
-                "python manage.py host dataset analyze-mainlog-2-content\n"
-                "python manage.py host dataset analyze-mainlog-3-content\n"
-                "python manage.py host dataset analyze-memory-log-content\n"
-                "python manage.py host dataset analyze-messages-content\n"
-                "python manage.py host dataset analyze-messages-1-content\n"
-                "python manage.py host dataset analyze-netflow-ids-content\n"
-                "python manage.py host dataset analyze-network-log-content\n"
-                "python manage.py host dataset analyze-pcap-content\n"
-                "python manage.py host dataset analyze-process-log-content\n"
-                "python manage.py host dataset analyze-process-summary-log-content\n"
-                "python manage.py host dataset analyze-sc-content\n"
-                "python manage.py host dataset analyze-service-log-content\n"
-                "python manage.py host dataset analyze-socket-summary-log-content\n"
-                "python manage.py host dataset analyze-syslog-content\n"
-                "python manage.py host dataset analyze-syslog-1-content\n"
-                "python manage.py host dataset analyze-syslog-2-content\n"
-                "python manage.py host dataset analyze-syslog-3-content\n"
-                "python manage.py host dataset analyze-syslog-4-content\n"
-                "python manage.py host dataset analyze-syslog-log-content\n"
-                "python manage.py host dataset analyze-test-bson-content\n"
-                "python manage.py host dataset analyze-test-csv-content\n"
-                "python manage.py host dataset analyze-test-json-content\n"
-                "python manage.py host dataset analyze-test-log-content\n"
-                "python manage.py host dataset analyze-test-netflow-day-content\n"
-                "python manage.py host dataset analyze-test-txt-content\n"
-                "python manage.py host dataset analyze-test-wls-day-content\n"
-                "python manage.py host dataset analyze-validation-cap-content\n"
-                "python manage.py host dataset analyze-validation-csv-content\n"
-                "python manage.py host dataset analyze-validation-json-content\n"
-                "python manage.py host dataset analyze-validation-netflow-day-content\n"
-                "python manage.py host dataset analyze-validation-pcap-content\n"
-                "python manage.py host dataset analyze-validation-pcapng-content\n"
-                "python manage.py host dataset analyze-validation-txt-content\n"
-                "python manage.py host dataset analyze-validation-wls-day-content\n"
-                "python manage.py host dataset analyze-txt-content\n"
-                "python manage.py host dataset analyze-uptime-log-content\n"
-                "python manage.py host dataset analyze-xml-content\n"
+                "python manage.py handlers analyze-dataset dns-dataset-handler\n"
+                "python manage.py handlers sort sort-dns-dataset-handler\n"
+                "python manage.py handlers save-sort save-sort-dns-dataset-handler\n"
+                "python manage.py handlers dns-analyze analyze-train-csv-content\n"
+                "python manage.py handlers dns-analyze analyze-train-pcap-content\n"
+                "python manage.py handlers dns-analyze analyze-train-pcap-csv-content\n"
+                "python manage.py handlers dns-analyze analyze-test-csv-content\n"
+                "python manage.py handlers dns-analyze analyze-test-pcap-content\n"
+                "python manage.py handlers dns-analyze analyze-test-pcap-csv-content\n"
+                "python manage.py handlers dns-analyze analyze-validation-pcap-content\n"
+                "python manage.py handlers dns-analyze analyze-validation-txt-content\n"
+                "python manage.py handlers analyze-dataset host-dataset-handler\n"
+                "python manage.py handlers filter-dataset filter-host-dataset-handler\n"
+                "python manage.py handlers sort sort-host-dataset-handler\n"
+                "python manage.py handlers save-sort save-sort-host-dataset-handler\n"
+                "python manage.py handlers host-analyze analyze-csv-content\n"
+                "python manage.py handlers host-analyze analyze-auth-log-content\n"
+                "python manage.py handlers host-analyze analyze-cpu-log-content\n"
+                "python manage.py handlers host-analyze analyze-diskio-log-content\n"
+                "python manage.py handlers host-analyze analyze-filesystem-log-content\n"
+                "python manage.py handlers host-analyze analyze-fsstat-log-content\n"
+                "python manage.py handlers host-analyze analyze-ghc-content\n"
+                "python manage.py handlers host-analyze analyze-info-content\n"
+                "python manage.py handlers host-analyze analyze-journal-content\n"
+                "python manage.py handlers host-analyze analyze-journal-tilde-content\n"
+                "python manage.py handlers host-analyze analyze-json-content\n"
+                "python manage.py handlers host-analyze analyze-json-1-content\n"
+                "python manage.py handlers host-analyze analyze-load-log-content\n"
+                "python manage.py handlers host-analyze analyze-log-content\n"
+                "python manage.py handlers host-analyze analyze-log-1-content\n"
+                "python manage.py handlers host-analyze analyze-log-2-content\n"
+                "python manage.py handlers host-analyze analyze-log-3-content\n"
+                "python manage.py handlers host-analyze analyze-mail-info-1-content\n"
+                "python manage.py handlers host-analyze analyze-mail-warn-1-content\n"
+                "python manage.py handlers host-analyze analyze-mainlog-content\n"
+                "python manage.py handlers host-analyze analyze-mainlog-1-content\n"
+                "python manage.py handlers host-analyze analyze-mainlog-2-content\n"
+                "python manage.py handlers host-analyze analyze-mainlog-3-content\n"
+                "python manage.py handlers host-analyze analyze-memory-log-content\n"
+                "python manage.py handlers host-analyze analyze-messages-content\n"
+                "python manage.py handlers host-analyze analyze-messages-1-content\n"
+                "python manage.py handlers host-analyze analyze-netflow-ids-content\n"
+                "python manage.py handlers host-analyze analyze-network-log-content\n"
+                "python manage.py handlers host-analyze analyze-pcap-content\n"
+                "python manage.py handlers host-analyze analyze-process-log-content\n"
+                "python manage.py handlers host-analyze analyze-process-summary-log-content\n"
+                "python manage.py handlers host-analyze analyze-sc-content\n"
+                "python manage.py handlers host-analyze analyze-service-log-content\n"
+                "python manage.py handlers host-analyze analyze-socket-summary-log-content\n"
+                "python manage.py handlers host-analyze analyze-syslog-content\n"
+                "python manage.py handlers host-analyze analyze-syslog-1-content\n"
+                "python manage.py handlers host-analyze analyze-syslog-2-content\n"
+                "python manage.py handlers host-analyze analyze-syslog-3-content\n"
+                "python manage.py handlers host-analyze analyze-syslog-4-content\n"
+                "python manage.py handlers host-analyze analyze-syslog-log-content\n"
+                "python manage.py handlers host-analyze analyze-test-bson-content\n"
+                "python manage.py handlers host-analyze analyze-test-csv-content\n"
+                "python manage.py handlers host-analyze analyze-test-json-content\n"
+                "python manage.py handlers host-analyze analyze-test-log-content\n"
+                "python manage.py handlers host-analyze analyze-test-netflow-day-content\n"
+                "python manage.py handlers host-analyze analyze-test-txt-content\n"
+                "python manage.py handlers host-analyze analyze-test-wls-day-content\n"
+                "python manage.py handlers host-analyze analyze-validation-cap-content\n"
+                "python manage.py handlers host-analyze analyze-validation-csv-content\n"
+                "python manage.py handlers host-analyze analyze-validation-json-content\n"
+                "python manage.py handlers host-analyze analyze-validation-netflow-day-content\n"
+                "python manage.py handlers host-analyze analyze-validation-pcap-content\n"
+                "python manage.py handlers host-analyze analyze-validation-pcapng-content\n"
+                "python manage.py handlers host-analyze analyze-validation-txt-content\n"
+                "python manage.py handlers host-analyze analyze-validation-wls-day-content\n"
+                "python manage.py handlers host-analyze analyze-txt-content\n"
+                "python manage.py handlers host-analyze analyze-uptime-log-content\n"
+                "python manage.py handlers host-analyze analyze-xml-content\n"
             )
 
 
