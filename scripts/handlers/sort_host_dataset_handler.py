@@ -328,7 +328,11 @@ class HostDatasetSortHandler:
         Возвращает True, если создан hardlink, иначе False (копия).
         """
         if destination_path.exists():
-            return True
+            if destination_path.samefile(source_path):
+                return True
+            raise FileExistsError(
+                f"Целевой файл уже существует и не совпадает с источником: {destination_path}"
+            )
 
         try:
             os.link(source_path, destination_path)

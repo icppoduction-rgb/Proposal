@@ -1,11 +1,8 @@
 # -*- coding: cp1251 -*-
 
-import os
 import argparse
 
-from pathlib import Path
-
-from dotenv import load_dotenv
+from config import *
 
 try:
     from rich.console import Console
@@ -216,42 +213,6 @@ from scripts.handlers.analyze_host_xml_dataset_handler import (
 )
 
 
-load_dotenv()
-
-PROJECT_ROOT: Path = Path(__file__).resolve().parent
-
-# ---------------------- PATHS FOLDERS ---------------------- #
-
-PATH_DATA_STORAGE: str = os.getenv("PATH_DATA_STORAGE", "")
-
-PATH_REPORT: str = f"{PATH_DATA_STORAGE}/reports"
-
-PATH_FOLDER_DATASETS: str = os.getenv("PATH_FOLDER_DATASETS", "")
-
-PATH_FOLDER_DATASETS_FILTER: str = os.getenv('PATH_FOLDER_DATASETS_FILTER', "")
-
-PATH_TEMP_DATA: str = f"{PATH_DATA_STORAGE}/temp_data"
-
-PATH_HOST_DATASETS: str = os.getenv(
-    "PATH_HOST_DATASETS",
-    fr"{PATH_FOLDER_DATASETS}\host" if PATH_FOLDER_DATASETS else "",
-)
-
-PATH_DNS_DATASETS: str = os.getenv(
-    "PATH_DNS_DATASETS",
-    fr"{PATH_FOLDER_DATASETS}\dns" if PATH_FOLDER_DATASETS else "",
-)
-
-PATH_FILTER_LOG: str = os.getenv(
-    "PATH_FILTER_LOG",
-    str(PROJECT_ROOT / "logs" / "filter.log"),
-)
-
-PATH_HOST_DATASETS_FILTER: str = fr'{PATH_FOLDER_DATASETS_FILTER}\host'
-PATH_DNS_DATASETS_FILTER: str = fr'{PATH_FOLDER_DATASETS_FILTER}\dns'
-
-# ------------------------------ Database settings ------------------------------ #
-
 console = Console()
 
 parser = argparse.ArgumentParser()
@@ -270,9 +231,7 @@ def manage() -> None:
     args, _unknown = parser.parse_known_args()
 
     match (args.module, args.service, args.action):
-        # пример
-        case ("handler", "example", "work_example"):
-            pass
+
 
         case ("dataset", "dns", "analyze"):
             handler = DNSDatasetHandler(

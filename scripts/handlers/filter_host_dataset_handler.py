@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -131,7 +132,8 @@ class HostDatasetFilterHandler:
                     )
                     continue
 
-                if file_path.name not in source_file_names_by_role[role]:
+                file_name = self._path_name(file_path)
+                if file_name not in source_file_names_by_role[role]:
                     excluded_files_count += 1
                     self._track_exclusion(
                         excluded_by_reason=excluded_by_reason,
@@ -144,7 +146,7 @@ class HostDatasetFilterHandler:
 
                 kept_files_count += 1
                 file_paths_by_role_set[role].add(raw_path)
-                files_by_role_set[role].add(file_path.name)
+                files_by_role_set[role].add(file_name)
 
         file_paths_by_role = self._prepare_output(file_paths_by_role_set)
         files_by_role = self._prepare_output(files_by_role_set)
@@ -222,9 +224,10 @@ class HostDatasetFilterHandler:
 
     def _is_allowed_file(self, dataset_name: str, file_path: Path) -> tuple[bool, str]:
         """Проверяет, нужен ли файл для дальнейших этапов подготовки датасетов."""
-        suffix = file_path.suffix.lower()
-        lower_path = str(file_path).lower()
-        file_name_lower = file_path.name.lower()
+        file_name = self._path_name(file_path)
+        suffix = Path(file_name).suffix.lower()
+        lower_path = f"/{self._normalize_path_text(file_path).lower().strip('/')}/"
+        file_name_lower = file_name.lower()
 
         if file_name_lower.startswith("._"):
             return False, "macos_resource_fork_file"
@@ -240,7 +243,7 @@ class HostDatasetFilterHandler:
             return False, f"unsupported_extension:{suffix or '<noext>'}"
 
         if dataset_name == "Maintainable Log Dataset":
-            if "\\logs\\" not in lower_path and "\\alerts_csv\\" not in lower_path and "\\labels\\" not in lower_path:
+            if "/logs/" not in lower_path and "/alerts_csv/" not in lower_path and "/labels/" not in lower_path:
                 return False, "non_telemetry_path_for_maintainable_dataset"
             if suffix in {".jpg", ".jpeg", ".png", ".svg", ".pdf", ".doc", ".docx", ".odt", ".xlsx"}:
                 return False, f"unsupported_binary_or_document_extension:{suffix}"
@@ -277,11 +280,26 @@ class HostDatasetFilterHandler:
     @staticmethod
     def _extract_dataset_name(file_path: Path) -> str | None:
         """Извлекает имя датасета из полного пути."""
-        parts = file_path.parts
+        parts = [
+            part
+            for part in re.split(r"[\\/]+", str(file_path))
+            if part
+        ]
         for index, part in enumerate(parts):
             if part.lower() == "host" and index + 2 < len(parts):
                 return parts[index + 2]
         return None
+
+    @staticmethod
+    def _normalize_path_text(file_path: Path) -> str:
+        """Возвращает путь с единым разделителем для OS-independent проверок."""
+        return str(file_path).replace("\\", "/")
+
+    @classmethod
+    def _path_name(cls, file_path: Path) -> str:
+        """Возвращает basename для путей с POSIX- или Windows-разделителями."""
+        normalized_path = cls._normalize_path_text(file_path).rstrip("/")
+        return normalized_path.rsplit("/", 1)[-1]
 
     @classmethod
     def _init_role_sets(cls) -> dict[str, set[str]]:
