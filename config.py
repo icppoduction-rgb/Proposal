@@ -19,10 +19,7 @@ def _child_path(root: str, child: str) -> str:
 
 PATH_DATA_STORAGE: str = os.getenv("PATH_DATA_STORAGE", "")
 
-PATH_REPORT: str = os.getenv(
-    "PATH_REPORT",
-    _child_path(PATH_DATA_STORAGE, "reports"),
-)
+PATH_REPORT: str = f'{PATH_DATA_STORAGE}/report'
 
 PATH_FOLDER_DATASETS: str = os.getenv("PATH_FOLDER_DATASETS", "")
 
