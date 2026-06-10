@@ -3,7 +3,6 @@
 import argparse
 
 from config import *
-from scripts.handlers.host_analyze.analyze_host_cpu_log_dataset_handler import HostCPULogContentAnalysisHandler
 
 try:
     from rich.console import Console
@@ -15,15 +14,6 @@ except ModuleNotFoundError:
         def print(message: str) -> None:
             print(message)
 
-from scripts.handlers.analyze_dataset.dns_dataset_handler import DNSDatasetHandler
-from scripts.handlers.analyze_dataset.host_dataset_handler import HostDatasetHandler
-from scripts.handlers.filter_dataset.filter_host_dataset_handler import HostDatasetFilterHandler
-from scripts.handlers.sort.sort_host_dataset_handler import HostDatasetSortHandler
-from scripts.handlers.save_sort.save_sort_host_path_handler import HostSortedPathExportHandler
-from scripts.handlers.sort.sort_dns_dataset_handler import DNSDatasetSortHandler
-from scripts.handlers.save_sort.save_sort_dns_path_handler import DNSSortedPathExportHandler
-from scripts.handlers.host_analyze.analyze_host_csv_dataset_handler import HostCSVContentAnalysisHandler
-from scripts.handlers.host_analyze.analyze_host_auth_log_dataset_handler import HostAuthLogContentAnalysisHandler
 from scripts.handlers.host_analyze.analyze_host_diskio_log_dataset_handler import HostDiskioLogContentAnalysisHandler
 from scripts.handlers.host_analyze.analyze_host_filesystem_log_dataset_handler import (
     HostFilesystemLogContentAnalysisHandler,
@@ -228,146 +218,13 @@ def manage() -> None:
     ”правл€ет запуском скриптов проекта через аргументы командной строки.
     """
 
+    from scripts.router_script import router_commands
+
     args, _unknown = parser.parse_known_args()
 
-    print("# =========== ", args.module, args.service, args.action)
+    router_commands(args.module, args.service, args.action)
 
     match (args.module, args.service, args.action):
-
-        case ("handlers", "analyze-dataset", "dns-dataset-handler"):
-            handler = DNSDatasetHandler(
-                dns_datasets_path=PATH_DNS_DATASETS,
-                temp_data_path=PATH_TEMP_DATA,
-            )
-            result = handler.analyze_and_save()
-            console.print(
-                "DNS dataset analysis completed.\n"
-                f"Path JSON: {result.path_json_file}\n"
-                f"Files JSON: {result.files_json_file}"
-            )
-
-        case ("handlers", "analyze-dataset", "host-dataset-handler"):
-            handler = HostDatasetHandler(
-                host_datasets_path=PATH_HOST_DATASETS,
-                temp_data_path=PATH_TEMP_DATA,
-            )
-            result = handler.analyze_and_save()
-            console.print(
-                "Host dataset analysis completed.\n"
-                f"Path JSON: {result.path_json_file}\n"
-                f"Files JSON: {result.files_json_file}"
-            )
-
-        case ("handlers", "filter-dataset", "filter-host-dataset-handler"):
-            handler = HostDatasetFilterHandler(
-                temp_data_path=PATH_TEMP_DATA,
-                log_file_path=PATH_FILTER_LOG,
-            )
-            result = handler.filter_and_save()
-            console.print(
-                "Host dataset filter_dataset completed.\n"
-                f"Path JSON: {result.path_json_file}\n"
-                f"Files JSON: {result.files_json_file}\n"
-                f"Log file: {result.log_file}\n"
-                f"Kept files: {result.kept_files_count}\n"
-                f"Excluded files: {result.excluded_files_count}\n"
-                f"Excluded reasons: {result.excluded_by_reason}"
-            )
-
-        case ("handlers", "sort", "sort-host-dataset-handler"):
-            handler = HostDatasetSortHandler(
-                temp_data_path=PATH_TEMP_DATA,
-                host_datasets_filter_path=PATH_HOST_DATASETS_FILTER,
-            )
-            result = handler.sort_and_prepare()
-            console.print(
-                "Host dataset sort completed.\n"
-                f"Sorted root: {result.sorted_root_path}\n"
-                f"Summary JSON: {result.summary_json_file}\n"
-                f"Created hardlinks: {result.created_links_count}\n"
-                f"Copied files: {result.copied_files_count}\n"
-                f"Skipped existing: {result.skipped_existing_count}\n"
-                f"Missing source files: {result.missing_source_count}\n"
-                f"Name mismatches: {result.name_mismatch_count}\n"
-                f"Formats by role: {result.files_by_role_and_format}"
-            )
-
-        case ("handlers", "save-sort", "save-sort-host-dataset-handler"):
-            handler = HostSortedPathExportHandler(
-                host_datasets_filter_path=PATH_HOST_DATASETS_FILTER,
-                temp_data_path=PATH_TEMP_DATA,
-            )
-            result = handler.export_paths()
-            console.print(
-                "Host sorted path export completed.\n"
-                f"JSON file: {result.json_file}\n"
-                f"Scanned files: {result.scanned_files_count}\n"
-                f"Counts by role/format: {result.counts_by_role_and_format}"
-            )
-
-        case ("handlers", "host-analyze", "analyze-csv-content"):
-            handler = HostCSVContentAnalysisHandler(
-                temp_data_path=PATH_TEMP_DATA,
-                project_root=PROJECT_ROOT,
-                report_path=PATH_REPORT,
-            )
-            result = handler.analyze_and_generate_docs()
-            console.print(
-                "Host CSV content analysis completed.\n"
-                f"Summary JSON: {result.summary_json_file}\n"
-                f"RU doc: {result.docs_ru_file}\n"
-                f"EN doc: {result.docs_en_file}\n"
-                f"RU index: {result.docs_ru_readme_file}\n"
-                f"EN index: {result.docs_en_readme_file}\n"
-                f"RU report: {result.report_ru_file}\n"
-                f"EN report: {result.report_en_file}\n"
-                f"Total files: {result.total_files_count}\n"
-                f"Sampled files: {result.sampled_files_count}\n"
-                f"Status: {result.status}"
-            )
-
-        case ("handlers", "host-analyze", "analyze-auth-log-content"):
-            handler = HostAuthLogContentAnalysisHandler(
-                temp_data_path=PATH_TEMP_DATA,
-                project_root=PROJECT_ROOT,
-                report_path=PATH_REPORT,
-            )
-            result = handler.analyze_and_generate_docs()
-            console.print(
-                "Host auth.log content analysis completed.\n"
-                f"Summary JSON: {result.summary_json_file}\n"
-                f"RU doc: {result.docs_ru_file}\n"
-                f"EN doc: {result.docs_en_file}\n"
-                f"RU index: {result.docs_ru_readme_file}\n"
-                f"EN index: {result.docs_en_readme_file}\n"
-                f"RU report: {result.report_ru_file}\n"
-                f"EN report: {result.report_en_file}\n"
-                f"Total files: {result.total_files_count}\n"
-                f"Sampled files: {result.sampled_files_count}\n"
-                f"Status: {result.status}"
-            )
-
-        case ("handlers", "host-analyze", "analyze-cpu-log-content"):
-            pass
-            handler = HostCPULogContentAnalysisHandler(
-                temp_data_path=PATH_TEMP_DATA,
-                project_root=PROJECT_ROOT,
-                report_path=PATH_REPORT,
-            )
-            result = handler.analyze_and_generate_docs()
-            console.print(
-                "Host cpu.log content analysis completed.\n"
-                f"Summary JSON: {result.summary_json_file}\n"
-                f"RU doc: {result.docs_ru_file}\n"
-                f"EN doc: {result.docs_en_file}\n"
-                f"RU index: {result.docs_ru_readme_file}\n"
-                f"EN index: {result.docs_en_readme_file}\n"
-                f"RU report: {result.report_ru_file}\n"
-                f"EN report: {result.report_en_file}\n"
-                f"Total files: {result.total_files_count}\n"
-                f"Sampled files: {result.sampled_files_count}\n"
-                f"Status: {result.status}"
-            )
 
         case ("handlers", "host-analyze", "analyze-diskio-log-content"):
             handler = HostDiskioLogContentAnalysisHandler(
@@ -1524,37 +1381,6 @@ def manage() -> None:
                 f"Status: {result.status}"
             )
 
-        case ("handlers", "sort", "sort-dns-dataset-handler"):
-            handler = DNSDatasetSortHandler(
-                temp_data_path=PATH_TEMP_DATA,
-                dns_datasets_filter_path=PATH_DNS_DATASETS_FILTER,
-            )
-            result = handler.sort_and_prepare()
-            console.print(
-                "DNS dataset sort completed.\n"
-                f"Sorted root: {result.sorted_root_path}\n"
-                f"Summary JSON: {result.summary_json_file}\n"
-                f"Created hardlinks: {result.created_links_count}\n"
-                f"Copied files: {result.copied_files_count}\n"
-                f"Skipped existing: {result.skipped_existing_count}\n"
-                f"Missing source files: {result.missing_source_count}\n"
-                f"Name mismatches: {result.name_mismatch_count}\n"
-                f"Formats by role: {result.files_by_role_and_format}"
-            )
-
-        case ("handlers", "save-sort", "save-sort-dns-dataset-handler"):
-            handler = DNSSortedPathExportHandler(
-                dns_datasets_filter_path=PATH_DNS_DATASETS_FILTER,
-                temp_data_path=PATH_TEMP_DATA,
-            )
-            result = handler.export_paths()
-            console.print(
-                "DNS sorted path export completed.\n"
-                f"JSON file: {result.json_file}\n"
-                f"Scanned files: {result.scanned_files_count}\n"
-                f"Counts by role/format: {result.counts_by_role_and_format}"
-            )
-
         case ("handlers", "dns-analyze", "analyze-train-csv-content"):
             handler = DNSTrainCSVContentAnalysisHandler(
                 temp_data_path=PATH_TEMP_DATA,
@@ -1724,82 +1550,7 @@ def manage() -> None:
             )
 
         case _:
-            console.print(
-                "Commands:\n"
-                "python manage.py handlers analyze-dataset dns-dataset-handler\n"
-                "python manage.py handlers sort sort-dns-dataset-handler\n"
-                "python manage.py handlers save-sort save-sort-dns-dataset-handler\n"
-                "python manage.py handlers dns-analyze analyze-train-csv-content\n"
-                "python manage.py handlers dns-analyze analyze-train-pcap-content\n"
-                "python manage.py handlers dns-analyze analyze-train-pcap-csv-content\n"
-                "python manage.py handlers dns-analyze analyze-test-csv-content\n"
-                "python manage.py handlers dns-analyze analyze-test-pcap-content\n"
-                "python manage.py handlers dns-analyze analyze-test-pcap-csv-content\n"
-                "python manage.py handlers dns-analyze analyze-validation-pcap-content\n"
-                "python manage.py handlers dns-analyze analyze-validation-txt-content\n"
-                "python manage.py handlers analyze-dataset host-dataset-handler\n"
-                "python manage.py handlers filter-dataset filter-host-dataset-handler\n"
-                "python manage.py handlers sort sort-host-dataset-handler\n"
-                "python manage.py handlers save-sort save-sort-host-dataset-handler\n"
-                "python manage.py handlers host-analyze analyze-csv-content\n"
-                "python manage.py handlers host-analyze analyze-auth-log-content\n"
-                "python manage.py handlers host-analyze analyze-cpu-log-content\n"
-                "python manage.py handlers host-analyze analyze-diskio-log-content\n"
-                "python manage.py handlers host-analyze analyze-filesystem-log-content\n"
-                "python manage.py handlers host-analyze analyze-fsstat-log-content\n"
-                "python manage.py handlers host-analyze analyze-ghc-content\n"
-                "python manage.py handlers host-analyze analyze-info-content\n"
-                "python manage.py handlers host-analyze analyze-journal-content\n"
-                "python manage.py handlers host-analyze analyze-journal-tilde-content\n"
-                "python manage.py handlers host-analyze analyze-json-content\n"
-                "python manage.py handlers host-analyze analyze-json-1-content\n"
-                "python manage.py handlers host-analyze analyze-load-log-content\n"
-                "python manage.py handlers host-analyze analyze-log-content\n"
-                "python manage.py handlers host-analyze analyze-log-1-content\n"
-                "python manage.py handlers host-analyze analyze-log-2-content\n"
-                "python manage.py handlers host-analyze analyze-log-3-content\n"
-                "python manage.py handlers host-analyze analyze-mail-info-1-content\n"
-                "python manage.py handlers host-analyze analyze-mail-warn-1-content\n"
-                "python manage.py handlers host-analyze analyze-mainlog-content\n"
-                "python manage.py handlers host-analyze analyze-mainlog-1-content\n"
-                "python manage.py handlers host-analyze analyze-mainlog-2-content\n"
-                "python manage.py handlers host-analyze analyze-mainlog-3-content\n"
-                "python manage.py handlers host-analyze analyze-memory-log-content\n"
-                "python manage.py handlers host-analyze analyze-messages-content\n"
-                "python manage.py handlers host-analyze analyze-messages-1-content\n"
-                "python manage.py handlers host-analyze analyze-netflow-ids-content\n"
-                "python manage.py handlers host-analyze analyze-network-log-content\n"
-                "python manage.py handlers host-analyze analyze-pcap-content\n"
-                "python manage.py handlers host-analyze analyze-process-log-content\n"
-                "python manage.py handlers host-analyze analyze-process-summary-log-content\n"
-                "python manage.py handlers host-analyze analyze-sc-content\n"
-                "python manage.py handlers host-analyze analyze-service-log-content\n"
-                "python manage.py handlers host-analyze analyze-socket-summary-log-content\n"
-                "python manage.py handlers host-analyze analyze-syslog-content\n"
-                "python manage.py handlers host-analyze analyze-syslog-1-content\n"
-                "python manage.py handlers host-analyze analyze-syslog-2-content\n"
-                "python manage.py handlers host-analyze analyze-syslog-3-content\n"
-                "python manage.py handlers host-analyze analyze-syslog-4-content\n"
-                "python manage.py handlers host-analyze analyze-syslog-log-content\n"
-                "python manage.py handlers host-analyze analyze-test-bson-content\n"
-                "python manage.py handlers host-analyze analyze-test-csv-content\n"
-                "python manage.py handlers host-analyze analyze-test-json-content\n"
-                "python manage.py handlers host-analyze analyze-test-log-content\n"
-                "python manage.py handlers host-analyze analyze-test-netflow-day-content\n"
-                "python manage.py handlers host-analyze analyze-test-txt-content\n"
-                "python manage.py handlers host-analyze analyze-test-wls-day-content\n"
-                "python manage.py handlers host-analyze analyze-validation-cap-content\n"
-                "python manage.py handlers host-analyze analyze-validation-csv-content\n"
-                "python manage.py handlers host-analyze analyze-validation-json-content\n"
-                "python manage.py handlers host-analyze analyze-validation-netflow-day-content\n"
-                "python manage.py handlers host-analyze analyze-validation-pcap-content\n"
-                "python manage.py handlers host-analyze analyze-validation-pcapng-content\n"
-                "python manage.py handlers host-analyze analyze-validation-txt-content\n"
-                "python manage.py handlers host-analyze analyze-validation-wls-day-content\n"
-                "python manage.py handlers host-analyze analyze-txt-content\n"
-                "python manage.py handlers host-analyze analyze-uptime-log-content\n"
-                "python manage.py handlers host-analyze analyze-xml-content\n"
-            )
+            console.print(manage_commands)
 
 
 if __name__ == "__main__":
