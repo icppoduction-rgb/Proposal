@@ -126,9 +126,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task01(Проверить текущую структуру репозитория и подготовить место для DB layer).md
+   PATH_REPORT/ru/stage-two/Task1(Проверить текущую структуру репозитория и подготовить место для DB layer).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task01(Проверить текущую структуру репозитория и подготовить место для DB layer).md
+   PATH_REPORT/en/stage-two/Task1(Check the current repository structure and prepare space for the DB layer).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -175,9 +175,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task02(Добавить зависимости для SQLAlchemy, PostgreSQL driver и Alembic).md
+   PATH_REPORT/ru/stage-two/Task2(Добавить зависимости для SQLAlchemy, PostgreSQL driver и Alembic).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task02(Добавить зависимости для SQLAlchemy, PostgreSQL driver и Alembic).md
+   PATH_REPORT/en/stage-two/Task2(Add dependencies for SQLAlchemy, PostgreSQL driver, and Alembic).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -222,9 +222,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task03(Обновить .env.example для PostgreSQL catalog).md
+   PATH_REPORT/ru/stage-two/Ta3(Обновить .env.example для PostgreSQL catalog).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task03(Обновить .env.example для PostgreSQL catalog).md
+   PATH_REPORT/en/stage-two/Task3(Update .env.example for PostgreSQL catalog).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -275,9 +275,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task04(Реализовать scripts-db-config.py).md
+   PATH_REPORT/ru/stage-two/Task4(Реализовать scripts-db-config.py).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task04(Реализовать scripts-db-config.py).md
+   PATH_REPORT/en/stage-two/Task4(Implement scripts-db-config.py).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -332,9 +332,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task05(Реализовать scripts-db-session.py).md
+   PATH_REPORT/ru/stage-two/Task5(Реализовать scripts-db-session.py).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task05(Реализовать scripts-db-session.py).md
+   PATH_REPORT/en/stage-two/Task5(Implement scripts-db-session.py).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -384,9 +384,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task06(Создать SQLAlchemy Base и naming convention для constraints).md
+   PATH_REPORT/ru/stage-two/Task6(Создать SQLAlchemy Base и naming convention для constraints).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task06(Создать SQLAlchemy Base и naming convention для constraints).md
+   PATH_REPORT/en/stage-two/Task6(Create SQLAlchemy Base and naming convention for constraints).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -471,9 +471,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task07(Реализовать ORM-модели datasets, ingestion_runs и dataset_files).md
+   PATH_REPORT/ru/stage-two/Task7(Реализовать ORM-модели datasets, ingestion_runs и dataset_files).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task07(Реализовать ORM-модели datasets, ingestion_runs и dataset_files).md
+   PATH_REPORT/en/stage-two/Task7(Implement the ORM models datasets, ingestion_runs, and dataset_files).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -541,9 +541,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task08(Реализовать ORM-модели parser_registry, parser_runs и schema_versions).md
+   PATH_REPORT/ru/stage-two/Task8(Реализовать ORM-модели parser_registry, parser_runs и schema_versions).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task08(Реализовать ORM-модели parser_registry, parser_runs и schema_versions).md
+   PATH_REPORT/en/stage-two/Task8(Implement the ORM models datasets, ingestion_runs, and dataset_files).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -621,9 +621,9 @@ Acceptance criteria:
 
 Отчет после выполнения:
 1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task09(Реализовать ORM-модели normalized_artifacts, feature_artifacts и model_ready_artifacts).md
+   PATH_REPORT/ru/stage-two/Task9(Реализовать ORM-модели normalized_artifacts, feature_artifacts и model_ready_artifacts).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task09(Реализовать ORM-модели normalized_artifacts, feature_artifacts и model_ready_artifacts).md
+   PATH_REPORT/en/stage-two/Task9(Implement ORM models normalized_artifacts, feature_artifacts and model_ready_artifacts).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -689,7 +689,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task10(Реализовать ORM-модель data_quality_reports).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task10(Реализовать ORM-модель data_quality_reports).md
+   PATH_REPORT/en/stage-two/Task10(Implement the data_quality_reports ORM model).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -744,7 +744,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task11(Экспортировать все модели через scripts-db-models-__init__.py).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task11(Экспортировать все модели через scripts-db-models-__init__.py).md
+   PATH_REPORT/en/stage-two/Task11(Export all models via scripts-db-models-__init__.py).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -798,7 +798,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task12(Настроить Alembic внутри scripts-db-migrations).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task12(Настроить Alembic внутри scripts-db-migrations).md
+   PATH_REPORT/en/stage-two/Task12(Configure Alembic within scripts-db-migrations).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -859,7 +859,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task13(Создать initial Alembic migration для 10 catalog tables).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task13(Создать initial Alembic migration для 10 catalog tables).md
+   PATH_REPORT/en/stage-two/Task13(Create an initial Alembic migration for 10 catalog tables).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -908,7 +908,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task14(Добавить smoke script для проверки подключения и структуры catalog schema).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task14(Добавить smoke script для проверки подключения и структуры catalog schema).md
+   PATH_REPORT/en/stage-two/Task14(Add a smoke script to check the connection and catalog schema structure).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -959,7 +959,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task15(Создать repository package и базовый repository helper).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task15(Создать repository package и базовый repository helper).md
+   PATH_REPORT/en/stage-two/Task15(Create a repository package and a basic repository helper).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -1016,7 +1016,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task16(Реализовать DatasetRepository и IngestionRepository).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task16(Реализовать DatasetRepository и IngestionRepository).md
+   PATH_REPORT/en/stage-two/Task16(Implement DatasetRepository and IngestionRepository).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -1073,7 +1073,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task17(Реализовать DatasetFileRepository с bulk insert - upsert skeleton).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task17(Реализовать DatasetFileRepository с bulk insert - upsert skeleton).md
+   PATH_REPORT/en/stage-two/Task17(Implement DatasetFileRepository with bulk insert - upsert skeleton).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -1128,7 +1128,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task18(Реализовать ParserRepository и SchemaVersionRepository).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task18(Реализовать ParserRepository и SchemaVersionRepository).md
+   PATH_REPORT/en/stage-two/Task18(Implement ParserRepository and SchemaVersionRepository).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -1184,7 +1184,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task19(Реализовать ArtifactRepository и DataQualityRepository).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task19(Реализовать ArtifactRepository и DataQualityRepository).md
+   PATH_REPORT/en/stage-two/Task19(Implement ArtifactRepository and DataQualityRepository).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -1242,7 +1242,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task20(Добавить integration smoke test для constraints и rollback).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task20(Добавить integration smoke test для constraints и rollback).md
+   PATH_REPORT/en/stage-two/Task20(Add smoke test integration for constraints and rollback)).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
@@ -1301,7 +1301,7 @@ Acceptance criteria:
 1. Создать русский отчет:
    PATH_REPORT/ru/stage-two/Task21(Обновить README - project docs по DB foundation).md
 2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task21(Обновить README - project docs по DB foundation).md
+   PATH_REPORT/en/stage-two/Task21(Update README - project docs for DB Foundation).md
 3. В каждом отчете указать:
    - номер и название задачи;
    - цель задачи;
