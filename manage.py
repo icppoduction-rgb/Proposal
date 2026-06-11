@@ -1,5 +1,3 @@
-# -*- coding: cp1251 -*-
-
 import argparse
 
 from config import *
