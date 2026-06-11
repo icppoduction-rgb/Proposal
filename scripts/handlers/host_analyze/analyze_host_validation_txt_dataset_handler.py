@@ -5,7 +5,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
+from config import (
+    DOCS_EN_ANALYSIS_HOST_VALIDATION,
+    DOCS_RU_ANALYSIS_HOST_VALIDATION,
+    REPORTS_RU_STAGE_ONE_ANALYSIS_HOST_VALIDATION,
+    REPORTS_EN_STAGE_ONE_ANALYSIS_HOST_VALIDATION
+)
 from scripts.handlers.host_analyze.analyze_host_test_txt_dataset_handler import HostTestTXTContentAnalysisHandler
 from scripts.handlers.json_handler.json_data import JsonDataManager
 
@@ -50,14 +55,11 @@ class HostValidationTXTContentAnalysisHandler(HostTestTXTContentAnalysisHandler)
         max_lines_per_file: int = HostTestTXTContentAnalysisHandler.DEFAULT_MAX_LINES_PER_FILE,
     ) -> None:
         super().__init__(temp_data_path, project_root, max_files_per_format, max_lines_per_file)
-        self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "host" / "validation"
-        self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "host" / "validation"
-        self.report_ru_dir = (
-            self.report_path / "ru" / "stage-one" / "analysis-dataset" / "host" / "validation"
-        )
-        self.report_en_dir = (
-            self.report_path / "en" / "stage-one" / "analysis-dataset" / "host" / "validation"
-        )
+
+        self.docs_ru_dir = f"{self.project_root}/{DOCS_RU_ANALYSIS_HOST_VALIDATION}"
+        self.docs_en_dir = f"{self.project_root}/{DOCS_EN_ANALYSIS_HOST_VALIDATION}"
+        self.report_ru_dir = f"{self.report_path}/{REPORTS_RU_STAGE_ONE_ANALYSIS_HOST_VALIDATION}"
+        self.report_en_dir = f"{self.report_path}/{REPORTS_EN_STAGE_ONE_ANALYSIS_HOST_VALIDATION}"
 
     def analyze_and_generate_docs(self) -> HostValidationTXTContentAnalysisResult:
         role_to_formats = self._read_source_json()

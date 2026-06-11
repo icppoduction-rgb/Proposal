@@ -6,7 +6,12 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
+from config import (
+DOCS_RU_ANALYSIS_HOST_TEST,
+DOCS_EN_ANALYSIS_HOST_TEST,
+REPORTS_RU_STAGE_ONE_ANALYSIS_HOST_TEST,
+REPORTS_EN_STAGE_ONE_ANALYSIS_HOST_TEST,
+)
 from scripts.handlers.json_handler.json_data import JsonDataManager
 
 
@@ -68,10 +73,10 @@ class HostTestCSVContentAnalysisHandler:
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_lines_per_file = max(50, max_lines_per_file)
 
-        self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "host" / "test"
-        self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "host" / "test"
-        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "host" / "test"
-        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "host" / "test"
+        self.docs_ru_dir = f"{self.project_root}/{DOCS_RU_ANALYSIS_HOST_TEST}"
+        self.docs_en_dir = f"{self.project_root}/{DOCS_EN_ANALYSIS_HOST_TEST}"
+        self.report_ru_dir = f"{self.report_path}/{REPORTS_RU_STAGE_ONE_ANALYSIS_HOST_TEST}"
+        self.report_en_dir = f"{self.report_path}/{REPORTS_EN_STAGE_ONE_ANALYSIS_HOST_TEST}"
 
     def analyze_and_generate_docs(self) -> HostTestCSVContentAnalysisResult:
         role_to_formats = self._read_source_json()
