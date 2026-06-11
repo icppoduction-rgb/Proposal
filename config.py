@@ -168,5 +168,4 @@ manage_commands: str = (
     "python manage.py handlers host-analyze analyze-txt-content\n"
     "python manage.py handlers host-analyze analyze-uptime-log-content\n"
     "python manage.py handlers host-analyze analyze-xml-content\n"
-
 )
