@@ -5,7 +5,12 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
+from config import (
+    DOCS_EN_ANALYSIS_DNS_VALIDATION,
+    DOCS_RU_ANALYSIS_DNS_VALIDATION,
+    REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_VALIDATION,
+    REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_VALIDATION
+)
 from scripts.handlers.json_handler.json_data import JsonDataManager
 
 
@@ -63,10 +68,11 @@ class DNSValidationTXTContentAnalysisHandler:
         self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_lines_per_file = max(1, max_lines_per_file)
-        self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "validation"
-        self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "validation"
-        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "validation"
-        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "validation"
+
+        self.docs_ru_dir = f"{self.project_root}/{DOCS_RU_ANALYSIS_DNS_VALIDATION}"
+        self.docs_en_dir = f"{self.project_root}/{DOCS_EN_ANALYSIS_DNS_VALIDATION}"
+        self.report_ru_dir = f"{self.report_path}/{REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_VALIDATION}"
+        self.report_en_dir = f"{self.report_path}/{REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_VALIDATION}" 
 
     def analyze_and_generate_docs(self) -> DNSValidationTXTContentAnalysisResult:
         all_paths = self._extract_paths(self._read_source_json())

@@ -51,6 +51,23 @@ DOCS_RU_ANALYSIS_HOST_TEST: str = "docs/ru/analysis-dataset/host/test"
 DOCS_EN_ANALYSIS_HOST_VALIDATION: str = "docs/en/analysis-dataset/host/validation"
 DOCS_RU_ANALYSIS_HOST_VALIDATION: str = "docs/ru/analysis-dataset/host/validation"
 
+REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_TRAIN: str = "en/stage-one/analysis-dataset/dns/train"
+REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_TRAIN: str = "ru/stage-one/analysis-dataset/dns/train"
+
+REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_TEST: str = "en/stage-one/analysis-dataset/dns/test"
+REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_TEST: str = "ru/stage-one/analysis-dataset/dns/test"
+
+REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_VALIDATION: str = "en/stage-one/analysis-dataset/dns/validation"
+REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_VALIDATION: str = "ru/stage-one/analysis-dataset/dns/validation"
+
+DOCS_EN_ANALYSIS_DNS_TRAIN: str = "docs/en/analysis-dataset/dns/train"
+DOCS_RU_ANALYSIS_DNS_TRAIN: str = "docs/ru/analysis-dataset/host/train"
+
+DOCS_EN_ANALYSIS_DNS_TEST: str = "docs/en/analysis-dataset/dns/test"
+DOCS_RU_ANALYSIS_DNS_TEST: str = "docs/ru/analysis-dataset/dns/test"
+
+DOCS_EN_ANALYSIS_DNS_VALIDATION: str = "docs/en/analysis-dataset/dns/validation"
+DOCS_RU_ANALYSIS_DNS_VALIDATION: str = "docs/ru/analysis-dataset/dns/validation"
 
 # ----------------------------------------------------------------
 

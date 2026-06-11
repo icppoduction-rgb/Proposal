@@ -4,7 +4,12 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
+from config import (
+    DOCS_EN_ANALYSIS_DNS_TEST,
+    DOCS_RU_ANALYSIS_DNS_TEST,
+    REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_TEST,
+    REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_TEST
+)
 from scripts.handlers.json_handler.json_data import JsonDataManager
 
 
@@ -40,10 +45,11 @@ class DNSTestPCAPCSVContentAnalysisHandler:
         self.temp_data_path = Path(temp_data_path).expanduser()
         self.project_root = Path(project_root).expanduser()
         self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
-        self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "test"
-        self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "test"
-        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "test"
-        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "test"
+
+        self.docs_ru_dir = f"{self.project_root}/{DOCS_RU_ANALYSIS_DNS_TEST}"
+        self.docs_en_dir = f"{self.project_root}/{DOCS_EN_ANALYSIS_DNS_TEST}"
+        self.report_ru_dir = f"{self.report_path}/{REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_TEST}"
+        self.report_en_dir = f"{self.report_path}/{REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_TEST}"
 
     def analyze_and_generate_docs(self) -> DNSTestPCAPCSVContentAnalysisResult:
         payload = self._read_source_json()

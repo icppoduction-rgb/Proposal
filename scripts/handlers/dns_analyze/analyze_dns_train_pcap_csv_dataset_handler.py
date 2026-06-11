@@ -6,7 +6,12 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
+from config import (
+    DOCS_EN_ANALYSIS_DNS_TRAIN,
+    DOCS_RU_ANALYSIS_DNS_TRAIN,
+    REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_TRAIN,
+    REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_TRAIN
+)
 from scripts.handlers.json_handler.json_data import JsonDataManager
 
 
@@ -101,10 +106,10 @@ class DNSTrainPCAPCSVContentAnalysisHandler:
         self.report_path = Path(report_path).expanduser() if report_path is not None else self.project_root / "report"
         self.max_files_per_format = max(1, max_files_per_format)
         self.max_rows_per_file = max(1, max_rows_per_file)
-        self.docs_ru_dir = self.project_root / "docs" / "ru" / "analysis-dataset" / "dns" / "train"
-        self.docs_en_dir = self.project_root / "docs" / "en" / "analysis-dataset" / "dns" / "train"
-        self.report_ru_dir = self.report_path / "ru" / "stage-one" / "analysis-dataset" / "dns" / "train"
-        self.report_en_dir = self.report_path / "en" / "stage-one" / "analysis-dataset" / "dns" / "train"
+        self.docs_ru_dir = f"{self.project_root}/{DOCS_RU_ANALYSIS_DNS_TRAIN}"
+        self.docs_en_dir = f"{self.project_root}/{DOCS_EN_ANALYSIS_DNS_TRAIN}"
+        self.report_ru_dir = f"{self.report_path}/{REPORTS_RU_STAGE_ONE_ANALYSIS_DNS_TRAIN}"
+        self.report_en_dir = f"{self.report_path}/{REPORTS_EN_STAGE_ONE_ANALYSIS_DNS_TRAIN}"
 
     def analyze_and_generate_docs(self) -> DNSTrainPCAPCSVContentAnalysisResult:
         all_paths = self._extract_paths(self._read_source_json())
