@@ -6,6 +6,7 @@ from scripts.handlers.sort.router_sort import router_sort
 from scripts.handlers.save_sort.router_save import router_save
 from scripts.handlers.filter_dataset.router_filter import router_filter
 from scripts.handlers.host_analyze.router_host import router_host
+from scripts.handlers.dns_analyze.router_dns import router_dns
 
 console = Console()
 
@@ -28,10 +29,11 @@ def router_commands_handlers(service: str, action: str):
         router_filter(action)
 
     elif service == "dns-analyze":
-        pass
 
+        router_dns(action)
 
     elif service == "host-analyze":
+
         router_host(action)
 
     else:
