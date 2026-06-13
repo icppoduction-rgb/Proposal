@@ -1,2 +1,5 @@
+alembic
+psycopg[binary]
 python-dotenv
 rich
+sqlalchemy
