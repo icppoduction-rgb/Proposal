@@ -1,0 +1,112 @@
+{
+  "schema_name": "feature_artifact",
+  "schema_version": "v1",
+  "layer": "features",
+  "description": "Stage Two feature artifact contract for feature Parquet outputs and PostgreSQL catalog registration.",
+  "feature_groups": [
+    {
+      "name": "dns_features",
+      "branch": "dns",
+      "description": "DNS lexical, packet, resolver, and domain-level features derived from normalized DNS events."
+    },
+    {
+      "name": "host_syscall_features",
+      "branch": "host",
+      "description": "Host syscall/API sequence and aggregate features derived from normalized syscall or sandbox events."
+    },
+    {
+      "name": "host_eventlog_features",
+      "branch": "host",
+      "description": "Host event log, auth, process, and file activity features."
+    },
+    {
+      "name": "host_metrics_features",
+      "branch": "host",
+      "description": "Host metric features derived from Metricbeat-like CPU, memory, filesystem, network, and service telemetry."
+    },
+    {
+      "name": "network_flow_features",
+      "branch": "network",
+      "description": "Packet, flow, NetFlow, and network summary features."
+    },
+    {
+      "name": "hybrid_features",
+      "branch": "hybrid",
+      "description": "Cross-domain host plus DNS/network correlation features."
+    },
+    {
+      "name": "sequence_features",
+      "branch": "hybrid",
+      "description": "Ordered event/window features for sequence models with event UID traceability."
+    }
+  ],
+  "required_traceability_fields": [
+    "sample_uid",
+    "dataset_id",
+    "normalized_artifact_id",
+    "role",
+    "branch",
+    "feature_group",
+    "feature_schema_name",
+    "feature_schema_version",
+    "source_event_uid_refs",
+    "source_normalized_path",
+    "created_at"
+  ],
+  "optional_traceability_fields": [
+    "entity_type",
+    "entity_id",
+    "window_start",
+    "window_end",
+    "window_size_seconds",
+    "window_step_seconds",
+    "source_file_hash",
+    "parser_run_id"
+  ],
+  "x_excluded_columns": [
+    "label_binary",
+    "label_family",
+    "label_subtype",
+    "label_source",
+    "label_status",
+    "label_confidence",
+    "label_mapping_rule_id",
+    "dataset_id",
+    "dataset_name",
+    "dataset_role",
+    "role",
+    "branch",
+    "source_file_path",
+    "source_file_hash",
+    "source_normalized_path",
+    "source_event_uid_refs",
+    "parser_run_id",
+    "normalized_artifact_id",
+    "feature_group",
+    "feature_schema_name",
+    "feature_schema_version",
+    "event_uid",
+    "sample_uid",
+    "entity_type",
+    "entity_id",
+    "window_start",
+    "window_end",
+    "window_size_seconds",
+    "window_step_seconds",
+    "scenario_name",
+    "raw_fields_json",
+    "metadata_json",
+    "created_at"
+  ],
+  "catalog_registration": {
+    "table": "feature_artifacts",
+    "path_column": "feature_path",
+    "path_template": "parquet/features/{feature_group}/{role}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet",
+    "large_feature_rows_storage": "Parquet only; PostgreSQL stores metadata and artifact paths."
+  },
+  "null_policy": {
+    "missing_feature_values": "Use Parquet null for missing feature values.",
+    "labels": "Labels may be present for y/analysis, but all label columns are excluded from X model features.",
+    "splits": "TRAIN, VALIDATION, TEST, and EXPERIMENTS remain physically partitioned by role."
+  }
+}

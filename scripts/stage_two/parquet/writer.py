@@ -13,7 +13,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from config import PATH_DATA_STORAGE
-from scripts.db.models import NormalizedArtifact
+from scripts.db.models import FeatureArtifact, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository
 
 
@@ -126,6 +126,21 @@ class ParquetArtifactWriter:
             **metadata,
         }
         return repository.register_normalized_artifact(**values)
+
+    def register_feature_artifact(
+        self,
+        repository: ArtifactRepository,
+        result: ParquetWriteResult,
+        **metadata: Any,
+    ) -> FeatureArtifact:
+        """Register a feature artifact path through ArtifactRepository."""
+        values = {
+            "artifact_uid": metadata.pop("artifact_uid", uuid4()),
+            "feature_path": result.relative_path,
+            "row_count": result.row_count,
+            **metadata,
+        }
+        return repository.register_feature_artifact(**values)
 
     def _write_rows(
         self,
