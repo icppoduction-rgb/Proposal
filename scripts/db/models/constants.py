@@ -23,6 +23,14 @@ RUN_STATUS_VALUES: tuple[str, ...] = (
     "SKIPPED",
     "BLOCKED",
 )
+PARSER_RUN_STATUS_VALUES: tuple[str, ...] = (
+    "RUNNING",
+    "SUCCESS",
+    "PARTIAL_SUCCESS",
+    "FAILED",
+    "SKIPPED",
+)
+SCHEMA_LAYER_VALUES: tuple[str, ...] = ("normalized", "features", "model_ready")
 
 
 def sql_in(values: tuple[str, ...]) -> str:
