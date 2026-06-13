@@ -3,6 +3,7 @@
 **Preparation date:** 2026-06-13  
 **Project:** Behaviour-driven hybrid learning for data exfiltration detection  
 **Purpose:** to define the complete list of features that must be extracted during Stage Two / Feature Engineering for the DNS, Host, Network/Hybrid, and sequence branches.
+**Update:** additional features from the new reference images were added: file-access diversity, sensitive file access, archiving/compression, external destinations, failed-then-success authentication, rare process execution, and stage-transition sequence indicators.
 
 ---
 
@@ -129,6 +130,10 @@ The related document `Dataset Feature Extraction Map` serves as a map: **which g
 |flow_fan_out|LANL/Unified Host-Network; netflow_day|Reconnaissance/Lateral Movement/Exfiltration|Network graph|Number of unique destinations per source.|nunique(dst_host/ip) per src/window.|RF, XGBoost, CNN; SHAP for feature importance|
 |flow_fan_in|LANL/Unified Host-Network; netflow_day|Reconnaissance/Lateral Movement|Network graph|Number of unique sources per destination.|nunique(src_host/ip) per dst/window.|RF, XGBoost, CNN; SHAP for feature importance|
 |src_dst_pair_frequency|Host TEST csv; netflow_day|Reconnaissance/Lateral Movement/Exfiltration|Network graph|Frequency of src/dst pairs.|count(src,dst) per window.|RF, XGBoost, CNN; SHAP for feature importance|
+|outbound_byte_ratio|Unified Host-Network; Host TEST netflow_day/csv; Host VALIDATION cap/pcap/pcapng; DNS/NetFlow windows|Exfiltration|Network flow|Shows whether outbound traffic volume exceeds inbound traffic; useful for detecting data transfer out of the environment.|outbound_bytes / max(inbound_bytes,1) per host/src_ip/window.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|external_destination_count|Unified Host-Network; Host TEST netflow_day/csv; DNS TEST csv; packet captures|Exfiltration|Network destination|Number of unique external IP addresses or domains contacted during a time window.|nunique(external_dst_ip/domain) per host/src_ip/window.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|new_external_destination_indicator|Unified Host-Network; Host TEST netflow_day/csv; DNS TEST csv; packet captures|Exfiltration|Network anomaly|Indicator for connections to external addresses or domains not previously observed in the baseline.|1 if dst not in historical_baseline(host/src_ip), else 0.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|unique_dst_host_count|LANL; Unified Host-Network; Host TEST netflow_day/csv; Host VALIDATION cap/pcap/pcapng|Reconnaissance/Lateral Movement|Network graph|Number of unique destination hosts; a strong indicator of scanning or lateral movement between hosts.|nunique(dst_host/dst_ip) per src_host/src_ip/window.|RF, XGBoost, CNN; SHAP for feature importance|
 |dns_ldap_smb_dcerpc_indicator|Host VALIDATION packet captures|Reconnaissance/Lateral Movement/Collection|Network protocol indicators|DNS/LDAP/SMB/DCERPC indicators based on ports/decoder output.|binary/count per protocol family.|RF, XGBoost, CNN; SHAP for feature importance|
 |network_burst_score|Packet captures; netflow_day|Exfiltration|Network temporal|Network activity bursts.|current_window_count / rolling_baseline.|RF, XGBoost, CNN; SHAP for feature importance|
 
@@ -187,11 +192,17 @@ The related document `Dataset Feature Extraction Map` serves as a map: **which g
 |suspicious_path_indicator|Host process logs; Dynamic Malware; Windows Event Log|Data Staging|Process/path|Indicator of temporary/user/non-standard paths.|regex/path category flags.|RF, XGBoost, CNN; SHAP for feature importance|
 |module_basename_frequency|Dynamic Malware; BSON/JSON; GHC|Data Staging|Module/path|Frequencies of library/module basenames.|count(basename(module_path)).|RF, XGBoost, CNN; SHAP for feature importance|
 |module_path_entropy|Dynamic Malware; BSON/JSON; GHC|Data Staging|Module/path|Entropy of module/path strings.|Shannon entropy(module_path).|RF, XGBoost, CNN; SHAP for feature importance|
+|unique_file_count|ADFA/LID-DS; Maintainable Log Dataset; Windows Event Log; Dynamic Malware; Host logs|Collection|File activity|Number of unique files accessed; helps distinguish broad file discovery/collection from repeated reads of the same file.|nunique(file_path/object_name) per process/user/host/window.|RF, XGBoost, CNN; SHAP for feature importance|
+|sensitive_file_extension_count|ADFA/LID-DS; Maintainable Log Dataset; Windows Event Log; Dynamic Malware; Host logs|Collection|File activity / sensitive data|Number of accesses to potentially sensitive file extensions such as `.docx`, `.xlsx`, `.pdf`, `.csv`, `.sql`, `.zip`, and others.|count(file_ext in sensitive_ext_set) per process/user/host/window.|RF, XGBoost, CNN; SHAP for feature importance|
+|archive_creation_count|Maintainable Log Dataset; Windows Event Log; Dynamic Malware; Host logs|Data Staging|File/archive activity|Number of archive-creation events before potential exfiltration: `.zip`, `.rar`, `.7z`, `.tar`, `.gz`.|count(created_file_ext in archive_ext_set) or archive-write events per window.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|compression_process_indicator|Windows Event Log / OTRF; Dynamic Malware; Host process logs; command-line telemetry|Data Staging|Process/command-line|Indicator for use of archiving or compression tools such as `zip`, `rar`, `7z`, `tar`, `gzip`, `powershell Compress-Archive`, and similar utilities.|binary/count if process_name or command_line matches compression_tool_set.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|failed_then_success_login_indicator|LANL; OTRF; Windows Event Log; auth.log/info/wls_day|Privilege Escalation/Lateral Movement|Host auth sequence|Indicator for a sequence of failed login attempts followed by a successful login; typical for brute-force and password-spraying activity.|1 if failed_login_count >= k before success_login within T for same user/src/host.|RF, XGBoost, CNN, LSTM; SHAP|
+|rare_process_execution_score|OTRF; Windows Event Log; Dynamic Malware; Host process logs; Maintainable Log Dataset|Reconnaissance/Data Staging|Process anomaly|Rarity score for process execution relative to normal system, user, or host behaviour.|-log(P(process_name | host/user/baseline)) or inverse frequency rank.|RF, XGBoost, CNN; SHAP for feature importance|
 |file_access_count|ADFA/LID-DS; Maintainable Log Dataset; Windows Event Log; Dynamic Malware|Collection|File activity|Number of file access operations.|count(open/read/access/stat/readdir/object access).|RF, XGBoost, CNN; SHAP for feature importance|
 |file_access_rate|ADFA/LID-DS; Maintainable; Dynamic Malware|Collection|File activity temporal|File access frequency.|file_access_count / window_duration.|LSTM; RF/XGBoost on window aggregates|
 |file_access_entropy|Host logs; Maintainable; Dynamic Malware|Collection/Data Staging|File activity|Entropy of accessed file paths.|Shannon entropy(file_path tokens).|RF, XGBoost, CNN; SHAP for feature importance|
 |filesystem_used_pct_stats|Host TRAIN filesystem.log|Data Staging|Host resource/storage|Filesystem usage statistics.|mean/max/std(system.filesystem.used.pct).|RF, XGBoost, CNN; SHAP for feature importance|
-|filesystem_pressure_ratio|Host TRAIN filesystem.log|Data Staging|Host resource/storage|Free-space pressure.|1 - available/total or used/total.|RF, XGBoost, CNN; SHAP for feature importance|
+|filesystem_pressure_ratio|Host TRAIN filesystem.log|Data Staging|Host resource/storage|Free-space pressure indicator.|1 - available/total or used/total.|RF, XGBoost, CNN; SHAP for feature importance|
 |inode_free_ratio|Host TRAIN filesystem.log/fsstat.log|Data Staging|Host resource/storage|Ratio of free inodes.|free_files/total_files.|RF, XGBoost, CNN; SHAP for feature importance|
 |fs_total_used_ratio|Host TRAIN fsstat.log|Data Staging|Host resource/storage|Overall filesystem utilization.|total_size.used / total_size.total.|RF, XGBoost, CNN; SHAP for feature importance|
 |disk_read_bytes_rate|Host TRAIN diskio.log|Collection/Data Staging|Host resource/I/O|Disk read rate.|delta(read.bytes)/delta(time).|RF, XGBoost, CNN; SHAP for feature importance|
@@ -217,7 +228,7 @@ The related document `Dataset Feature Extraction Map` serves as a map: **which g
 |event_type_frequency|Host TRAIN json/log-derived files|Cross-stage|Log/event type|Frequencies of event_type: stats/dns/alert, etc.|count(event_type)/window.|RF, XGBoost, CNN; SHAP for feature importance|
 |alert_count|Host TRAIN json/log-derived files|Cross-stage|Alert context|Number of alert events.|count(event_type==alert or alert present).|RF, XGBoost, CNN; SHAP for feature importance|
 |task_lifecycle_duration|Dynamic Malware; Host TEST log/json|Data Staging|Sandbox context|Sandbox task/lifecycle duration.|completed_on - started_on or task timing fields.|Pipeline/label resolver; do not use as an independent feature without leakage control|
-|scenario_image_context|Host VALIDATION csv; Maintainable/LID-DS metadata|Context/labeling|Scenario context|Image/scenario context for joining with events.|categorical scenario_name/image_name; do not use as a model feature when leakage risk exists.|Pipeline/label resolver; do not use as an independent feature without leakage control|
+|scenario_image_context|Host VALIDATION csv; Maintainable/LID-DS metadata|Context/labeling|Scenario context|Image/scenario context for joining with events.|categorical scenario_name/image_name; do not use as a model feature when leakage risk is present.|Pipeline/label resolver; do not use as an independent feature without leakage control|
 |exploit_start_offset|Host VALIDATION csv|Context/labeling|Scenario context/time|Exploit start offset.|exploit_start_time field; use for window labeling.|Pipeline/label resolver; do not use as an independent feature without leakage control|
 |recording_duration|Host VALIDATION csv; LID-DS metadata|Context/labeling|Scenario context/time|Scenario recording duration.|recording_time.|Pipeline/label resolver; do not use as an independent feature without leakage control|
 
@@ -238,6 +249,8 @@ The related document `Dataset Feature Extraction Map` serves as a map: **which g
 |sequence_window_duration|All timestamped DNS/host/network sources|Cross-stage|Sequence|Sequence-window duration.|last_event_time - first_event_time.|LSTM; RF/XGBoost on window aggregates|
 |sequence_event_type_entropy|All event streams|Cross-stage|Sequence|Entropy of event types in the sequence.|Shannon entropy(event_type tokens).|LSTM; RF/XGBoost on window aggregates|
 |sequence_temporal_order_pattern|All event streams|Cross-stage|Sequence|Order of stages/event types in the attack.|ordered tokens mapped to ATT&CK/stage labels.|LSTM; RF/XGBoost on window aggregates|
+|process_file_network_sequence|Unified Host-Network; Dynamic Malware + pcap/netflow; LID-DS/Dynamic Malware + network joins|Collection → Data Staging → Exfiltration|Hybrid sequence|Tracks the action chain: file access → archiving/preparation → data transfer over the network.|ordered pattern match: file_access -> archive/compress -> outbound_network_event within T.|LSTM, late fusion; RF/XGBoost on window aggregates|
+|stage_transition_pattern|All timestamped DNS/host/network sources; MITRE ATT&CK mapped events|Sequential modelling|Sequence / attack progression|Explicitly models transitions between attack stages and helps LSTM detect behavioural progression by an attacker.|ordered stage tokens; transition counts/probabilities between Reconnaissance, Privilege Escalation, Lateral Movement, Collection, Data Staging, Exfiltration.|LSTM; RF/XGBoost on window aggregates; SHAP for sequence-aware attribution|
 |label_binary|All supervised-ready artifacts|Target/context|Label|Target binary label. Not an input feature.|0=benign, 1=malicious/exfiltration, NULL=unknown.|Pipeline/label resolver; do not use as an independent feature without leakage control|
 |label_family|All supervised-ready artifacts|Target/context|Label|Attack family/type. Not an input feature.|benign/dns_exfiltration/malware/phishing/lateral_movement/etc.|Pipeline/label resolver; do not use as an independent feature without leakage control|
 |label_status|All artifacts|Target/context|Label quality|Label status for quality control and leakage control.|explicit/inferred/weak/partial/unlabeled/conflicting.|Pipeline/label resolver; do not use as an independent feature without leakage control|
@@ -325,17 +338,17 @@ The related document `Dataset Feature Extraction Map` serves as a map: **which g
 2. DNS temporal: `dns_query_rate`, `dns_inter_query_interval_stats`, `dns_queries_per_window`.
 3. DNS protocol: `ttl_mean`, `ttl_variance`, `rr_count`, `rr_type_frequency_*`, `dns_response_size_stats`, `dns_nxdomain_rate`.
 4. Host syscall/API: `syscall_frequency`, `syscall_ngram_2_frequency`, `syscall_transition_probability`, `syscall_trace_length`.
-5. Host auth: `failed_login_ratio`, `session_opened_count`, `sudo_activity_count`, `user_host_interaction_count`.
+5. Host auth: `failed_login_ratio`, `failed_then_success_login_indicator`, `session_opened_count`, `sudo_activity_count`, `user_host_interaction_count`.
 6. Windows/Sysmon: `event_id_frequency`, `parent_child_process_count`, `command_line_entropy`, `encoded_powershell_indicator`.
-7. Network: `packet_count`, `byte_count`, `flow_duration`, `protocol_distribution`, `dst_port_frequency`.
-8. Sequence: `sequence_window_event_count`, `sequence_event_type_entropy`, ordered event tokens.
+7. Network: `packet_count`, `byte_count`, `flow_duration`, `protocol_distribution`, `dst_port_frequency`, `outbound_byte_ratio`, `external_destination_count`.
+8. Sequence: `sequence_window_event_count`, `sequence_event_type_entropy`, `process_file_network_sequence`, `stage_transition_pattern`, ordered event tokens.
 
 ### P1 — after the baseline pipeline
 
 1. Domain enrichment: ASN/country/domain age/reputation.
 2. Hybrid correlations: host-network time delta, file-to-network, auth-to-network.
-3. Resource telemetry: CPU/disk/filesystem/network interface burst features.
-4. Graph features: fan-in/fan-out, Source-LogHost degree.
+3. Resource telemetry and staging indicators: CPU/disk/filesystem/network interface burst features, `archive_creation_count`, `compression_process_indicator`, `sensitive_file_extension_count`.
+4. Graph and baseline features: fan-in/fan-out, Source-LogHost degree, `unique_dst_host_count`, `new_external_destination_indicator`, `rare_process_execution_score`.
 
 ### P2 — extension after the baseline
 
@@ -379,7 +392,8 @@ The project should implement not one general extractor, but a set of specialized
 - authentication and Windows/Sysmon extractors;
 - resource telemetry extractors;
 - network/flow extractors;
+- staging/compression and sensitive-file activity extractors;
 - hybrid correlation extractors;
-- sequence window builder for LSTM.
+- sequence window builder for LSTM, including process-file-network and stage-transition patterns.
 
 The final framework should use one consistent feature catalogue, but different parser-specific data sources. This will preserve traceability, prevent leakage, and prepare features for RF, XGBoost, CNN, LSTM, and SHAP analysis.

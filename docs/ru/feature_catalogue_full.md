@@ -3,6 +3,7 @@
 **Дата подготовки:** 2026-06-13  
 **Проект:** Behaviour-driven hybrid learning for data exfiltration detection  
 **Назначение:** зафиксировать полный перечень признаков, которые нужно извлекать в Stage Two / Feature Engineering для DNS, Host, Network/Hybrid и sequence-веток.
+**Обновление:** добавлены дополнительные признаки из новых изображений: file-access diversity, sensitive file access, archiving/compression, external destinations, failed-then-success authentication, rare process execution и stage-transition sequence indicators.
 
 ---
 
@@ -129,6 +130,10 @@
 |flow_fan_out|LANL/Unified Host-Network; netflow_day|Reconnaissance/Lateral Movement/Exfiltration|Network graph|Количество уникальных назначений от источника.|nunique(dst_host/ip) per src/window.|RF, XGBoost, CNN; SHAP для важности признаков|
 |flow_fan_in|LANL/Unified Host-Network; netflow_day|Reconnaissance/Lateral Movement|Network graph|Количество уникальных источников к назначению.|nunique(src_host/ip) per dst/window.|RF, XGBoost, CNN; SHAP для важности признаков|
 |src_dst_pair_frequency|Host TEST csv; netflow_day|Reconnaissance/Lateral Movement/Exfiltration|Network graph|Частота пар src/dst.|count(src,dst) per window.|RF, XGBoost, CNN; SHAP для важности признаков|
+|outbound_byte_ratio|Unified Host-Network; Host TEST netflow_day/csv; Host VALIDATION cap/pcap/pcapng; DNS/NetFlow windows|Exfiltration|Network flow|Показывает, насколько объём исходящего трафика превышает входящий; полезно для выявления передачи данных наружу.|outbound_bytes / max(inbound_bytes,1) per host/src_ip/window.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|external_destination_count|Unified Host-Network; Host TEST netflow_day/csv; DNS TEST csv; packet captures|Exfiltration|Network destination|Количество уникальных внешних IP-адресов или доменов, с которыми установлены соединения за окно.|nunique(external_dst_ip/domain) per host/src_ip/window.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|new_external_destination_indicator|Unified Host-Network; Host TEST netflow_day/csv; DNS TEST csv; packet captures|Exfiltration|Network anomaly|Индикатор соединения с внешним адресом или доменом, который ранее не наблюдался в baseline.|1 if dst not in historical_baseline(host/src_ip), else 0.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|unique_dst_host_count|LANL; Unified Host-Network; Host TEST netflow_day/csv; Host VALIDATION cap/pcap/pcapng|Reconnaissance/Lateral Movement|Network graph|Количество уникальных destination hosts; сильный индикатор сканирования или перемещения между хостами.|nunique(dst_host/dst_ip) per src_host/src_ip/window.|RF, XGBoost, CNN; SHAP для важности признаков|
 |dns_ldap_smb_dcerpc_indicator|Host VALIDATION packet captures|Reconnaissance/Lateral Movement/Collection|Network protocol indicators|Индикаторы DNS/LDAP/SMB/DCERPC по портам/декодеру.|binary/count per protocol family.|RF, XGBoost, CNN; SHAP для важности признаков|
 |network_burst_score|Packet captures; netflow_day|Exfiltration|Network temporal|Всплески сетевой активности.|current_window_count / rolling_baseline.|RF, XGBoost, CNN; SHAP для важности признаков|
 
@@ -187,6 +192,12 @@
 |suspicious_path_indicator|Host process logs; Dynamic Malware; Windows Event Log|Data Staging|Process/path|Индикатор временных/пользовательских/нестандартных путей.|regex/path category flags.|RF, XGBoost, CNN; SHAP для важности признаков|
 |module_basename_frequency|Dynamic Malware; BSON/JSON; GHC|Data Staging|Module/path|Частоты basename библиотек/модулей.|count(basename(module_path)).|RF, XGBoost, CNN; SHAP для важности признаков|
 |module_path_entropy|Dynamic Malware; BSON/JSON; GHC|Data Staging|Module/path|Энтропия module/path строк.|Shannon entropy(module_path).|RF, XGBoost, CNN; SHAP для важности признаков|
+|unique_file_count|ADFA/LID-DS; Maintainable Log Dataset; Windows Event Log; Dynamic Malware; Host logs|Collection|File activity|Количество уникальных файлов, к которым был выполнен доступ; помогает отличить доступ к большому числу разных файлов от многократного чтения одного файла.|nunique(file_path/object_name) per process/user/host/window.|RF, XGBoost, CNN; SHAP для важности признаков|
+|sensitive_file_extension_count|ADFA/LID-DS; Maintainable Log Dataset; Windows Event Log; Dynamic Malware; Host logs|Collection|File activity / sensitive data|Количество обращений к потенциально чувствительным расширениям файлов: `.docx`, `.xlsx`, `.pdf`, `.csv`, `.sql`, `.zip` и другим.|count(file_ext in sensitive_ext_set) per process/user/host/window.|RF, XGBoost, CNN; SHAP для важности признаков|
+|archive_creation_count|Maintainable Log Dataset; Windows Event Log; Dynamic Malware; Host logs|Data Staging|File/archive activity|Количество событий создания архивов перед возможной эксфильтрацией: `.zip`, `.rar`, `.7z`, `.tar`, `.gz`.|count(created_file_ext in archive_ext_set) or archive-write events per window.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|compression_process_indicator|Windows Event Log / OTRF; Dynamic Malware; Host process logs; command-line telemetry|Data Staging|Process/command-line|Индикатор использования процессов и утилит архивации или компрессии: `zip`, `rar`, `7z`, `tar`, `gzip`, `powershell Compress-Archive` и др.|binary/count if process_name or command_line matches compression_tool_set.|RF, XGBoost, CNN, LSTM late-fusion; SHAP|
+|failed_then_success_login_indicator|LANL; OTRF; Windows Event Log; auth.log/info/wls_day|Privilege Escalation/Lateral Movement|Host auth sequence|Индикатор последовательности: несколько неуспешных входов, затем успешный вход; характерно для brute-force/password spraying.|1 if failed_login_count >= k before success_login within T for same user/src/host.|RF, XGBoost, CNN, LSTM; SHAP|
+|rare_process_execution_score|OTRF; Windows Event Log; Dynamic Malware; Host process logs; Maintainable Log Dataset|Reconnaissance/Data Staging|Process anomaly|Оценка редкости запуска процесса относительно нормального поведения системы, пользователя или хоста.|-log(P(process_name | host/user/baseline)) или inverse frequency rank.|RF, XGBoost, CNN; SHAP для важности признаков|
 |file_access_count|ADFA/LID-DS; Maintainable Log Dataset; Windows Event Log; Dynamic Malware|Collection|File activity|Количество операций доступа к файлам.|count(open/read/access/stat/readdir/object access).|RF, XGBoost, CNN; SHAP для важности признаков|
 |file_access_rate|ADFA/LID-DS; Maintainable; Dynamic Malware|Collection|File activity temporal|Частота доступа к файлам.|file_access_count / window_duration.|LSTM; RF/XGBoost по агрегатам окна|
 |file_access_entropy|Host logs; Maintainable; Dynamic Malware|Collection/Data Staging|File activity|Энтропия accessed file paths.|Shannon entropy(file_path tokens).|RF, XGBoost, CNN; SHAP для важности признаков|
@@ -238,6 +249,8 @@
 |sequence_window_duration|All timestamped DNS/host/network sources|Cross-stage|Sequence|Длительность sequence window.|last_event_time - first_event_time.|LSTM; RF/XGBoost по агрегатам окна|
 |sequence_event_type_entropy|All event streams|Cross-stage|Sequence|Энтропия типов событий в последовательности.|Shannon entropy(event_type tokens).|LSTM; RF/XGBoost по агрегатам окна|
 |sequence_temporal_order_pattern|All event streams|Cross-stage|Sequence|Порядок стадий/типов событий в атаке.|ordered tokens mapped to ATT&CK/stage labels.|LSTM; RF/XGBoost по агрегатам окна|
+|process_file_network_sequence|Unified Host-Network; Dynamic Malware + pcap/netflow; LID-DS/Dynamic Malware + network joins|Collection → Data Staging → Exfiltration|Hybrid sequence|Отслеживает цепочку действий: доступ к файлам → архивация/подготовка → передача данных по сети.|ordered pattern match: file_access -> archive/compress -> outbound_network_event within T.|LSTM, late fusion; RF/XGBoost по агрегатам окна|
+|stage_transition_pattern|All timestamped DNS/host/network sources; MITRE ATT&CK mapped events|Sequential modelling|Sequence / attack progression|Явно моделирует переходы между стадиями атаки и помогает LSTM выявлять поведенческую прогрессию злоумышленника.|ordered stage tokens; transition counts/probabilities between Reconnaissance, Privilege Escalation, Lateral Movement, Collection, Data Staging, Exfiltration.|LSTM; RF/XGBoost по агрегатам окна; SHAP для sequence-aware attribution|
 |label_binary|All supervised-ready artifacts|Target/context|Label|Целевая бинарная метка. Не является input feature.|0=benign, 1=malicious/exfiltration, NULL=unknown.|Pipeline/label resolver; не использовать как независимый признак без контроля leakage|
 |label_family|All supervised-ready artifacts|Target/context|Label|Семейство/тип атаки. Не input feature.|benign/dns_exfiltration/malware/phishing/lateral_movement/etc.|Pipeline/label resolver; не использовать как независимый признак без контроля leakage|
 |label_status|All artifacts|Target/context|Label quality|Статус метки для контроля качества и leakage.|explicit/inferred/weak/partial/unlabeled/conflicting.|Pipeline/label resolver; не использовать как независимый признак без контроля leakage|
@@ -325,17 +338,17 @@
 2. DNS temporal: `dns_query_rate`, `dns_inter_query_interval_stats`, `dns_queries_per_window`.
 3. DNS protocol: `ttl_mean`, `ttl_variance`, `rr_count`, `rr_type_frequency_*`, `dns_response_size_stats`, `dns_nxdomain_rate`.
 4. Host syscall/API: `syscall_frequency`, `syscall_ngram_2_frequency`, `syscall_transition_probability`, `syscall_trace_length`.
-5. Host auth: `failed_login_ratio`, `session_opened_count`, `sudo_activity_count`, `user_host_interaction_count`.
+5. Host auth: `failed_login_ratio`, `failed_then_success_login_indicator`, `session_opened_count`, `sudo_activity_count`, `user_host_interaction_count`.
 6. Windows/Sysmon: `event_id_frequency`, `parent_child_process_count`, `command_line_entropy`, `encoded_powershell_indicator`.
-7. Network: `packet_count`, `byte_count`, `flow_duration`, `protocol_distribution`, `dst_port_frequency`.
-8. Sequence: `sequence_window_event_count`, `sequence_event_type_entropy`, ordered event tokens.
+7. Network: `packet_count`, `byte_count`, `flow_duration`, `protocol_distribution`, `dst_port_frequency`, `outbound_byte_ratio`, `external_destination_count`.
+8. Sequence: `sequence_window_event_count`, `sequence_event_type_entropy`, `process_file_network_sequence`, `stage_transition_pattern`, ordered event tokens.
 
 ### P1 — после базового pipeline
 
 1. Domain enrichment: ASN/country/domain age/reputation.
 2. Hybrid correlations: host-network time delta, file-to-network, auth-to-network.
-3. Resource telemetry: CPU/disk/filesystem/network interface burst features.
-4. Graph features: fan-in/fan-out, Source-LogHost degree.
+3. Resource telemetry and staging indicators: CPU/disk/filesystem/network interface burst features, `archive_creation_count`, `compression_process_indicator`, `sensitive_file_extension_count`.
+4. Graph and baseline features: fan-in/fan-out, Source-LogHost degree, `unique_dst_host_count`, `new_external_destination_indicator`, `rare_process_execution_score`.
 
 ### P2 — расширение после baseline
 
@@ -379,7 +392,8 @@
 - authentication and Windows/Sysmon extractors;
 - resource telemetry extractors;
 - network/flow extractors;
+- staging/compression and sensitive-file activity extractors;
 - hybrid correlation extractors;
-- sequence window builder для LSTM.
+- sequence window builder для LSTM, включая process-file-network и stage-transition patterns.
 
 Итоговый framework должен использовать один согласованный feature catalogue, но разные parser-specific источники данных. Это позволит сохранить traceability, избежать leakage и подготовить признаки для RF, XGBoost, CNN, LSTM и SHAP-анализа.
