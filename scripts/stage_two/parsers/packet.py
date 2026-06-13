@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
-from scripts.stage_two.parsers.dns import LabelResolverProtocol, UnlabeledResolver
 
 
 PCAP_MAGIC_ENDIAN: dict[bytes, tuple[str, float]] = {
@@ -67,7 +67,7 @@ class PacketCaptureParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse packet capture records into normalized summaries."""

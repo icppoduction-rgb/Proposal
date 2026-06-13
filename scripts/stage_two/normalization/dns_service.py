@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from scripts.db.models import DatasetFile, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository, DatasetFileRepository, ParserRepository
+from scripts.stage_two.labels import LabelResolver
 from scripts.stage_two.parquet import ParquetArtifactWriter
 from scripts.stage_two.parser_registry import ParserResolver
 from scripts.stage_two.parsers import ParserContext
@@ -56,7 +57,7 @@ class DnsNormalizationService:
             parser_version=parser_metadata.parser_version,
             parser_registry=parser_metadata,
         )
-        parser = parser_class()
+        parser = parser_class(label_resolver=LabelResolver(session=self.session))
         context = ParserContext(
             dataset_id=dataset_file.dataset_id,
             file_id=dataset_file.id,

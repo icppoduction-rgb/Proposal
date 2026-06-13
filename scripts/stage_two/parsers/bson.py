@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
-from scripts.stage_two.parsers.dns import LabelResolverProtocol, UnlabeledResolver
 
 
 EVENT_LIST_KEYS: tuple[str, ...] = ("calls", "events", "event_documents")
@@ -23,7 +23,7 @@ class HostBsonSandboxParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse BSON documents into normalized sandbox behaviour events."""

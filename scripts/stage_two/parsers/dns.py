@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import csv
 import hashlib
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, UnlabeledLabelResolver
 
 
 HEADERLESS_DNS_TEST_COLUMNS: tuple[str, ...] = (
@@ -57,28 +57,7 @@ SRC_PORT_FIELDS: tuple[str, ...] = ("src_port", "udp.srcport", "tcp.srcport")
 DST_PORT_FIELDS: tuple[str, ...] = ("dst_port", "udp.dstport", "tcp.dstport")
 
 
-class LabelResolverProtocol(Protocol):
-    """Protocol for injectable label resolution without parser DB coupling."""
-
-    def resolve(self, row: dict[str, Any], context: ParserContext) -> dict[str, Any]:
-        """Return canonical label fields for one source row."""
-
-
-@dataclass(frozen=True)
-class UnlabeledResolver:
-    """Default resolver used until canonical LabelResolver is configured."""
-
-    def resolve(self, row: dict[str, Any], context: ParserContext) -> dict[str, Any]:
-        """Return an explicit unlabeled label contract."""
-        return {
-            "label_binary": None,
-            "label_family": None,
-            "label_subtype": None,
-            "label_source": "none",
-            "label_status": "unlabeled",
-            "label_confidence": None,
-            "label_mapping_rule_id": None,
-        }
+UnlabeledResolver = UnlabeledLabelResolver
 
 
 class DnsCsvParser(BaseParser):
@@ -88,7 +67,7 @@ class DnsCsvParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse DNS CSV rows into normalized DNS events."""
@@ -182,7 +161,7 @@ class DnsTxtDomainListParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse a domain-list TXT file into normalized DNS events."""

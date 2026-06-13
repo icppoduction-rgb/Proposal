@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
-from scripts.stage_two.parsers.dns import LabelResolverProtocol, UnlabeledResolver
 
 
 HOST_CSV_COLUMNS: tuple[str, ...] = (
@@ -56,7 +56,7 @@ class HostCsvParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse host CSV rows into normalized host events."""
@@ -83,7 +83,7 @@ class HostJsonLinesParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse JSON-lines host telemetry into normalized host events."""
@@ -110,7 +110,7 @@ class HostLineLogParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse raw log lines into normalized host log events."""
@@ -138,7 +138,7 @@ class HostSyscallTraceParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or UnlabeledResolver()
+        self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse syscall trace lines and preserve event_order through event_index."""
