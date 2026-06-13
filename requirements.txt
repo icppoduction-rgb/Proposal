@@ -1,4 +1,5 @@
 alembic
+duckdb
 psycopg[binary]
 pyarrow
 python-dotenv
