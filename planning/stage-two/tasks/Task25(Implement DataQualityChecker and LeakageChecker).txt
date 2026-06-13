@@ -1,0 +1,69 @@
+================================================================================
+
+0. ОБЩИЕ ПРАВИЛА ДЛЯ ВСЕХ ЗАДАЧ
+================================================================================
+
+1. Работать малыми логически завершенными задачами.
+2. После каждой задачи создавать два отчета:
+   - PATH_REPORT/ru/stage-two/Task<number>(<русское название>).md
+   - PATH_REPORT/en/stage-two/Task<number>(<english name>).md
+3. Отчеты создавать до git add / git commit / git push.
+4. Каждый отчет должен содержать:
+   - цель задачи;
+   - выполненные изменения;
+   - измененные/созданные файлы;
+   - команды проверки;
+   - результат проверок;
+   - commit message;
+   - статус git push;
+   - проблемы/ограничения;
+   - следующий шаг.
+5. Код должен использовать type hints.
+6. Каждый новый модуль должен иметь module docstring.
+7. Каждый публичный класс и метод должен иметь docstring.
+8. Комментарии добавлять только для нетривиальной логики.
+9. Не хранить реальные credentials.
+10. Не коммитить .env.
+11. Не изменять raw datasets.
+12. Не читать большие raw files в DB foundation задачах.
+13. Если поле отсутствует в датасете, сохранять NULL / None.
+14. Не смешивать TRAIN, VALIDATION и TEST.
+15. TEST нельзя использовать для fit scaler/encoder/imputer/feature selector/model.
+16. PostgreSQL не использовать для хранения больших normalized events/features.
+17. Parquet использовать для normalized/features/model-ready artifacts.
+18. DuckDB использовать для SQL analytics over Parquet.
+19. Базовые проверки после каждой задачи:
+   - python -m compileall manage.py scripts
+   - git diff --check
+20. Если добавлены тесты, запускать project test runner.
+
+================================================================================
+ЗАДАЧА 25. Реализовать DataQualityChecker and LeakageChecker
+================================================================================
+
+Цель:
+Блокировать плохие artifacts before downstream stages.
+
+Что сделать:
+1. Создать scripts/stage_two/quality/.
+2. Реализовать DataQualityChecker.
+3. Реализовать LeakageChecker.
+4. Проверки:
+   - required columns;
+   - null counts;
+   - duplicate event_uid/sample_uid;
+   - role/branch values;
+   - label columns absent from X;
+   - source_file/scenario_name absent from X;
+   - TEST absent from TRAIN artifacts;
+   - preprocessing fit only on TRAIN.
+5. Сохранять RU/EN report where applicable.
+
+Acceptance criteria:
+- Failed leakage check creates CRITICAL report.
+- model_ready SUCCESS blocked if leakage check failed.
+- compileall и git diff --check проходят.
+
+git add .
+git commit -m "Add Stage Two data quality and leakage checks"
+git push origin dev

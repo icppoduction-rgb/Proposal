@@ -1,0 +1,150 @@
+================================================================================
+
+0. ОБЩИЕ ПРАВИЛА ДЛЯ ВСЕХ ЗАДАЧ
+================================================================================
+
+1. Работать малыми логически завершенными задачами.
+2. После каждой задачи создавать два отчета:
+   - PATH_REPORT/ru/stage-two/Task<number>(<русское название>).md
+   - PATH_REPORT/en/stage-two/Task<number>(<english name>).md
+3. Отчеты создавать до git add / git commit / git push.
+4. Каждый отчет должен содержать:
+   - цель задачи;
+   - выполненные изменения;
+   - измененные/созданные файлы;
+   - команды проверки;
+   - результат проверок;
+   - commit message;
+   - статус git push;
+   - проблемы/ограничения;
+   - следующий шаг.
+5. Код должен использовать type hints.
+6. Каждый новый модуль должен иметь module docstring.
+7. Каждый публичный класс и метод должен иметь docstring.
+8. Комментарии добавлять только для нетривиальной логики.
+9. Не хранить реальные credentials.
+10. Не коммитить .env.
+11. Не изменять raw datasets.
+12. Не читать большие raw files в DB foundation задачах.
+13. Если поле отсутствует в датасете, сохранять NULL / None.
+14. Не смешивать TRAIN, VALIDATION и TEST.
+15. TEST нельзя использовать для fit scaler/encoder/imputer/feature selector/model.
+16. PostgreSQL не использовать для хранения больших normalized events/features.
+17. Parquet использовать для normalized/features/model-ready artifacts.
+18. DuckDB использовать для SQL analytics over Parquet.
+19. Базовые проверки после каждой задачи:
+   - python -m compileall manage.py scripts
+   - git diff --check
+20. Если добавлены тесты, запускать project test runner.
+
+================================================================================
+ЗАДАЧА 14. Реализовать parser registry seed and resolver
+================================================================================
+
+Цель:
+Подготовить routing parser-а по branch/role/source_format.
+
+Что сделать:
+1. Создать config/parser_registry_seed.json.
+2. Описать parsers for DNS csv/pcap/pcap.csv/txt and Host csv/log/json/txt/sc/ghc/bson/cap/pcap/pcapng/netflow_day/wls_day.
+# ========================
+host:
+  "files_by_role_and_format": {
+    "TRAIN": {
+      "auth.log": 23,
+      "cpu.log": 13,
+      "csv": 101,
+      "diskio.log": 12,
+      "filesystem.log": 12,
+      "fsstat.log": 12,
+      "ghc": 56158,
+      "info": 3,
+      "journal": 17,
+      "journal~": 1,
+      "json": 219,
+      "json-1": 1,
+      "load.log": 12,
+      "log": 98,
+      "log-1": 32,
+      "log-2": 9,
+      "log-3": 8,
+      "mail-info-1": 3,
+      "mail-warn-1": 2,
+      "mainlog": 3,
+      "mainlog-1": 3,
+      "mainlog-2": 3,
+      "mainlog-3": 3,
+      "memory.log": 12,
+      "messages": 3,
+      "messages-1": 3,
+      "netflow_ids": 50,
+      "network.log": 12,
+      "pcap": 15,
+      "process.log": 2,
+      "process.summary.log": 12,
+      "sc": 210,
+      "service.log": 12,
+      "socket.summary.log": 12,
+      "syslog": 9,
+      "syslog-1": 10,
+      "syslog-2": 10,
+      "syslog-3": 10,
+      "syslog-4": 1,
+      "syslog.log": 12,
+      "txt": 3170,
+      "uptime.log": 12,
+      "xml": 40
+    },
+    "TEST": {
+      "bson": 9005,
+      "csv": 3,
+      "json": 7071,
+      "log": 4086,
+      "netflow_day": 2,
+      "txt": 274419,
+      "wls_day": 3
+    },
+    "VALIDATION": {
+      "cap": 44,
+      "csv": 6,
+      "json": 130,
+      "netflow_day": 2,
+      "pcap": 1,
+      "pcapng": 5,
+      "txt": 6495,
+      "wls_day": 3
+    }
+  }
+# ========================
+
+# ========================
+dns:
+"files_by_role_and_format": {
+    "TRAIN": {
+      "csv": 8,
+      "pcap": 4,
+      "pcap.csv": 14
+    },
+    "TEST": {
+      "csv": 1
+    },
+    "VALIDATION": {
+      "pcap": 5,
+      "txt": 3
+    },
+  }
+# ========================
+3. Реализовать ParserResolver.
+4. Resolver должен искать parser по branch + role + source_format.
+5. Если parser не найден, file status UNSUPPORTED_FORMAT or SKIPPED.
+
+Acceptance criteria:
+- parser_registry можно seed/update.
+- ParserResolver возвращает parser metadata.
+- Unsupported format не ломает pipeline.
+- compileall и git diff --check проходят.
+
+
+git add .
+git commit -m "Add parser registry seed and resolver"
+git push origin dev

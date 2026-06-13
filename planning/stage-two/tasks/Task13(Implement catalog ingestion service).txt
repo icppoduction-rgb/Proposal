@@ -1,0 +1,66 @@
+================================================================================
+
+0. ОБЩИЕ ПРАВИЛА ДЛЯ ВСЕХ ЗАДАЧ
+================================================================================
+
+1. Работать малыми логически завершенными задачами.
+2. После каждой задачи создавать два отчета:
+   - PATH_REPORT/ru/stage-two/Task<number>(<русское название>).md
+   - PATH_REPORT/en/stage-two/Task<number>(<english name>).md
+3. Отчеты создавать до git add / git commit / git push.
+4. Каждый отчет должен содержать:
+   - цель задачи;
+   - выполненные изменения;
+   - измененные/созданные файлы;
+   - команды проверки;
+   - результат проверок;
+   - commit message;
+   - статус git push;
+   - проблемы/ограничения;
+   - следующий шаг.
+5. Код должен использовать type hints.
+6. Каждый новый модуль должен иметь module docstring.
+7. Каждый публичный класс и метод должен иметь docstring.
+8. Комментарии добавлять только для нетривиальной логики.
+9. Не хранить реальные credentials.
+10. Не коммитить .env.
+11. Не изменять raw datasets.
+12. Не читать большие raw files в DB foundation задачах.
+13. Если поле отсутствует в датасете, сохранять NULL / None.
+14. Не смешивать TRAIN, VALIDATION и TEST.
+15. TEST нельзя использовать для fit scaler/encoder/imputer/feature selector/model.
+16. PostgreSQL не использовать для хранения больших normalized events/features.
+17. Parquet использовать для normalized/features/model-ready artifacts.
+18. DuckDB использовать для SQL analytics over Parquet.
+19. Базовые проверки после каждой задачи:
+   - python -m compileall manage.py scripts
+   - git diff --check
+20. Если добавлены тесты, запускать project test runner.
+
+================================================================================
+ЗАДАЧА 13. Реализовать catalog ingestion service
+================================================================================
+
+Цель:
+Сканировать raw/sorted dataset directories and register files in PostgreSQL.
+
+Что сделать:
+1. Создать scripts/stage_two/ingestion/.
+2. Реализовать DatasetFileScanner.
+3. Реализовать FileHashService.
+4. Реализовать CatalogIngestionService.
+5. Поддержать PATH_FOLDER_DATASETS and PATH_FOLDER_DATASETS_FILTER.
+6. Определять dataset_name, branch, role, source_format.
+7. Считать sha256, file size, modified time.
+8. Использовать bulk upsert через SQLAlchemy Core.
+9. Не читать содержимое больших файлов.
+
+Acceptance criteria:
+- Files регистрируются в dataset_files.
+- Повторный запуск idempotent.
+- ingestion_runs получает SUCCESS/PARTIAL_SUCCESS/FAILED.
+- compileall и git diff --check проходят.
+
+git add .
+git commit -m "Implement Stage Two catalog ingestion service"
+git push origin dev

@@ -1,0 +1,67 @@
+================================================================================
+
+0. ОБЩИЕ ПРАВИЛА ДЛЯ ВСЕХ ЗАДАЧ
+================================================================================
+
+1. Работать малыми логически завершенными задачами.
+2. После каждой задачи создавать два отчета:
+   - PATH_REPORT/ru/stage-two/Task<number>(<русское название>).md
+   - PATH_REPORT/en/stage-two/Task<number>(<english name>).md
+3. Отчеты создавать до git add / git commit / git push.
+4. Каждый отчет должен содержать:
+   - цель задачи;
+   - выполненные изменения;
+   - измененные/созданные файлы;
+   - команды проверки;
+   - результат проверок;
+   - commit message;
+   - статус git push;
+   - проблемы/ограничения;
+   - следующий шаг.
+5. Код должен использовать type hints.
+6. Каждый новый модуль должен иметь module docstring.
+7. Каждый публичный класс и метод должен иметь docstring.
+8. Комментарии добавлять только для нетривиальной логики.
+9. Не хранить реальные credentials.
+10. Не коммитить .env.
+11. Не изменять raw datasets.
+12. Не читать большие raw files в DB foundation задачах.
+13. Если поле отсутствует в датасете, сохранять NULL / None.
+14. Не смешивать TRAIN, VALIDATION и TEST.
+15. TEST нельзя использовать для fit scaler/encoder/imputer/feature selector/model.
+16. PostgreSQL не использовать для хранения больших normalized events/features.
+17. Parquet использовать для normalized/features/model-ready artifacts.
+18. DuckDB использовать для SQL analytics over Parquet.
+19. Базовые проверки после каждой задачи:
+   - python -m compileall manage.py scripts
+   - git diff --check
+20. Если добавлены тесты, запускать project test runner.
+
+================================================================================
+ЗАДАЧА 16. Реализовать Parquet writer foundation
+================================================================================
+
+Цель:
+Подготовить запись normalized/features/model-ready Parquet artifacts.
+
+Что сделать:
+1. Добавить зависимости pyarrow and/or polars only in this task if needed.
+2. Создать scripts/stage_two/parquet/.
+3. Реализовать ParquetArtifactWriter.
+4. Поддержать paths:
+   - parquet/normalized/{branch}/{role}/{modality}/{dataset_slug}/schema={version}/...
+   - parquet/features/{feature_group}/{role}/{dataset_slug}/schema={version}/...
+   - parquet/model_ready/...
+5. Не писать в PostgreSQL сами events/features.
+6. Регистрировать artifact path through ArtifactRepository.
+
+Acceptance criteria:
+- Writer создает partitioned paths.
+- Missing fields сохраняются as NULL.
+- Artifact registry получает row_count and path.
+- compileall и git diff --check проходят.
+
+
+git add .
+git commit -m "Add Parquet artifact writer foundation"
+git push origin dev

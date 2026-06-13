@@ -1,0 +1,66 @@
+================================================================================
+
+0. ОБЩИЕ ПРАВИЛА ДЛЯ ВСЕХ ЗАДАЧ
+================================================================================
+
+1. Работать малыми логически завершенными задачами.
+2. После каждой задачи создавать два отчета:
+   - PATH_REPORT/ru/stage-two/Task<number>(<русское название>).md
+   - PATH_REPORT/en/stage-two/Task<number>(<english name>).md
+3. Отчеты создавать до git add / git commit / git push.
+4. Каждый отчет должен содержать:
+   - цель задачи;
+   - выполненные изменения;
+   - измененные/созданные файлы;
+   - команды проверки;
+   - результат проверок;
+   - commit message;
+   - статус git push;
+   - проблемы/ограничения;
+   - следующий шаг.
+5. Код должен использовать type hints.
+6. Каждый новый модуль должен иметь module docstring.
+7. Каждый публичный класс и метод должен иметь docstring.
+8. Комментарии добавлять только для нетривиальной логики.
+9. Не хранить реальные credentials.
+10. Не коммитить .env.
+11. Не изменять raw datasets.
+12. Не читать большие raw files в DB foundation задачах.
+13. Если поле отсутствует в датасете, сохранять NULL / None.
+14. Не смешивать TRAIN, VALIDATION и TEST.
+15. TEST нельзя использовать для fit scaler/encoder/imputer/feature selector/model.
+16. PostgreSQL не использовать для хранения больших normalized events/features.
+17. Parquet использовать для normalized/features/model-ready artifacts.
+18. DuckDB использовать для SQL analytics over Parquet.
+19. Базовые проверки после каждой задачи:
+   - python -m compileall manage.py scripts
+   - git diff --check
+20. Если добавлены тесты, запускать project test runner.
+
+================================================================================
+ЗАДАЧА 23. Реализовать model-ready artifact contracts and preprocessing registry
+================================================================================
+
+Цель:
+Подготовить model-ready layer without training final models.
+
+Что сделать:
+1. Создать schemas/model_ready/model_ready_v1.json.
+2. Описать artifacts:
+   - X_train.parquet, y_train.parquet
+   - X_validation.parquet, y_validation.parquet
+   - X_test.parquet, y_test.parquet
+   - train_sequences.npz, validation_sequences.npz, test_sequences.npz
+   - preprocessing objects
+3. Реализовать registry service.
+4. Enforce preprocessing fitted_on_role='TRAIN'.
+
+Acceptance criteria:
+- model_ready_artifacts registered.
+- preprocessing_artifacts linked.
+- TEST cannot be fitted_on_role.
+- compileall и git diff --check проходят.
+
+git add .
+git commit -m "Add model ready artifact and preprocessing contracts"
+git push origin dev
