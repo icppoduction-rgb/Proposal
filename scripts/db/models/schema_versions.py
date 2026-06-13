@@ -49,3 +49,4 @@ class SchemaVersion(Base):
     )
 
     parser_runs: Mapped[list["ParserRun"]] = relationship(back_populates="schema_version")
+    normalized_artifacts: Mapped[list["NormalizedArtifact"]] = relationship(back_populates="schema")

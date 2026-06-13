@@ -58,3 +58,4 @@ class ParserRun(Base):
     file: Mapped["DatasetFile"] = relationship(back_populates="parser_runs")
     parser_registry: Mapped["ParserRegistry | None"] = relationship(back_populates="parser_runs")
     schema_version: Mapped["SchemaVersion | None"] = relationship(back_populates="parser_runs")
+    normalized_artifacts: Mapped[list["NormalizedArtifact"]] = relationship(back_populates="parser_run")

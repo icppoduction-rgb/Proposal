@@ -31,6 +31,37 @@ PARSER_RUN_STATUS_VALUES: tuple[str, ...] = (
     "SKIPPED",
 )
 SCHEMA_LAYER_VALUES: tuple[str, ...] = ("normalized", "features", "model_ready")
+LABEL_STATUS_VALUES: tuple[str, ...] = (
+    "explicit_label",
+    "inferred_label",
+    "weak_label",
+    "partial_label",
+    "unlabeled",
+    "conflicting_label",
+)
+MODEL_READY_DATA_TYPE_VALUES: tuple[str, ...] = (
+    "X",
+    "y",
+    "sequence",
+    "split_index",
+    "preprocessing_metadata",
+)
+QUALITY_ARTIFACT_TYPE_VALUES: tuple[str, ...] = (
+    "raw_file",
+    "normalized",
+    "feature",
+    "model_ready",
+    "preprocessing",
+    "catalog",
+)
+QUALITY_STATUS_VALUES: tuple[str, ...] = (
+    "SUCCESS",
+    "PARTIAL_SUCCESS",
+    "FAILED",
+    "SKIPPED",
+    "BLOCKED",
+)
+QUALITY_SEVERITY_VALUES: tuple[str, ...] = ("INFO", "WARNING", "ERROR", "CRITICAL")
 
 
 def sql_in(values: tuple[str, ...]) -> str:

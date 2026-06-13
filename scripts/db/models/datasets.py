@@ -48,3 +48,5 @@ class Dataset(Base):
     )
 
     files: Mapped[list["DatasetFile"]] = relationship(back_populates="dataset")
+    normalized_artifacts: Mapped[list["NormalizedArtifact"]] = relationship(back_populates="dataset")
+    feature_artifacts: Mapped[list["FeatureArtifact"]] = relationship(back_populates="dataset")

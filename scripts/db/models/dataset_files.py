@@ -87,3 +87,4 @@ class DatasetFile(Base):
     dataset: Mapped["Dataset"] = relationship(back_populates="files")
     ingestion_run: Mapped["IngestionRun | None"] = relationship(back_populates="files")
     parser_runs: Mapped[list["ParserRun"]] = relationship(back_populates="file")
+    normalized_artifacts: Mapped[list["NormalizedArtifact"]] = relationship(back_populates="file")
