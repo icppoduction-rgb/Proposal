@@ -77,8 +77,9 @@ Acceptance criteria:
 - .env.example не содержит production secrets.
 - compileall и git diff --check проходят.
 
-Commit:
-Add Stage Two environment configuration
+git add .
+git commit -m "Add Stage Two environment configuration"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 2. Создать/обновить storage bootstrap utility
@@ -95,7 +96,8 @@ Add Stage Two environment configuration
    - parquet/normalized, parquet/features, parquet/model_ready
    - duckdb/sql, duckdb/exports
    - reports/ru/stage-two, reports/en/stage-two
-   - reports/parser, reports/normalization, reports/quality, reports/leakage, reports/schema_mismatch
+   - reports/ru/parser, reports/ru/normalization, reports/ru/quality, reports/ru/leakage, reports/ru/schema_mismatch
+   - reports/en/parser, reports/en/normalization, reports/en/quality, reports/en/leakage, reports/en/schema_mismatch
    - logs/stage-two
    - backups/postgres_catalog
    - temp_data/ingestion, temp_data/parser_runs, temp_data/normalization
@@ -109,8 +111,9 @@ Acceptance criteria:
 - Повторный запуск безопасен.
 - compileall и git diff --check проходят.
 
-Commit:
-Add Stage Two storage bootstrapper
+git add .
+git commit -m "Add Stage Two storage bootstrapper"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 3. Добавить зависимости Stage Two DB foundation
@@ -134,8 +137,9 @@ Acceptance criteria:
 - Нет дубликатов.
 - compileall и git diff --check проходят.
 
-Commit:
-Add SQLAlchemy Alembic and PostgreSQL dependencies
+git add .
+git commit -m "Add SQLAlchemy Alembic and PostgreSQL dependencies"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 4. Создать scripts/db config/session layer
@@ -159,8 +163,9 @@ Acceptance criteria:
 - Нет hardcoded credentials.
 - compileall и git diff --check проходят.
 
-Commit:
-Add SQLAlchemy configuration and session layer
+git add .
+git commit -m "Add SQLAlchemy configuration and session layer"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 5. Настроить Alembic migrations
@@ -181,8 +186,8 @@ Acceptance criteria:
 - env.py использует project metadata.
 - compileall и git diff --check проходят.
 
-Commit:
-Configure Alembic for PostgreSQL catalog migrations
+git add .
+git commit -m "Configure Alembic for PostgreSQL catalog migrations"
 
 ================================================================================
 ЗАДАЧА 6. Создать SQLAlchemy Base и naming convention
@@ -202,8 +207,9 @@ Acceptance criteria:
 - naming_convention есть для ix/uq/ck/fk/pk.
 - compileall и git diff --check проходят.
 
-Commit:
-Add SQLAlchemy declarative base with naming convention
+git add .
+git commit -m "Add SQLAlchemy declarative base with naming convention"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 7. Реализовать ORM models: datasets, ingestion_runs, dataset_files
@@ -229,8 +235,9 @@ Acceptance criteria:
 - dataset_files поддерживает raw file metadata.
 - compileall и git diff --check проходят.
 
-Commit:
-Add dataset ingestion and file catalog models
+git add .
+git commit -m "Add dataset ingestion and file catalog models"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 8. Реализовать ORM models: parser_registry, schema_versions, parser_runs
@@ -255,8 +262,9 @@ Acceptance criteria:
 - Parser run history связана с dataset_files.
 - compileall и git diff --check проходят.
 
-Commit:
-Add parser registry schema version and parser run models
+git add .
+git commit -m "Add parser registry schema version and parser run models"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 9. Реализовать ORM models: artifacts, preprocessing, labels, quality
@@ -286,8 +294,9 @@ Acceptance criteria:
 - TEST cannot be fitted_on_role for preprocessing.
 - compileall и git diff --check проходят.
 
-Commit:
-Add artifact label preprocessing and quality catalog models
+git add .
+git commit -m "Add artifact label preprocessing and quality catalog models"
+git push origin
 
 ================================================================================
 ЗАДАЧА 10. Создать первую Alembic migration catalog schema
@@ -314,8 +323,10 @@ Acceptance criteria:
 - Все tables созданы.
 - compileall и git diff --check проходят.
 
-Commit:
-Create initial Stage Two catalog schema migration
+git add .
+git commit -m "Create initial Stage Two catalog schema migration"
+git push origin dev
+
 
 ================================================================================
 ЗАДАЧА 11. Реализовать repository layer
@@ -344,8 +355,9 @@ Acceptance criteria:
 - Нет создания engine внутри repositories.
 - compileall и git diff --check проходят.
 
-Commit:
-Add PostgreSQL catalog repository layer
+git add .
+git commit -m "Add PostgreSQL catalog repository layer"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 12. Реализовать smoke tests для DB foundation
@@ -373,8 +385,9 @@ Acceptance criteria:
 - Rollback работает.
 - compileall и git diff --check проходят.
 
-Commit:
-Add PostgreSQL catalog smoke checks
+git add .
+git commit -m "Add PostgreSQL catalog smoke checks"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 13. Реализовать catalog ingestion service
@@ -400,8 +413,9 @@ Acceptance criteria:
 - ingestion_runs получает SUCCESS/PARTIAL_SUCCESS/FAILED.
 - compileall и git diff --check проходят.
 
-Commit:
-Implement Stage Two catalog ingestion service
+git add .
+git commit -m "Implement Stage Two catalog ingestion service"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 14. Реализовать parser registry seed and resolver
@@ -413,6 +427,93 @@ Implement Stage Two catalog ingestion service
 Что сделать:
 1. Создать config/parser_registry_seed.json.
 2. Описать parsers for DNS csv/pcap/pcap.csv/txt and Host csv/log/json/txt/sc/ghc/bson/cap/pcap/pcapng/netflow_day/wls_day.
+# ========================
+host:
+  "files_by_role_and_format": {
+    "TRAIN": {
+      "auth.log": 23,
+      "cpu.log": 13,
+      "csv": 101,
+      "diskio.log": 12,
+      "filesystem.log": 12,
+      "fsstat.log": 12,
+      "ghc": 56158,
+      "info": 3,
+      "journal": 17,
+      "journal~": 1,
+      "json": 219,
+      "json-1": 1,
+      "load.log": 12,
+      "log": 98,
+      "log-1": 32,
+      "log-2": 9,
+      "log-3": 8,
+      "mail-info-1": 3,
+      "mail-warn-1": 2,
+      "mainlog": 3,
+      "mainlog-1": 3,
+      "mainlog-2": 3,
+      "mainlog-3": 3,
+      "memory.log": 12,
+      "messages": 3,
+      "messages-1": 3,
+      "netflow_ids": 50,
+      "network.log": 12,
+      "pcap": 15,
+      "process.log": 2,
+      "process.summary.log": 12,
+      "sc": 210,
+      "service.log": 12,
+      "socket.summary.log": 12,
+      "syslog": 9,
+      "syslog-1": 10,
+      "syslog-2": 10,
+      "syslog-3": 10,
+      "syslog-4": 1,
+      "syslog.log": 12,
+      "txt": 3170,
+      "uptime.log": 12,
+      "xml": 40
+    },
+    "TEST": {
+      "bson": 9005,
+      "csv": 3,
+      "json": 7071,
+      "log": 4086,
+      "netflow_day": 2,
+      "txt": 274419,
+      "wls_day": 3
+    },
+    "VALIDATION": {
+      "cap": 44,
+      "csv": 6,
+      "json": 130,
+      "netflow_day": 2,
+      "pcap": 1,
+      "pcapng": 5,
+      "txt": 6495,
+      "wls_day": 3
+    }
+  }
+# ========================
+
+# ========================
+dns:
+"files_by_role_and_format": {
+    "TRAIN": {
+      "csv": 8,
+      "pcap": 4,
+      "pcap.csv": 14
+    },
+    "TEST": {
+      "csv": 1
+    },
+    "VALIDATION": {
+      "pcap": 5,
+      "txt": 3
+    },
+  }
+# ========================
 3. Реализовать ParserResolver.
 4. Resolver должен искать parser по branch + role + source_format.
 5. Если parser не найден, file status UNSUPPORTED_FORMAT or SKIPPED.
@@ -423,8 +524,11 @@ Acceptance criteria:
 - Unsupported format не ломает pipeline.
 - compileall и git diff --check проходят.
 
-Commit:
-Add parser registry seed and resolver
+
+git add .
+git commit -m "Add parser registry seed and resolver"
+git push origin dev
+
 
 ================================================================================
 ЗАДАЧА 15. Реализовать normalized schema contracts
@@ -449,8 +553,10 @@ Acceptance criteria:
 - NULL policy documented.
 - compileall и git diff --check проходят.
 
-Commit:
-Add normalized event schema contract
+git add .
+git commit -m "Add normalized event schema contract"
+git push origin dev
+
 
 ================================================================================
 ЗАДАЧА 16. Реализовать Parquet writer foundation
@@ -476,8 +582,10 @@ Acceptance criteria:
 - Artifact registry получает row_count and path.
 - compileall и git diff --check проходят.
 
-Commit:
-Add Parquet artifact writer foundation
+
+git add .
+git commit -m "Add Parquet artifact writer foundation"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 17. Реализовать базовые parser interfaces
@@ -500,8 +608,9 @@ Acceptance criteria:
 - Parser contract documented.
 - compileall и git diff --check проходят.
 
-Commit:
-Add Stage Two parser interface contract
+git add .
+git commit -m "Add Stage Two parser interface contract"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 18. Реализовать DNS normalization parsers MVP
@@ -524,8 +633,10 @@ Acceptance criteria:
 - parser_runs and normalized_artifacts registered.
 - compileall и git diff --check проходят.
 
-Commit:
-Implement DNS normalized parser MVP
+
+git add .
+git commit -m "Implement DNS normalized parser MVP"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 19. Реализовать Host normalization parsers MVP
@@ -548,8 +659,9 @@ Acceptance criteria:
 - parser_runs and normalized_artifacts registered.
 - compileall и git diff --check проходят.
 
-Commit:
-Implement Host normalized parser MVP
+git add .
+git commit -m "Implement Host normalized parser MVP"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 20. Реализовать custom parser tasks для PCAP/CAP/PCAPNG/BSON
@@ -575,8 +687,10 @@ Acceptance criteria:
 - parser errors are recorded, not destructive.
 - compileall и git diff --check проходят.
 
-Commit:
-Add custom parsers for packet captures and BSON telemetry
+git add .
+git commit -m "Add custom parsers for packet captures and BSON telemetry"
+git push origin dev
+
 
 ================================================================================
 ЗАДАЧА 21. Реализовать LabelResolver
@@ -600,8 +714,9 @@ Acceptance criteria:
 - TEST labels не используются для training decisions.
 - compileall и git diff --check проходят.
 
-Commit:
-Add canonical label resolver
+git add .
+git commit -m "Add canonical label resolver"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 22. Реализовать feature artifact contracts
@@ -625,8 +740,9 @@ Acceptance criteria:
 - X exclude list documented.
 - compileall и git diff --check проходят.
 
-Commit:
-Add feature artifact schema contracts
+git add .
+git commit -m "Add feature artifact schema contracts"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 23. Реализовать model-ready artifact contracts and preprocessing registry
@@ -652,8 +768,9 @@ Acceptance criteria:
 - TEST cannot be fitted_on_role.
 - compileall и git diff --check проходят.
 
-Commit:
-Add model ready artifact and preprocessing contracts
+git add .
+git commit -m "Add model ready artifact and preprocessing contracts"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 24. Реализовать DuckDB analytics layer
@@ -683,8 +800,9 @@ Acceptance criteria:
 - Reports saved and registered in data_quality_reports.
 - compileall и git diff --check проходят.
 
-Commit:
-Add DuckDB analytics checks over Parquet
+git add .
+git commit -m "Add DuckDB analytics checks over Parquet"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 25. Реализовать DataQualityChecker and LeakageChecker
@@ -713,8 +831,9 @@ Acceptance criteria:
 - model_ready SUCCESS blocked if leakage check failed.
 - compileall и git diff --check проходят.
 
-Commit:
-Add Stage Two data quality and leakage checks
+git add .
+git commit -m "Add Stage Two data quality and leakage checks"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 26. Реализовать traceability service
@@ -734,8 +853,9 @@ Acceptance criteria:
 - Missing link returns explicit error, not silent pass.
 - compileall и git diff --check проходят.
 
-Commit:
-Add artifact traceability service
+git add .
+git commit -m "Add artifact traceability service"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 27. Добавить CLI routes для Stage Two
@@ -763,8 +883,9 @@ Acceptance criteria:
 - New routes show clear output.
 - compileall и git diff --check проходят.
 
-Commit:
-Add Stage Two CLI routes
+git add .
+git commit -m "Add Stage Two CLI routes"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 28. Создать финальную документацию Stage Two в docs/ru и docs/en
@@ -789,8 +910,9 @@ Acceptance criteria:
 - Docs match implemented code.
 - compileall и git diff --check проходят.
 
-Commit:
-Document Stage Two normalization implementation
+git add .
+git commit -m "Document Stage Two normalization implementation"
+git push origin dev
 
 ================================================================================
 ЗАДАЧА 29. Провести end-to-end dry run на small sample
@@ -817,8 +939,10 @@ Acceptance criteria:
 - Raw files unchanged.
 - compileall и git diff --check проходят.
 
-Commit:
-Run Stage Two end to end dry run on sample data
+git add .
+git commit -m "Run Stage Two end to end dry run on sample data"
+git push origin dev
+
 
 ================================================================================
 ЗАДАЧА 30. Финальная проверка Stage Two readiness
@@ -844,5 +968,8 @@ Acceptance criteria:
 - Все artifacts registered.
 - compileall и git diff --check проходят.
 
-Commit:
-Finalize Stage Two normalization readiness checks
+git add .
+git commit -m "Finalize Stage Two normalization readiness checks"
+git push origin dev
+
+
