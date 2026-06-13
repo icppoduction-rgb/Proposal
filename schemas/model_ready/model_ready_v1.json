@@ -1,0 +1,62 @@
+{
+  "schema_name": "model_ready",
+  "schema_version": "v1",
+  "layer": "model_ready",
+  "description": "Stage Two model-ready artifact contract for X/y tables, sequences, split indices, and preprocessing objects.",
+  "artifacts": [
+    {"role": "TRAIN", "data_type": "X", "path": "parquet/model_ready/tabular/{branch}/TRAIN/schema=v1/X_train.parquet"},
+    {"role": "TRAIN", "data_type": "y", "path": "parquet/model_ready/labels/{branch}/TRAIN/schema=v1/y_train.parquet"},
+    {"role": "VALIDATION", "data_type": "X", "path": "parquet/model_ready/tabular/{branch}/VALIDATION/schema=v1/X_validation.parquet"},
+    {"role": "VALIDATION", "data_type": "y", "path": "parquet/model_ready/labels/{branch}/VALIDATION/schema=v1/y_validation.parquet"},
+    {"role": "TEST", "data_type": "X", "path": "parquet/model_ready/tabular/{branch}/TEST/schema=v1/X_test.parquet"},
+    {"role": "TEST", "data_type": "y", "path": "parquet/model_ready/labels/{branch}/TEST/schema=v1/y_test.parquet"},
+    {"role": "TRAIN", "data_type": "sequence", "path": "parquet/model_ready/sequences/{branch}/TRAIN/schema=v1/train_sequences.npz"},
+    {"role": "VALIDATION", "data_type": "sequence", "path": "parquet/model_ready/sequences/{branch}/VALIDATION/schema=v1/validation_sequences.npz"},
+    {"role": "TEST", "data_type": "sequence", "path": "parquet/model_ready/sequences/{branch}/TEST/schema=v1/test_sequences.npz"},
+    {"role": "TRAIN", "data_type": "split_index", "path": "parquet/model_ready/split_index/{branch}/TRAIN/schema=v1/split_index.parquet"},
+    {"role": "TRAIN", "data_type": "preprocessing_metadata", "path": "parquet/model_ready/preprocessing/{branch}/TRAIN/schema=v1/preprocessing_metadata.parquet"}
+  ],
+  "preprocessing": {
+    "fit_allowed_role": "TRAIN",
+    "transform_roles": ["VALIDATION", "TEST"],
+    "artifact_path_template": "parquet/model_ready/preprocessing/{branch}/schema=v1/{preprocessing_type}_{object_version}.pkl",
+    "registry_table": "preprocessing_artifacts"
+  },
+  "x_forbidden_columns": [
+    "label_binary",
+    "label_family",
+    "label_subtype",
+    "label_source",
+    "label_status",
+    "label_confidence",
+    "label_mapping_rule_id",
+    "dataset_name",
+    "dataset_role",
+    "role",
+    "branch",
+    "source_file_path",
+    "source_file_hash",
+    "source_normalized_path",
+    "source_event_uid_refs",
+    "parser_run_id",
+    "normalized_artifact_id",
+    "event_uid",
+    "sample_uid",
+    "scenario_name",
+    "raw_fields_json",
+    "metadata_json",
+    "created_at"
+  ],
+  "traceability": {
+    "model_ready_artifacts": "model_ready_artifacts.feature_artifact_id -> feature_artifacts.id",
+    "preprocessing": "model_ready_artifacts.preprocessing_artifact_id -> preprocessing_artifacts.id",
+    "upstream_raw": "feature_artifacts.normalized_artifact_id -> normalized_artifacts.id -> parser_runs.file_id -> dataset_files.id"
+  },
+  "rules": [
+    "X artifacts must not contain labels or source/leakage columns.",
+    "y artifacts store labels separately from X.",
+    "Preprocessing objects are fitted only on TRAIN.",
+    "VALIDATION and TEST may only transform with TRAIN-fitted preprocessing objects.",
+    "TEST statistics must not be used to fit scalers, encoders, imputers, feature selectors, thresholds, or models."
+  ]
+}
