@@ -12,10 +12,12 @@ from scripts.stage_two.parquet import ParquetArtifactWriter
 from scripts.stage_two.parser_registry import ParserResolver
 from scripts.stage_two.parsers import ParserContext
 from scripts.stage_two.parsers.dns import DnsCsvParser, DnsPcapCsvParser, DnsTxtDomainListParser
+from scripts.stage_two.parsers.packet import DnsPacketCaptureParser
 
 
 DNS_PARSER_CLASSES = {
     "DnsCsvParser": DnsCsvParser,
+    "DnsPacketCaptureParser": DnsPacketCaptureParser,
     "DnsPcapCsvParser": DnsPcapCsvParser,
     "DnsTxtDomainListParser": DnsTxtDomainListParser,
 }
@@ -66,17 +68,23 @@ class DnsNormalizationService:
             source_file_hash=dataset_file.file_hash_sha256,
             parser_run_id=parser_run.id,
         )
-        result = parser.parse(Path(dataset_file.file_path), context)
-        status = "PARTIAL_SUCCESS" if result.has_failures else "SUCCESS"
-        write_result = self.writer.write_normalized(
-            result.events,
-            branch=dataset_file.branch,
-            role=dataset_file.role,
-            modality="dns",
-            dataset_slug=dataset_file.dataset.slug,
-            schema_version=parser_metadata.normalized_schema_version,
-            run_id=parser_run.id,
-        )
+        try:
+            result = parser.parse(Path(dataset_file.file_path), context)
+            status = "PARTIAL_SUCCESS" if result.has_failures else "SUCCESS"
+            write_result = self.writer.write_normalized(
+                result.events,
+                branch=dataset_file.branch,
+                role=dataset_file.role,
+                modality="dns",
+                dataset_slug=dataset_file.dataset.slug,
+                schema_version=parser_metadata.normalized_schema_version,
+                run_id=parser_run.id,
+            )
+        except Exception as exc:
+            error_message = str(exc)
+            self.parser_repository.fail_parser_run(parser_run, error_message)
+            self.file_repository.mark_file_status(dataset_file, "FAILED", error_message=error_message)
+            return None
         self.parser_repository.finish_parser_run(
             parser_run,
             status=status,
