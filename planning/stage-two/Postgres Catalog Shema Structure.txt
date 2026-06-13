@@ -1,1394 +1,566 @@
-ФИНАЛЬНАЯ СТРУКТУРА POSTGRESQL CATALOG SCHEMA ДЛЯ STAGE TWO
-Проект: Proposal — Behaviour-driven hybrid learning for data exfiltration detection
-Назначение: PostgreSQL catalog для управления Stage Two: Data Normalization
+Проект: Proposal - Behaviour-driven hybrid learning for data exfiltration detection
+Этап: Stage Two - Data Normalization
+Дата подготовки: 2026-06-13
+Формат: TXT
 
-================================================================================
-1. ОБЩАЯ ЦЕЛЬ POSTGRESQL CATALOG
-================================================================================
 
-PostgreSQL в данном проекте не используется как хранилище всех больших данных.
-Его задача — быть управляющим каталогом pipeline.
-
-PostgreSQL должен хранить:
-- какие датасеты используются;
-- какие raw-файлы найдены;
-- к какой роли относится каждый файл: TRAIN, VALIDATION, TEST, EXPERIMENTS;
-- к какой ветке относится файл: dns, host, network, hybrid;
-- какой parser назначен или использован;
-- какая версия parser-а и schema применялась;
-- куда сохранены normalized Parquet artifacts;
-- куда сохранены feature Parquet artifacts;
-- куда сохранены model-ready artifacts;
-- сколько строк/событий прочитано, обработано и упало;
-- какие quality checks были выполнены;
-- какие ошибки возникли;
-- как связать model-ready данные обратно с исходным raw-файлом.
-
-Большие данные PostgreSQL хранить не должен.
-
-Большие данные должны храниться в:
-- Parquet — normalized events, features, model-ready tabular datasets;
-- NPZ / similar — sequence windows для LSTM;
-- raw layer — исходные файлы датасетов без изменений.
-
-DuckDB используется отдельно как аналитический SQL-движок поверх Parquet.
-
-Итоговая логика:
-
-RAW DATASETS
-    ↓
-CATALOG INGESTION
-    ↓
-PARSER ROUTING
-    ↓
-NORMALIZED EVENTS
-    ↓
-PARQUET STORAGE
-    ↓
-FEATURE EXTRACTION
-    ↓
-MODEL-READY DATASETS
-    ↓
-TRAIN / VALIDATION / TEST
-
-PostgreSQL catalog нужен для контроля всех переходов между этими слоями.
-
-================================================================================
-2. СВЯЗЬ С PATH_DATA_STORAGE
+ФИНАЛЬНАЯ POSTGRESQL CATALOG SCHEMA ДЛЯ STAGE TWO
 ================================================================================
 
-Рекомендуемая структура хранения:
-
-${PATH_DATA_STORAGE}/
-├── postgres/
-├── pgadmin/
-├── parquet/
-│   ├── normalized/
-│   ├── features/
-│   └── model_ready/
-├── duckdb/
-├── reports/
-├── logs/
-├── backups/
-└── temp_data/
-
-Что где хранится:
-
-1. ${PATH_DATA_STORAGE}/postgres/
-   - физические данные PostgreSQL container volume;
-   - управляется Docker/PostgreSQL;
-   - вручную не редактировать.
-
-2. ${PATH_DATA_STORAGE}/pgadmin/
-   - данные pgAdmin;
-   - настройки подключения, сессии, metadata pgAdmin.
-
-3. ${PATH_DATA_STORAGE}/parquet/normalized/
-   - normalized events после parsing/normalization;
-   - DNS events, host events, network flows, syscall/API events, logs, metrics.
-
-4. ${PATH_DATA_STORAGE}/parquet/features/
-   - feature tables после feature extraction;
-   - dns_features, host_syscall_features, host_eventlog_features, network_flow_features, hybrid_features.
-
-5. ${PATH_DATA_STORAGE}/parquet/model_ready/
-   - финальные таблицы для ML/DL;
-   - X_train.parquet, y_train.parquet, X_validation.parquet, X_test.parquet и т.д.
-
-6. ${PATH_DATA_STORAGE}/duckdb/
-   - DuckDB database files, если будут использоваться постоянные .duckdb файлы.
-
-7. ${PATH_DATA_STORAGE}/reports/
-   - parser reports;
-   - normalization reports;
-   - data quality reports;
-   - schema mismatch reports;
-   - leakage check reports.
-
-8. ${PATH_DATA_STORAGE}/logs/
-   - runtime logs pipeline;
-   - ошибки ingestion, parser routing, normalization.
-
-9. ${PATH_DATA_STORAGE}/backups/
-   - резервные копии catalog metadata или важных configuration artifacts.
-
-10. ${PATH_DATA_STORAGE}/temp_data/
-   - промежуточные JSON/temporary artifacts;
-   - уже используется в Stage One для inventory/sort summaries.
-
-Важно:
-В PostgreSQL лучше хранить относительные пути от PATH_DATA_STORAGE, например:
-
-parquet/normalized/dns/train/part-0001.parquet
-
-А не абсолютные пути вида:
-
-C:\Users\Public\PythonProjects\storage\parquet\normalized\dns\train\part-0001.parquet
-
-Причина:
-- проект легче переносить на другую машину;
-- PATH_DATA_STORAGE может измениться;
-- catalog остается стабильным.
-
-================================================================================
-3. ОБЯЗАТЕЛЬНЫЕ ТАБЛИЦЫ CATALOG SCHEMA
+1. НАЗНАЧЕНИЕ POSTGRESQL CATALOG
 ================================================================================
 
-Финальная структура должна включать следующие таблицы:
-
-1. datasets
-2. ingestion_runs
-3. dataset_files
-4. parser_registry
-5. parser_runs
-6. schema_versions
-7. normalized_artifacts
-8. feature_artifacts
-9. model_ready_artifacts
-10. data_quality_reports
-
-Эти таблицы покрывают полный Stage Two lifecycle:
-
-datasets
-    ↓
-dataset_files
-    ↓
-parser_runs
-    ↓
-normalized_artifacts
-    ↓
-feature_artifacts
-    ↓
-model_ready_artifacts
-    ↓
-data_quality_reports
-
-ingestion_runs фиксирует запуски сканирования raw datasets.
-parser_registry фиксирует доступные parser-ы.
-schema_versions фиксирует версии normalized/feature/model-ready схем.
-
-================================================================================
-4. ТАБЛИЦА datasets
-================================================================================
-
-Назначение:
-Хранит список датасетов, которые используются в проекте.
-
-Примеры датасетов:
-- CIC-Bell-DNS-EXF-2021
-- CIC-Bell-DNS-2021
-- Mendeley DNS Exfiltration Dataset
-- ADFA IDS
-- LID-DS 2021
-- Maintainable Log Dataset
-- LID-DS 2019
-- LANL Dataset
-- Windows Event Log / OTRF Security Datasets
-- Unified Host + Network Dataset / LANL
-- ISOT Cloud IDS Dataset
-- Dynamic Malware Analysis Dataset
-
-Зачем нужна:
-- отделяет dataset-level metadata от file-level metadata;
-- позволяет хранить роль датасета;
-- позволяет не дублировать dataset_name в каждой таблице;
-- нужна для связи raw-файлов, normalized artifacts, feature artifacts и model-ready artifacts.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор датасета.
-
-- name
-  Название датасета.
-
-- branch
-  Ветка данных:
-  dns / host / network / hybrid
-
-- role
-  Роль датасета:
-  TRAIN / VALIDATION / TEST / EXPERIMENTS
-
-- source_group
-  Группа источника, например:
-  DNS benchmark, HIDS benchmark, enterprise logs, cloud telemetry, malware sandbox.
-
-- description
-  Краткое описание датасета.
-
-- is_active
-  Используется ли датасет в текущем scope проекта.
-
-- created_at
-  Дата создания записи.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS datasets (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    role TEXT NOT NULL,
-    source_group TEXT,
-    description TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_datasets_branch
-        CHECK (branch IN ('dns', 'host', 'network', 'hybrid')),
-    CONSTRAINT chk_datasets_role
-        CHECK (role IN ('TRAIN', 'VALIDATION', 'TEST', 'EXPERIMENTS')),
-    CONSTRAINT uq_datasets_name_branch_role
-        UNIQUE (name, branch, role)
-);
-
-Почему UNIQUE важен:
-Один и тот же датасет не должен случайно регистрироваться несколько раз в одной и той же ветке и роли.
-
-================================================================================
-5. ТАБЛИЦА ingestion_runs
-================================================================================
-
-Назначение:
-Фиксирует каждый запуск catalog ingestion, то есть каждый запуск сканирования raw datasets.
-
-Catalog ingestion — это этап, когда pipeline проходит по папкам raw datasets и регистрирует найденные файлы в PostgreSQL.
-
-Эта таблица отвечает на вопросы:
-- когда выполнялось сканирование;
-- какой root path сканировался;
-- какая ветка сканировалась;
-- какая роль сканировалась;
-- сколько файлов найдено;
-- сколько файлов новых;
-- сколько уже существовало;
-- сколько изменилось;
-- сколько файлов не удалось обработать;
-- завершился ли запуск успешно.
-
-Зачем нужна:
-Без ingestion_runs будет сложно понять, каким запуском был найден файл и какой результат был у конкретного scan.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор запуска.
-
-- run_name
-  Человекочитаемое имя запуска, например:
-  initial_dns_scan_2026_06_09
-
-- root_path
-  Корневая папка, которую сканировали.
-
-- branch
-  dns / host / network / hybrid.
-  Может быть NULL, если сканировались все ветки.
-
-- role
-  TRAIN / VALIDATION / TEST / EXPERIMENTS.
-  Может быть NULL, если сканировались все роли.
-
-- started_at
-  Время начала запуска.
-
-- finished_at
-  Время завершения запуска.
-
-- status
-  RUNNING / SUCCESS / PARTIAL_SUCCESS / FAILED.
-
-- files_seen
-  Сколько файлов найдено всего.
-
-- files_new
-  Сколько новых файлов добавлено в catalog.
-
-- files_existing
-  Сколько файлов уже было в catalog.
-
-- files_changed
-  Сколько файлов изменилось по hash/size/modified_at.
-
-- files_failed
-  Сколько файлов не удалось зарегистрировать.
-
-- error_message
-  Общая ошибка запуска, если была.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS ingestion_runs (
-    id SERIAL PRIMARY KEY,
-    run_name TEXT,
-    root_path TEXT NOT NULL,
-    branch TEXT,
-    role TEXT,
-    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    finished_at TIMESTAMP,
-    status TEXT DEFAULT 'RUNNING',
-    files_seen BIGINT DEFAULT 0,
-    files_new BIGINT DEFAULT 0,
-    files_existing BIGINT DEFAULT 0,
-    files_changed BIGINT DEFAULT 0,
-    files_failed BIGINT DEFAULT 0,
-    error_message TEXT,
-    CONSTRAINT chk_ingestion_runs_branch
-        CHECK (branch IS NULL OR branch IN ('dns', 'host', 'network', 'hybrid')),
-    CONSTRAINT chk_ingestion_runs_role
-        CHECK (role IS NULL OR role IN ('TRAIN', 'VALIDATION', 'TEST', 'EXPERIMENTS')),
-    CONSTRAINT chk_ingestion_runs_status
-        CHECK (status IN ('RUNNING', 'SUCCESS', 'PARTIAL_SUCCESS', 'FAILED'))
-);
-
-================================================================================
-6. ТАБЛИЦА dataset_files
-================================================================================
-
-Назначение:
-Самая важная таблица для raw layer.
-Хранит все исходные файлы, найденные в датасетах.
-
-Каждая запись = один raw-файл.
-
-Примеры файлов:
-- DNS CSV;
-- DNS PCAP;
-- domain-list TXT;
-- host JSON;
-- syscall trace TXT;
-- BSON sandbox telemetry;
-- Windows/Sysmon JSON Lines;
-- NetFlow files;
-- raw logs;
-- PCAP/PCAPNG/CAP network captures.
-
-Зачем нужна:
-- это точка входа для parser routing;
-- через нее обеспечивается traceability;
-- она связывает raw file → parser run → normalized artifact → feature artifact → model-ready artifact;
-- позволяет не потерять исходный контекст.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор raw-файла.
-
-- dataset_id
-  Ссылка на datasets.id.
-
-- ingestion_run_id
-  Ссылка на ingestion_runs.id.
-  Показывает, каким scan-запуском файл был найден.
-
-- file_path
-  Полный или проектный путь к raw-файлу.
-
-- relative_path
-  Относительный путь от root dataset folder или PATH_DATA_STORAGE.
-  Нужен для переносимости.
-
-- file_name
-  Имя файла.
-
-- source_format
-  Нормализованное имя формата:
-  csv, json, jsonl, log, txt, pcap, pcapng, cap, bson, netflow_day, wls_day, xml и т.д.
-
-- file_extension
-  Физическое расширение файла:
-  .csv, .json, .txt, .pcap и т.д.
-  Иногда source_format и file_extension могут отличаться.
-
-- file_size_bytes
-  Размер файла в байтах.
-
-- file_hash
-  Hash файла.
-  Нужен для контроля неизменности raw-файла.
-
-- checksum_algorithm
-  Алгоритм hash, например sha256.
-
-- role
-  TRAIN / VALIDATION / TEST / EXPERIMENTS.
-
-- branch
-  dns / host / network / hybrid.
-
-- status
-  Текущий статус файла в pipeline.
-
-- last_seen_at
-  Когда файл последний раз был найден scan-ом.
-
-- modified_at
-  Время изменения файла на файловой системе.
-
-- is_empty
-  Флаг пустого файла.
-
-- parser_name
-  Назначенный parser.
-
-- parser_version
-  Версия назначенного parser-а.
-
-- schema_version
-  Версия schema, которую планируется применить.
-
-- label_source
-  Откуда будет извлекаться label:
-  filename / directory / column / metadata / external_mapping / unknown.
-
-- timestamp_source
-  Откуда будет извлекаться timestamp:
-  column / packet_timestamp / event_order / relative_time / missing / unknown.
-
-- error_message
-  Ошибка регистрации или routing, если была.
-
-- created_at
-  Когда запись создана.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS dataset_files (
-    id SERIAL PRIMARY KEY,
-    dataset_id INTEGER NOT NULL REFERENCES datasets(id),
-    ingestion_run_id INTEGER REFERENCES ingestion_runs(id),
-    file_path TEXT NOT NULL,
-    relative_path TEXT,
-    file_name TEXT NOT NULL,
-    source_format TEXT NOT NULL,
-    file_extension TEXT,
-    file_size_bytes BIGINT,
-    file_hash TEXT,
-    checksum_algorithm TEXT DEFAULT 'sha256',
-    role TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    status TEXT DEFAULT 'NEW',
-    last_seen_at TIMESTAMP,
-    modified_at TIMESTAMP,
-    is_empty BOOLEAN DEFAULT FALSE,
-    parser_name TEXT,
-    parser_version TEXT,
-    schema_version TEXT,
-    label_source TEXT,
-    timestamp_source TEXT,
-    error_message TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_dataset_files_branch
-        CHECK (branch IN ('dns', 'host', 'network', 'hybrid')),
-    CONSTRAINT chk_dataset_files_role
-        CHECK (role IN ('TRAIN', 'VALIDATION', 'TEST', 'EXPERIMENTS')),
-    CONSTRAINT chk_dataset_files_status
-        CHECK (status IN (
-            'NEW',
-            'REGISTERED',
-            'READY_FOR_PARSING',
-            'PARSING',
-            'PARSED',
-            'PARTIALLY_PARSED',
-            'FAILED',
-            'SKIPPED',
-            'NORMALIZED',
-            'FEATURE_EXTRACTED',
-            'MODEL_READY',
-            'NO_PARSER_AVAILABLE',
-            'EMPTY_FILE'
-        ))
-);
-
-Рекомендуемые индексы:
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dataset_files_dataset_path
-ON dataset_files(dataset_id, file_path);
-
-CREATE INDEX IF NOT EXISTS idx_dataset_files_dataset_id
-ON dataset_files(dataset_id);
-
-CREATE INDEX IF NOT EXISTS idx_dataset_files_ingestion_run_id
-ON dataset_files(ingestion_run_id);
-
-CREATE INDEX IF NOT EXISTS idx_dataset_files_branch_role_format
-ON dataset_files(branch, role, source_format);
-
-CREATE INDEX IF NOT EXISTS idx_dataset_files_status
-ON dataset_files(status);
-
-CREATE INDEX IF NOT EXISTS idx_dataset_files_hash
-ON dataset_files(file_hash);
-
-Почему это важно:
-- UNIQUE защищает от повторной регистрации одного и того же файла;
-- branch/role/source_format нужен для parser routing;
-- status нужен для поиска файлов, готовых к следующему этапу;
-- hash нужен для проверки, что raw-файл не изменился.
-
-================================================================================
-7. ТАБЛИЦА parser_registry
-================================================================================
-
-Назначение:
-Хранит список доступных parser-ов и правила их применимости.
-
-Эта таблица нужна для parser routing.
-
-Пример:
-- dns + csv → DnsCsvParser
-- dns + pcap → DnsPcapParser
-- host + bson → HostBsonParser
-- host + txt → HostTxtTraceParser
-- host + wls_day → WindowsEventLogParser
-- network + netflow_day → NetFlowParser
-
-Зачем нужна:
-- routing становится управляемым и документированным;
-- можно отключать parser через is_active;
-- можно фиксировать parser_version;
-- можно связать parser с output_schema_version.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор parser-а.
-
-- parser_name
-  Имя parser-а.
-
-- parser_version
-  Версия parser-а.
-
-- branch
-  Для какой ветки parser:
-  dns / host / network / hybrid.
-
-- source_format
-  Для какого формата parser.
-
-- supported_role
-  Для какой роли подходит:
-  TRAIN / VALIDATION / TEST / EXPERIMENTS.
-  Может быть NULL, если parser подходит для всех ролей.
-
-- output_schema_version
-  Какая schema получается на выходе parser-а.
-
-- is_active
-  Активен ли parser.
-
-- description
-  Описание parser-а.
-
-- created_at
-  Время создания записи.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS parser_registry (
-    id SERIAL PRIMARY KEY,
-    parser_name TEXT NOT NULL,
-    parser_version TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    source_format TEXT NOT NULL,
-    supported_role TEXT,
-    output_schema_version TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_parser_registry_branch
-        CHECK (branch IN ('dns', 'host', 'network', 'hybrid')),
-    CONSTRAINT chk_parser_registry_supported_role
-        CHECK (supported_role IS NULL OR supported_role IN ('TRAIN', 'VALIDATION', 'TEST', 'EXPERIMENTS')),
-    CONSTRAINT uq_parser_registry
-        UNIQUE (parser_name, parser_version, branch, source_format, supported_role)
-);
-
-Рекомендуемый индекс:
-
-CREATE INDEX IF NOT EXISTS idx_parser_registry_lookup
-ON parser_registry(branch, source_format, supported_role, is_active);
-
-================================================================================
-8. ТАБЛИЦА parser_runs
-================================================================================
-
-Назначение:
-Фиксирует каждый запуск parser-а по конкретному файлу.
-
-Если dataset_files говорит: “файл существует”,
-то parser_runs говорит: “мы пытались его разобрать таким parser-ом, в такой версии, с таким результатом”.
-
-Зачем нужна:
-- можно повторять parsing разными версиями parser-а;
-- можно видеть историю ошибок;
-- можно сравнивать rows_read / rows_parsed / rows_failed;
-- можно связать parser run с output Parquet.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор parser run.
-
-- file_id
-  Ссылка на dataset_files.id.
-
-- parser_name
-  Имя parser-а.
-
-- parser_version
-  Версия parser-а.
-
-- schema_version
-  Версия normalized schema.
-
-- started_at
-  Время начала parsing.
-
-- finished_at
-  Время завершения parsing.
-
-- status
-  RUNNING / SUCCESS / PARTIAL_SUCCESS / FAILED / SKIPPED.
-
-- rows_read
-  Сколько строк/событий прочитано.
-
-- rows_parsed
-  Сколько строк/событий успешно разобрано.
-
-- rows_failed
-  Сколько строк/событий не удалось разобрать.
-
-- error_message
-  Ошибка, если была.
-
-- output_parquet_path
-  Путь к normalized Parquet, если parser уже пишет output.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS parser_runs (
-    id SERIAL PRIMARY KEY,
-    file_id INTEGER NOT NULL REFERENCES dataset_files(id),
-    parser_name TEXT NOT NULL,
-    parser_version TEXT NOT NULL,
-    schema_version TEXT,
-    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    finished_at TIMESTAMP,
-    status TEXT DEFAULT 'RUNNING',
-    rows_read BIGINT DEFAULT 0,
-    rows_parsed BIGINT DEFAULT 0,
-    rows_failed BIGINT DEFAULT 0,
-    error_message TEXT,
-    output_parquet_path TEXT,
-    CONSTRAINT chk_parser_runs_status
-        CHECK (status IN ('RUNNING', 'SUCCESS', 'PARTIAL_SUCCESS', 'FAILED', 'SKIPPED'))
-);
-
-Рекомендуемые индексы:
-
-CREATE INDEX IF NOT EXISTS idx_parser_runs_file_id
-ON parser_runs(file_id);
-
-CREATE INDEX IF NOT EXISTS idx_parser_runs_status
-ON parser_runs(status);
-
-CREATE INDEX IF NOT EXISTS idx_parser_runs_parser
-ON parser_runs(parser_name, parser_version);
-
-================================================================================
-9. ТАБЛИЦА schema_versions
-================================================================================
-
-Назначение:
-Хранит версии схем данных.
-
-Нужна для:
-- normalized event schema;
-- DNS feature schema;
-- host syscall feature schema;
-- host eventlog feature schema;
-- network flow feature schema;
-- hybrid feature schema;
-- model-ready schema.
-
-Зачем нужна:
-Если структура normalized_events изменится, нужно знать, какие Parquet artifacts были созданы по старой схеме, а какие по новой.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор schema version.
-
-- schema_name
-  Название схемы:
-  normalized_events, dns_features, host_syscall_features, network_flow_features и т.д.
-
-- schema_version
-  Версия, например v1.0.
-
-- layer
-  На каком слое используется:
-  normalized / features / model_ready.
-
-- branch
-  dns / host / network / hybrid.
-  Может быть NULL, если схема общая.
-
-- description
-  Описание схемы.
-
-- is_active
-  Активна ли версия.
-
-- created_at
-  Время создания записи.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS schema_versions (
-    id SERIAL PRIMARY KEY,
-    schema_name TEXT NOT NULL,
-    schema_version TEXT NOT NULL,
-    layer TEXT NOT NULL,
-    branch TEXT,
-    description TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_schema_versions_layer
-        CHECK (layer IN ('normalized', 'features', 'model_ready')),
-    CONSTRAINT chk_schema_versions_branch
-        CHECK (branch IS NULL OR branch IN ('dns', 'host', 'network', 'hybrid')),
-    CONSTRAINT uq_schema_versions
-        UNIQUE (schema_name, schema_version, layer, branch)
-);
-
-================================================================================
-10. ТАБЛИЦА normalized_artifacts
-================================================================================
-
-Назначение:
-Хранит ссылки на normalized Parquet artifacts.
-
-После parsing/normalization raw-файл превращается в normalized events.
-Эти events сохраняются в Parquet.
-PostgreSQL хранит не сами events, а путь к Parquet и metadata.
-
-Зачем нужна:
-- связывает raw-файл с normalized Parquet;
-- фиксирует row_count;
-- фиксирует schema_version;
-- фиксирует статус нормализации;
-- нужна для дальнейшего feature extraction.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор artifact.
-
-- dataset_id
-  Ссылка на datasets.id.
-
-- file_id
-  Ссылка на dataset_files.id.
-
-- parser_run_id
-  Ссылка на parser_runs.id.
-
-- role
-  TRAIN / VALIDATION / TEST / EXPERIMENTS.
-
-- branch
-  dns / host / network / hybrid.
-
-- source_format
-  Исходный формат файла.
-
-- normalized_path
-  Путь к Parquet.
-
-- schema_version
-  Версия normalized schema.
-
-- row_count
-  Количество normalized events.
-
-- status
-  CREATED / VALIDATED / FAILED / PARTIAL.
-
-- created_at
-  Время создания записи.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS normalized_artifacts (
-    id SERIAL PRIMARY KEY,
-    dataset_id INTEGER NOT NULL REFERENCES datasets(id),
-    file_id INTEGER NOT NULL REFERENCES dataset_files(id),
-    parser_run_id INTEGER REFERENCES parser_runs(id),
-    role TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    source_format TEXT,
-    normalized_path TEXT NOT NULL,
-    schema_version TEXT,
-    row_count BIGINT,
-    status TEXT DEFAULT 'CREATED',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_normalized_artifacts_role
-        CHECK (role IN ('TRAIN', 'VALIDATION', 'TEST', 'EXPERIMENTS')),
-    CONSTRAINT chk_normalized_artifacts_branch
-        CHECK (branch IN ('dns', 'host', 'network', 'hybrid')),
-    CONSTRAINT chk_normalized_artifacts_status
-        CHECK (status IN ('CREATED', 'VALIDATED', 'FAILED', 'PARTIAL'))
-);
-
-Рекомендуемые индексы:
-
-CREATE INDEX IF NOT EXISTS idx_normalized_artifacts_dataset_id
-ON normalized_artifacts(dataset_id);
-
-CREATE INDEX IF NOT EXISTS idx_normalized_artifacts_file_id
-ON normalized_artifacts(file_id);
-
-CREATE INDEX IF NOT EXISTS idx_normalized_artifacts_role_branch
-ON normalized_artifacts(role, branch);
-
-================================================================================
-11. ТАБЛИЦА feature_artifacts
-================================================================================
-
-Назначение:
-Хранит ссылки на feature tables.
-
-Feature layer создается после normalized layer.
-Признаки извлекаются из normalized events и сохраняются в Parquet.
-
-Примеры feature groups:
-- dns_features;
-- host_syscall_features;
-- host_eventlog_features;
-- host_metrics_features;
-- network_flow_features;
-- hybrid_features;
-- sequence_features.
-
-Зачем нужна:
-- связывает features с dataset и normalized artifacts;
-- фиксирует количество строк и признаков;
-- позволяет понять, какие признаки уже построены;
-- нужна для model-ready layer.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор feature artifact.
-
-- dataset_id
-  Ссылка на datasets.id.
-
-- normalized_artifact_id
-  Ссылка на normalized_artifacts.id.
-  Может быть NULL, если feature table строится из нескольких normalized artifacts.
-
-- role
-  TRAIN / VALIDATION / TEST / EXPERIMENTS.
-
-- branch
-  dns / host / network / hybrid.
-
-- feature_group
-  Группа признаков.
-
-- feature_path
-  Путь к feature Parquet.
-
-- feature_schema_version
-  Версия feature schema.
-
-- row_count
-  Количество строк.
-
-- feature_count
-  Количество признаков.
-
-- created_at
-  Время создания записи.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS feature_artifacts (
-    id SERIAL PRIMARY KEY,
-    dataset_id INTEGER NOT NULL REFERENCES datasets(id),
-    normalized_artifact_id INTEGER REFERENCES normalized_artifacts(id),
-    role TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    feature_group TEXT NOT NULL,
-    feature_path TEXT NOT NULL,
-    feature_schema_version TEXT,
-    row_count BIGINT,
-    feature_count INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_feature_artifacts_role
-        CHECK (role IN ('TRAIN', 'VALIDATION', 'TEST', 'EXPERIMENTS')),
-    CONSTRAINT chk_feature_artifacts_branch
-        CHECK (branch IN ('dns', 'host', 'network', 'hybrid'))
-);
-
-Рекомендуемые индексы:
-
-CREATE INDEX IF NOT EXISTS idx_feature_artifacts_dataset_id
-ON feature_artifacts(dataset_id);
-
-CREATE INDEX IF NOT EXISTS idx_feature_artifacts_normalized_id
-ON feature_artifacts(normalized_artifact_id);
-
-CREATE INDEX IF NOT EXISTS idx_feature_artifacts_group
-ON feature_artifacts(feature_group);
-
-CREATE INDEX IF NOT EXISTS idx_feature_artifacts_role_branch
-ON feature_artifacts(role, branch);
-
-================================================================================
-12. ТАБЛИЦА model_ready_artifacts
-================================================================================
-
-Назначение:
-Хранит ссылки на финальные данные, готовые для ML/DL моделей.
-
-Примеры:
-- X_train.parquet;
-- y_train.parquet;
-- X_validation.parquet;
-- y_validation.parquet;
-- X_test.parquet;
-- y_test.parquet;
-- train_sequences.npz;
-- validation_sequences.npz;
-- test_sequences.npz.
-
-Зачем нужна:
-- фиксирует финальный dataset для модели;
-- контролирует TRAIN/VALIDATION/TEST split;
-- хранит label distribution;
-- хранит версии scaler/encoder;
-- помогает предотвращать data leakage.
-
-Рекомендуемые поля:
-
-- id
-  Уникальный идентификатор artifact.
-
-- feature_artifact_id
-  Ссылка на feature_artifacts.id.
-  Может быть NULL, если model-ready artifact собран из нескольких feature artifacts.
-
-- role
-  TRAIN / VALIDATION / TEST.
-
-- branch
-  dns / host / network / hybrid.
-
-- data_type
-  Тип данных:
-  X, y, sequences, metadata, split_index.
-
-- artifact_path
-  Путь к model-ready artifact.
-
-- sample_count
-  Количество сэмплов.
-
-- feature_count
-  Количество признаков.
-
-- label_distribution
-  JSONB с распределением labels.
-
-- scaler_version
-  Версия scaler, если применялся.
-
-- encoder_version
-  Версия encoder, если применялся.
-
-- created_at
-  Время создания записи.
-
-Рекомендуемый SQL:
-
-CREATE TABLE IF NOT EXISTS model_ready_artifacts (
-    id SERIAL PRIMARY KEY,
-    feature_artifact_id INTEGER REFERENCES feature_artifacts(id),
-    role TEXT NOT NULL,
-    branch TEXT,
-    data_type TEXT NOT NULL,
-    artifact_path TEXT NOT NULL,
-    sample_count BIGINT,
-    feature_count INTEGER,
-    label_distribution JSONB,
-    scaler_version TEXT,
-    encoder_version TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_model_ready_artifacts_role
-        CHECK (role IN ('TRAIN', 'VALIDATION', 'TEST', 'EXPERIMENTS')),
-    CONSTRAINT chk_model_ready_artifacts_branch
-        CHECK (branch IS NULL OR branch IN ('dns', 'host', 'network', 'hybrid')),
-    CONSTRAINT chk_model_ready_artifacts_data_type
-        CHECK (data_type IN ('X', 'y', 'sequences', 'metadata', 'split_index', 'preprocessing_object'))
-);
-
-Рекомендуемые индексы:
-
-CREATE INDEX IF NOT EXISTS idx_model_ready_artifacts_role_branch
-ON model_ready_artifacts(role, branch);
-
-CREATE INDEX IF NOT EXISTS idx_model_ready_artifacts_data_type
-ON model_ready_artifacts(data_type);
-
-================================================================================
-13. ТАБЛИЦА data_quality_reports
-================================================================================
-
-Назначение:
-Хранит результаты проверок качества данных.
-
-Quality checks должны выполняться для:
-- raw file registration;
+PostgreSQL используется как управляющий catalog/pipeline-control слой.
+Он не используется как хранилище больших normalized events, feature matrix,
+sequence windows, full packet payload или BSON streams.
+
+Catalog должен хранить:
+- datasets and roles;
+- raw dataset files;
+- ingestion runs;
+- parser registry;
 - parser runs;
+- schema versions;
 - normalized artifacts;
 - feature artifacts;
-- model-ready artifacts.
+- model-ready artifacts;
+- preprocessing artifacts;
+- label mapping rules;
+- data quality reports;
+- traceability across all layers.
 
-Проверки могут включать:
-- количество строк;
-- количество успешно обработанных строк;
-- количество ошибок;
-- missing values;
-- duplicates;
-- schema mismatch;
-- timestamp coverage;
-- label coverage;
-- label distribution;
-- наличие role;
-- наличие branch;
-- наличие source_format;
-- наличие file_id;
-- наличие raw_file_path;
-- наличие parser_version;
-- наличие schema_version.
+2. ОБЩИЕ ENUM-ЗНАЧЕНИЯ ЧЕРЕЗ CHECK CONSTRAINTS
+================================================================================
 
-Зачем нужна:
-- фиксирует качество каждого слоя;
-- помогает не пропустить silent data loss;
-- нужна для отчетности Stage Two;
-- помогает перед feature extraction и training.
+role:
+- TRAIN
+- VALIDATION
+- TEST
+- EXPERIMENTS
 
-Рекомендуемые поля:
+branch:
+- dns
+- host
+- network
+- hybrid
 
-- id
-  Уникальный идентификатор отчета.
+file status:
+- DISCOVERED
+- REGISTERED
+- CHANGED
+- EMPTY_FILE
+- UNSUPPORTED_FORMAT
+- READY_FOR_PARSING
+- PARSED
+- PARTIALLY_PARSED
+- FAILED
+- SKIPPED
 
-- artifact_id
-  ID объекта, к которому относится отчет.
-  Это может быть parser_run, normalized_artifact, feature_artifact, model_ready_artifact.
+run/artifact status:
+- PENDING
+- RUNNING
+- SUCCESS
+- PARTIAL_SUCCESS
+- FAILED
+- SKIPPED
+- BLOCKED
 
-- artifact_type
-  Тип объекта:
-  dataset_file / parser_run / normalized_artifact / feature_artifact / model_ready_artifact.
+schema layer:
+- normalized
+- features
+- model_ready
 
-- rows_total
-  Всего строк/событий.
+artifact type:
+- normalized
+- feature
+- model_ready
+- preprocessing
+- quality_report
 
-- rows_valid
-  Валидных строк/событий.
+label status:
+- explicit_label
+- inferred_label
+- weak_label
+- partial_label
+- unlabeled
+- conflicting_label
 
-- rows_failed
-  Ошибочных строк/событий.
+3. TABLE: datasets
+================================================================================
 
-- missing_values_count
-  Количество missing values.
+Назначение:
+Хранит dataset-level metadata.
 
-- duplicate_rows_count
-  Количество дублей.
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- name TEXT NOT NULL
+- slug TEXT NOT NULL
+- branch TEXT NOT NULL
+- role TEXT NOT NULL
+- source_group TEXT NULL
+- description TEXT NULL
+- dataset_version TEXT NULL
+- source_url TEXT NULL
+- license_name TEXT NULL
+- is_active BOOLEAN NOT NULL DEFAULT TRUE
+- metadata_json JSONB NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+- updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 
-- schema_mismatch_count
-  Количество несоответствий схеме.
+Constraints:
+- CHECK branch in dns/host/network/hybrid
+- CHECK role in TRAIN/VALIDATION/TEST/EXPERIMENTS
+- UNIQUE(name, branch, role)
+- UNIQUE(slug, branch, role)
 
-- label_distribution
-  Распределение labels в JSONB.
+4. TABLE: ingestion_runs
+================================================================================
 
-- timestamp_coverage
-  Доля событий с timestamp.
+Назначение:
+Фиксирует каждый запуск сканирования raw datasets.
 
-- report_path
-  Путь к подробному report-файлу.
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- run_uid UUID NOT NULL UNIQUE
+- root_path TEXT NOT NULL
+- root_path_kind TEXT NOT NULL
+- branch TEXT NULL
+- role TEXT NULL
+- started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+- finished_at TIMESTAMPTZ NULL
+- status TEXT NOT NULL DEFAULT 'RUNNING'
+- files_seen INTEGER NOT NULL DEFAULT 0
+- files_new INTEGER NOT NULL DEFAULT 0
+- files_existing INTEGER NOT NULL DEFAULT 0
+- files_changed INTEGER NOT NULL DEFAULT 0
+- files_failed INTEGER NOT NULL DEFAULT 0
+- error_message TEXT NULL
+- report_path TEXT NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 
-- created_at
-  Время создания отчета.
+Constraints:
+- CHECK status in RUNNING/SUCCESS/PARTIAL_SUCCESS/FAILED/SKIPPED
+- CHECK branch nullable or in dns/host/network/hybrid
+- CHECK role nullable or in TRAIN/VALIDATION/TEST/EXPERIMENTS
 
-Рекомендуемый SQL:
+5. TABLE: dataset_files
+================================================================================
 
-CREATE TABLE IF NOT EXISTS data_quality_reports (
-    id SERIAL PRIMARY KEY,
-    artifact_id INTEGER,
-    artifact_type TEXT NOT NULL,
-    rows_total BIGINT,
-    rows_valid BIGINT,
-    rows_failed BIGINT,
-    missing_values_count BIGINT,
-    duplicate_rows_count BIGINT,
-    schema_mismatch_count BIGINT,
-    label_distribution JSONB,
-    timestamp_coverage NUMERIC,
-    report_path TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_data_quality_reports_artifact_type
-        CHECK (artifact_type IN (
-            'dataset_file',
-            'parser_run',
-            'normalized_artifact',
-            'feature_artifact',
-            'model_ready_artifact'
-        ))
+Назначение:
+Главная таблица raw layer. Одна запись = один raw-файл.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- dataset_id BIGINT NOT NULL REFERENCES datasets(id)
+- ingestion_run_id BIGINT NULL REFERENCES ingestion_runs(id)
+- file_path TEXT NOT NULL
+- relative_path TEXT NULL
+- file_name TEXT NOT NULL
+- file_extension TEXT NULL
+- source_format TEXT NOT NULL
+- mime_type TEXT NULL
+- file_size_bytes BIGINT NULL
+- file_hash_sha256 TEXT NULL
+- file_modified_at TIMESTAMPTZ NULL
+- role TEXT NOT NULL
+- branch TEXT NOT NULL
+- status TEXT NOT NULL DEFAULT 'REGISTERED'
+- parser_hint TEXT NULL
+- has_embedded_label BOOLEAN NULL
+- label_source_hint TEXT NULL
+- timestamp_source_hint TEXT NULL
+- encoding_hint TEXT NULL
+- compression_hint TEXT NULL
+- row_count_hint BIGINT NULL
+- metadata_json JSONB NULL
+- error_message TEXT NULL
+- first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+- last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+- updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- UNIQUE(dataset_id, file_path)
+- CHECK role in TRAIN/VALIDATION/TEST/EXPERIMENTS
+- CHECK branch in dns/host/network/hybrid
+- CHECK status in DISCOVERED/REGISTERED/CHANGED/EMPTY_FILE/UNSUPPORTED_FORMAT/READY_FOR_PARSING/PARSED/PARTIALLY_PARSED/FAILED/SKIPPED
+
+Indexes:
+- idx_dataset_files_dataset_id
+- idx_dataset_files_role_branch
+- idx_dataset_files_source_format
+- idx_dataset_files_status
+- idx_dataset_files_hash
+
+6. TABLE: parser_registry
+================================================================================
+
+Назначение:
+Хранит доступные parser strategies and routing rules.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- parser_name TEXT NOT NULL
+- parser_version TEXT NOT NULL
+- branch TEXT NOT NULL
+- source_format TEXT NOT NULL
+- supported_role TEXT NULL
+- normalized_schema_name TEXT NOT NULL
+- normalized_schema_version TEXT NOT NULL
+- parser_module TEXT NOT NULL
+- parser_class TEXT NOT NULL
+- priority INTEGER NOT NULL DEFAULT 100
+- is_active BOOLEAN NOT NULL DEFAULT TRUE
+- supports_streaming BOOLEAN NOT NULL DEFAULT TRUE
+- requires_external_tools BOOLEAN NOT NULL DEFAULT FALSE
+- external_tools_json JSONB NULL
+- config_json JSONB NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+- updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- UNIQUE(parser_name, parser_version, branch, source_format, supported_role)
+- CHECK branch in dns/host/network/hybrid
+- CHECK supported_role nullable or in TRAIN/VALIDATION/TEST/EXPERIMENTS
+
+7. TABLE: schema_versions
+================================================================================
+
+Назначение:
+Хранит версии normalized/features/model-ready schemas.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- schema_name TEXT NOT NULL
+- schema_version TEXT NOT NULL
+- layer TEXT NOT NULL
+- branch TEXT NULL
+- schema_path TEXT NULL
+- schema_hash_sha256 TEXT NULL
+- is_active BOOLEAN NOT NULL DEFAULT TRUE
+- description TEXT NULL
+- columns_json JSONB NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- UNIQUE(schema_name, schema_version, layer, branch)
+- CHECK layer in normalized/features/model_ready
+- CHECK branch nullable or in dns/host/network/hybrid
+
+8. TABLE: parser_runs
+================================================================================
+
+Назначение:
+Фиксирует каждую попытку parsing/normalization raw-файла.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- run_uid UUID NOT NULL UNIQUE
+- file_id BIGINT NOT NULL REFERENCES dataset_files(id)
+- parser_registry_id BIGINT NULL REFERENCES parser_registry(id)
+- parser_name TEXT NOT NULL
+- parser_version TEXT NOT NULL
+- schema_version_id BIGINT NULL REFERENCES schema_versions(id)
+- started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+- finished_at TIMESTAMPTZ NULL
+- status TEXT NOT NULL DEFAULT 'RUNNING'
+- rows_read BIGINT NULL
+- rows_parsed BIGINT NULL
+- rows_failed BIGINT NULL
+- events_emitted BIGINT NULL
+- output_parquet_path TEXT NULL
+- error_message TEXT NULL
+- warning_count INTEGER NOT NULL DEFAULT 0
+- metadata_json JSONB NULL
+- report_path TEXT NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- CHECK status in RUNNING/SUCCESS/PARTIAL_SUCCESS/FAILED/SKIPPED
+
+Indexes:
+- idx_parser_runs_file_id
+- idx_parser_runs_status
+- idx_parser_runs_parser
+
+9. TABLE: label_mapping_rules
+================================================================================
+
+Назначение:
+Хранит правила назначения labels и происхождение разметки.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- rule_uid TEXT NOT NULL UNIQUE
+- rule_name TEXT NOT NULL
+- branch TEXT NOT NULL
+- role TEXT NULL
+- source_format TEXT NULL
+- dataset_name_pattern TEXT NULL
+- file_name_pattern TEXT NULL
+- source_field TEXT NULL
+- source_value_pattern TEXT NULL
+- label_binary SMALLINT NULL
+- label_family TEXT NULL
+- label_subtype TEXT NULL
+- label_source TEXT NOT NULL
+- label_status TEXT NOT NULL
+- label_confidence NUMERIC(4,3) NULL
+- priority INTEGER NOT NULL DEFAULT 100
+- is_active BOOLEAN NOT NULL DEFAULT TRUE
+- description TEXT NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- CHECK branch in dns/host/network/hybrid
+- CHECK role nullable or in TRAIN/VALIDATION/TEST/EXPERIMENTS
+- CHECK label_binary is null or in 0/1
+- CHECK label_status in explicit_label/inferred_label/weak_label/partial_label/unlabeled/conflicting_label
+
+10. TABLE: normalized_artifacts
+================================================================================
+
+Назначение:
+Регистрирует normalized Parquet artifacts and links raw file -> parser run -> normalized output.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- artifact_uid UUID NOT NULL UNIQUE
+- dataset_id BIGINT NOT NULL REFERENCES datasets(id)
+- file_id BIGINT NOT NULL REFERENCES dataset_files(id)
+- parser_run_id BIGINT NOT NULL REFERENCES parser_runs(id)
+- schema_version_id BIGINT NULL REFERENCES schema_versions(id)
+- role TEXT NOT NULL
+- branch TEXT NOT NULL
+- modality TEXT NOT NULL
+- source_format TEXT NOT NULL
+- normalized_path TEXT NOT NULL
+- schema_name TEXT NOT NULL
+- schema_version TEXT NOT NULL
+- row_count BIGINT NULL
+- event_count BIGINT NULL
+- file_size_bytes BIGINT NULL
+- content_hash_sha256 TEXT NULL
+- status TEXT NOT NULL DEFAULT 'SUCCESS'
+- null_counts_json JSONB NULL
+- label_distribution_json JSONB NULL
+- min_timestamp TIMESTAMPTZ NULL
+- max_timestamp TIMESTAMPTZ NULL
+- metadata_json JSONB NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- UNIQUE(parser_run_id, normalized_path)
+- CHECK role in TRAIN/VALIDATION/TEST/EXPERIMENTS
+- CHECK branch in dns/host/network/hybrid
+- CHECK status in PENDING/RUNNING/SUCCESS/PARTIAL_SUCCESS/FAILED/SKIPPED/BLOCKED
+
+11. TABLE: feature_artifacts
+================================================================================
+
+Назначение:
+Регистрирует feature Parquet artifacts.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- artifact_uid UUID NOT NULL UNIQUE
+- dataset_id BIGINT NOT NULL REFERENCES datasets(id)
+- normalized_artifact_id BIGINT NULL REFERENCES normalized_artifacts(id)
+- role TEXT NOT NULL
+- branch TEXT NOT NULL
+- feature_group TEXT NOT NULL
+- feature_path TEXT NOT NULL
+- feature_schema_name TEXT NOT NULL
+- feature_schema_version TEXT NOT NULL
+- row_count BIGINT NULL
+- sample_count BIGINT NULL
+- feature_count INTEGER NULL
+- entity_count BIGINT NULL
+- window_size_seconds INTEGER NULL
+- window_step_seconds INTEGER NULL
+- label_distribution_json JSONB NULL
+- excluded_columns_json JSONB NULL
+- status TEXT NOT NULL DEFAULT 'SUCCESS'
+- metadata_json JSONB NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- CHECK role in TRAIN/VALIDATION/TEST/EXPERIMENTS
+- CHECK branch in dns/host/network/hybrid
+- CHECK status in PENDING/RUNNING/SUCCESS/PARTIAL_SUCCESS/FAILED/SKIPPED/BLOCKED
+
+12. TABLE: preprocessing_artifacts
+================================================================================
+
+Назначение:
+Фиксирует scaler/encoder/imputer/preprocessing objects, fitted only on TRAIN.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- artifact_uid UUID NOT NULL UNIQUE
+- branch TEXT NOT NULL
+- feature_group TEXT NULL
+- preprocessing_type TEXT NOT NULL
+- artifact_path TEXT NOT NULL
+- fitted_on_role TEXT NOT NULL DEFAULT 'TRAIN'
+- fitted_on_feature_artifact_id BIGINT NULL REFERENCES feature_artifacts(id)
+- schema_version TEXT NOT NULL
+- object_version TEXT NOT NULL
+- columns_json JSONB NULL
+- params_json JSONB NULL
+- status TEXT NOT NULL DEFAULT 'SUCCESS'
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- CHECK branch in dns/host/network/hybrid
+- CHECK fitted_on_role = 'TRAIN'
+- CHECK status in PENDING/RUNNING/SUCCESS/PARTIAL_SUCCESS/FAILED/SKIPPED/BLOCKED
+
+13. TABLE: model_ready_artifacts
+================================================================================
+
+Назначение:
+Регистрирует final model-ready artifacts: X/y/sequences/split_index.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- artifact_uid UUID NOT NULL UNIQUE
+- feature_artifact_id BIGINT NULL REFERENCES feature_artifacts(id)
+- preprocessing_artifact_id BIGINT NULL REFERENCES preprocessing_artifacts(id)
+- role TEXT NOT NULL
+- branch TEXT NOT NULL
+- data_type TEXT NOT NULL
+- artifact_path TEXT NOT NULL
+- schema_name TEXT NOT NULL
+- schema_version TEXT NOT NULL
+- sample_count BIGINT NULL
+- feature_count INTEGER NULL
+- label_distribution_json JSONB NULL
+- excluded_columns_json JSONB NULL
+- sequence_length INTEGER NULL
+- status TEXT NOT NULL DEFAULT 'SUCCESS'
+- metadata_json JSONB NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- CHECK role in TRAIN/VALIDATION/TEST/EXPERIMENTS
+- CHECK branch in dns/host/network/hybrid
+- CHECK data_type in X/y/sequence/split_index/preprocessing_metadata
+- CHECK status in PENDING/RUNNING/SUCCESS/PARTIAL_SUCCESS/FAILED/SKIPPED/BLOCKED
+
+14. TABLE: data_quality_reports
+================================================================================
+
+Назначение:
+Хранит результаты quality, normalization, schema mismatch, leakage checks.
+
+Колонки:
+- id BIGSERIAL PRIMARY KEY
+- report_uid UUID NOT NULL UNIQUE
+- artifact_type TEXT NOT NULL
+- artifact_id BIGINT NULL
+- check_group TEXT NOT NULL
+- check_name TEXT NOT NULL
+- status TEXT NOT NULL
+- severity TEXT NOT NULL DEFAULT 'INFO'
+- rows_total BIGINT NULL
+- rows_valid BIGINT NULL
+- rows_failed BIGINT NULL
+- missing_values_count BIGINT NULL
+- duplicate_rows_count BIGINT NULL
+- schema_mismatch_count BIGINT NULL
+- leakage_issue_count BIGINT NULL
+- label_distribution_json JSONB NULL
+- timestamp_coverage_json JSONB NULL
+- details_json JSONB NULL
+- report_path TEXT NULL
+- created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Constraints:
+- CHECK artifact_type in raw_file/normalized/feature/model_ready/preprocessing/catalog
+- CHECK status in SUCCESS/PARTIAL_SUCCESS/FAILED/SKIPPED/BLOCKED
+- CHECK severity in INFO/WARNING/ERROR/CRITICAL
+
+15. NULL POLICY
+================================================================================
+
+Правило:
+Если нужного значения нет в исходном файле датасета, в соответствующую колонку
+PostgreSQL/Parquet записывать NULL.
+
+Примеры:
+- нет timestamp -> timestamp=NULL, timestamp_type='missing', event_index сохраняется;
+- нет label -> label_binary=NULL, label_status='unlabeled', label_source='none';
+- нет host.name -> host_name=NULL;
+- DNS TXT/domain-list не имеет src_ip -> src_ip=NULL;
+- PCAP packet без DNS layer -> qname/query_domain=NULL;
+- BSON args с неизвестной структурой -> конкретные колонки NULL, raw_fields_json заполнен.
+
+Не делать:
+- не записывать пустую строку вместо NULL;
+- не записывать 0 вместо отсутствующего numeric value;
+- не считать NULL label как benign;
+- не использовать TEST statistics для заполнения NULL.
+
+16. РЕКОМЕНДУЕМЫЙ DDL-ФРАГМЕНТ
+================================================================================
+
+Примечание: полный DDL лучше реализовать через Alembic migration на основе SQLAlchemy
+models. Ниже - ориентир для constraints.
+
+CREATE TABLE datasets (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    branch TEXT NOT NULL CHECK (branch IN ('dns','host','network','hybrid')),
+    role TEXT NOT NULL CHECK (role IN ('TRAIN','VALIDATION','TEST','EXPERIMENTS')),
+    source_group TEXT,
+    description TEXT,
+    dataset_version TEXT,
+    source_url TEXT,
+    license_name TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    metadata_json JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_datasets_name_branch_role UNIQUE (name, branch, role),
+    CONSTRAINT uq_datasets_slug_branch_role UNIQUE (slug, branch, role)
 );
 
-Рекомендуемые индексы:
+CREATE TABLE ingestion_runs (
+    id BIGSERIAL PRIMARY KEY,
+    run_uid UUID NOT NULL UNIQUE,
+    root_path TEXT NOT NULL,
+    root_path_kind TEXT NOT NULL,
+    branch TEXT CHECK (branch IS NULL OR branch IN ('dns','host','network','hybrid')),
+    role TEXT CHECK (role IS NULL OR role IN ('TRAIN','VALIDATION','TEST','EXPERIMENTS')),
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ,
+    status TEXT NOT NULL DEFAULT 'RUNNING' CHECK (status IN ('RUNNING','SUCCESS','PARTIAL_SUCCESS','FAILED','SKIPPED')),
+    files_seen INTEGER NOT NULL DEFAULT 0,
+    files_new INTEGER NOT NULL DEFAULT 0,
+    files_existing INTEGER NOT NULL DEFAULT 0,
+    files_changed INTEGER NOT NULL DEFAULT 0,
+    files_failed INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    report_path TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-CREATE INDEX IF NOT EXISTS idx_data_quality_reports_artifact
-ON data_quality_reports(artifact_type, artifact_id);
+Остальные таблицы реализовать в Alembic migration по списку колонок выше.
 
-CREATE INDEX IF NOT EXISTS idx_data_quality_reports_created_at
-ON data_quality_reports(created_at);
-
-================================================================================
-14. ОБЩАЯ СХЕМА СВЯЗЕЙ МЕЖДУ ТАБЛИЦАМИ
-================================================================================
-
-Логическая связь:
-
-datasets
-    └── dataset_files
-            ├── parser_runs
-            │       └── normalized_artifacts
-            │               └── feature_artifacts
-            │                       └── model_ready_artifacts
-            └── data_quality_reports
-
-ingestion_runs
-    └── dataset_files
-
-parser_registry
-    └── используется parser routing logic
-
-schema_versions
-    └── используется normalized_artifacts / feature_artifacts / model_ready_artifacts
-
-data_quality_reports
-    └── может ссылаться логически на:
-        - dataset_file
-        - parser_run
-        - normalized_artifact
-        - feature_artifact
-        - model_ready_artifact
-
-================================================================================
-15. КАК ЭТА СХЕМА ПРЕДОТВРАЩАЕТ DATA LEAKAGE
+17. ACCEPTANCE CRITERIA
 ================================================================================
 
-Data leakage — это ситуация, когда TEST данные случайно используются при обучении, настройке preprocessing или выборе threshold.
-
-В проекте нужно строго соблюдать:
-
-1. TRAIN
-   Используется для:
-   - fit scaler;
-   - fit encoder;
-   - fit feature selector;
-   - training model.
-
-2. VALIDATION
-   Используется для:
-   - threshold tuning;
-   - false positive control;
-   - model/config selection.
-
-3. TEST
-   Используется только для:
-   - финальной оценки;
-   - external generalization check.
-
-Как catalog помогает:
-
-- datasets.role фиксирует роль датасета.
-- dataset_files.role фиксирует роль каждого raw-файла.
-- normalized_artifacts.role фиксирует роль normalized Parquet.
-- feature_artifacts.role фиксирует роль feature Parquet.
-- model_ready_artifacts.role фиксирует роль финальных ML/DL данных.
-- CHECK constraints не дают записать неправильные role.
-- индексы позволяют быстро проверить, не смешаны ли роли.
-- preprocessing objects должны регистрироваться с role = TRAIN или как preprocessing_object, но fit должен выполняться только на TRAIN.
-
-Критичное правило:
-Если role датасета изменилась после создания feature/model-ready artifacts, pipeline должен пересобраться заново.
-
-================================================================================
-16. КАК ЭТА СХЕМА ОБЕСПЕЧИВАЕТ TRACEABILITY
-================================================================================
-
-Traceability — возможность пройти назад от model-ready данных к исходному raw-файлу.
-
-Пример цепочки:
-
-model_ready_artifacts.artifact_path
-    ↓
-feature_artifacts.feature_path
-    ↓
-normalized_artifacts.normalized_path
-    ↓
-parser_runs.file_id
-    ↓
-dataset_files.file_path
-    ↓
-datasets.name
-
-Это значит:
-для любого X_train.parquet или train_sequences.npz можно понять:
-- из каких feature artifacts он был собран;
-- из каких normalized events эти features были получены;
-- каким parser-ом были разобраны raw-файлы;
-- из каких исходных файлов пришли события;
-- к какому датасету относится файл;
-- какая у него роль: TRAIN / VALIDATION / TEST;
-- какой hash был у raw-файла;
-- какая версия parser-а и schema использовалась.
-
-Это критично для воспроизводимости дипломного проекта.
-
-================================================================================
-17. ЧТО ДЕЛАТЬ НА ЭТОМ ЭТАПЕ
-================================================================================
-
-Для текущей задачи нужно реализовать только PostgreSQL catalog schema.
-
-Нужно сделать:
-
-1. Создать файл migration:
-
-scripts/db/migrations/001_create_catalog_schema.sql
-
-2. Внести туда SQL для создания таблиц:
-
-- datasets
-- ingestion_runs
-- dataset_files
-- parser_registry
-- parser_runs
-- schema_versions
-- normalized_artifacts
-- feature_artifacts
-- model_ready_artifacts
-- data_quality_reports
-
-3. Добавить CHECK constraints.
-
-4. Добавить UNIQUE constraints.
-
-5. Добавить индексы.
-
-6. Применить migration к PostgreSQL.
-
-Пример команды через Docker:
-
-docker exec -i proposal-postgres psql -U proposal_user -d proposal_catalog < scripts/db/migrations/001_create_catalog_schema.sql
-
-7. Проверить, что таблицы созданы:
-
-SELECT table_name
-FROM information_schema.tables
-WHERE table_schema = 'public'
-ORDER BY table_name;
-
-Ожидаемые таблицы:
-
-data_quality_reports
-dataset_files
-datasets
-feature_artifacts
-ingestion_runs
-model_ready_artifacts
-normalized_artifacts
-parser_registry
-parser_runs
-schema_versions
-
-================================================================================
-18. ЧТО НЕ ДЕЛАТЬ НА ЭТОМ ЭТАПЕ
-================================================================================
-
-Пока не нужно:
-
-- сканировать raw datasets;
-- реализовывать catalog ingestion;
-- реализовывать parser routing;
-- писать parser-ы;
-- читать PCAP/BSON/JSON/TXT содержимое;
-- писать normalized events в Parquet;
-- делать feature extraction;
-- делать sequence windows;
-- обучать модели;
-- делать SHAP;
-- выполнять финальную оценку.
-
-Текущий этап — только создание catalog schema.
-
-================================================================================
-19. ЧТО ДЕЛАТЬ СРАЗУ ПОСЛЕ ЭТОГО
-================================================================================
-
-Следующая задача после создания catalog schema:
-
-CATALOG INGESTION
-
-Она должна делать:
-
-1. Сканировать raw dataset folders.
-2. Определять dataset_name.
-3. Определять branch: dns / host / network / hybrid.
-4. Определять role: TRAIN / VALIDATION / TEST.
-5. Определять source_format.
-6. Считать file_size_bytes.
-7. Считать file_hash.
-8. Записывать datasets.
-9. Записывать dataset_files.
-10. Создавать ingestion_runs.
-11. Формировать ingestion report.
-
-Только после catalog ingestion можно переходить к parser routing.
-
-================================================================================
-20. КРАТКИЙ ИТОГ
-================================================================================
-
-Финальная PostgreSQL catalog schema нужна для того, чтобы Stage Two был управляемым, воспроизводимым и безопасным.
-
-Главные функции catalog schema:
-
-1. Управление датасетами.
-2. Регистрация raw-файлов.
-3. Фиксация ingestion-запусков.
-4. Поддержка parser routing.
-5. Фиксация parser runs.
-6. Контроль schema versions.
-7. Связь raw → normalized → features → model-ready.
-8. Хранение путей к Parquet artifacts.
-9. Контроль качества данных.
-10. Предотвращение data leakage.
-11. Полная traceability до исходного raw-файла.
-
-Главный принцип:
-
-PostgreSQL = metadata catalog + pipeline control.
-Parquet = large normalized/features/model-ready data.
-DuckDB = SQL analytics over Parquet.
-Raw files = unchanged source of truth.
+- Все таблицы созданы через Alembic.
+- Все role/branch/status values ограничены CHECK constraints.
+- dataset_files поддерживает idempotent upsert.
+- parser_runs связаны с dataset_files.
+- normalized_artifacts связаны с parser_runs and dataset_files.
+- feature_artifacts связаны с normalized_artifacts where applicable.
+- model_ready_artifacts связаны с feature/preprocessing artifacts.
+- preprocessing_artifacts имеют fitted_on_role='TRAIN'.
+- label_mapping_rules позволяют объяснить label_source/status.
+- data_quality_reports фиксируют quality/leakage/schema checks.
+- Traceability chain проходит от model_ready до raw file.
+- Большие events/features не хранятся в PostgreSQL.

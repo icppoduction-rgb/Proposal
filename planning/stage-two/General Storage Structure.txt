@@ -1,37 +1,208 @@
-ОБЩАЯ СТРУКТУРА ХРАНЕНИЯ ЧЕРЕЗ PATH_DATA_STORAGE
+Проект: Proposal - Behaviour-driven hybrid learning for data exfiltration detection
+Этап: Stage Two - Data Normalization
+Дата подготовки: 2026-06-13
+Формат: TXT
 
-# ==========================
+
+ОБНОВЛЕННАЯ ОБЩАЯ СТРУКТУРА ХРАНЕНИЯ ЧЕРЕЗ PATH_DATA_STORAGE
+================================================================================
+
+1. ВЫВОД ПО СУЩЕСТВУЮЩЕМУ ФАЙЛУ
+================================================================================
+
+Исходный файл General Storage Structure.txt задавал правильную базовую основу:
+- postgres/
+- pgadmin/
+- parquet/normalized
+- parquet/features
+- parquet/model_ready
+- duckdb/
+- reports/
+- logs/
+- backups/
+- temp_data/
+
+Недочеты для полной реализации Stage Two:
+1. Parquet layer был описан слишком общо.
+2. Не были выделены branch/role/modality partitions.
+3. Не были выделены schemas/ и config/ для schema contracts, parser registry seed и label mapping rules.
+4. reports/ не был разделен на parser/normalization/quality/leakage/schema_mismatch.
+5. DuckDB layer не содержал sql/ и exports/.
+6. Не был явно описан принцип: raw datasets остаются вне изменения и могут храниться в PATH_FOLDER_DATASETS / PATH_FOLDER_DATASETS_FILTER.
+7. Не был зафиксирован принцип относительных путей для artifacts.
+
+2. ФИНАЛЬНАЯ СТРУКТУРА PATH_DATA_STORAGE
+================================================================================
+
 ${PATH_DATA_STORAGE}/
-├── postgres/
-├── pgadmin/
-├── parquet/
-│   ├── normalized/
-│   ├── features/
-│   └── model_ready/
-├── duckdb/
-├── reports/
-├── logs/
-├── backups/
-└── temp_data/
-# ==========================
+|-- postgres/
+|-- pgadmin/
+|-- parquet/
+|   |-- normalized/
+|   |   |-- dns/
+|   |   |   |-- TRAIN/
+|   |   |   |-- VALIDATION/
+|   |   |   |-- TEST/
+|   |   |-- host/
+|   |   |   |-- TRAIN/
+|   |   |   |-- VALIDATION/
+|   |   |   `-- TEST/
+|   |   |-- network/
+|   |   |   |-- TRAIN/
+|   |   |   |-- VALIDATION/
+|   |   |   `-- TEST/
+|   |   `-- hybrid/
+|   |       |-- TRAIN/
+|   |       |-- VALIDATION/
+|   |       `-- TEST/
+|   |-- features/
+|   |   |-- dns_features/
+|   |   |-- host_syscall_features/
+|   |   |-- host_eventlog_features/
+|   |   |-- host_metrics_features/
+|   |   |-- network_flow_features/
+|   |   |-- hybrid_features/
+|   |   `-- sequence_features/
+|   `-- model_ready/
+|       |-- tabular/
+|       |-- labels/
+|       |-- sequences/
+|       |-- preprocessing/
+|       `-- split_index/
+|-- duckdb/
+|   |-- proposal_analytics.duckdb
+|   |-- sql/
+|   `-- exports/
+|-- reports/
+|   |-- ru/
+|   |   `-- stage-two/
+|   |    '-- parser/'
+|   |    '-- normalization/'
+|   |    '-- quality/'
+|   |    '-- leakage/'
+|        '-- schema_mismatch/'
+|   |-- en/
+|   |   `-- stage-two/
+|   |    '-- parser/'
+|   |    '-- normalization/'
+|   |    '-- quality/'
+|   |    '-- leakage/'
+|        '-- schema_mismatch/'
+|-- logs/
+|   `-- stage-two/
+|-- backups/
+|   |-- postgres_catalog/
+|   `-- metadata_exports/
+|-- temp_data/
+|   |-- ingestion/
+|   |-- parser_runs/
+|   |-- normalization/
+|   `-- duckdb/
+|-- schemas/
+|   |-- normalized/
+|   |-- features/
+|   `-- model_ready/
+`-- config/
+    |-- parser_registry_seed.json
+    |-- label_mapping_rules.json
+    `-- duckdb_views.sql
 
-.env
-# ==========================
+3. НАЗНАЧЕНИЕ ДИРЕКТОРИЙ
+================================================================================
+
+postgres/
+- Docker bind volume для PostgreSQL data directory.
+- Вручную не редактировать.
+- Не хранить здесь Parquet, reports или raw datasets.
+
+pgadmin/
+- Docker bind volume для pgAdmin.
+- Хранит pgAdmin settings/sessions metadata.
+
+parquet/normalized/
+- Основной normalized event layer.
+- Все события разных форматов приводятся к canonical schema.
+- Деление обязательно по branch и role.
+
+parquet/features/
+- Feature tables после feature engineering.
+- Разделение по feature_group обязательно.
+- labels/context columns сохраняются отдельно от X model features.
+
+parquet/model_ready/
+- Финальные X/y/sequences/preprocessing/split artifacts.
+- TEST artifacts не используются для обучения preprocessing.
+
+DuckDB/
+- proposal_analytics.duckdb может хранить persistent views/macros.
+- sql/ хранит SQL scripts for views/checks.
+- exports/ хранит выгрузки diagnostic queries.
+
+reports/
+- ru/en/stage-two: task reports для Codex implementation.
+- parser: parsing summaries and error reports.
+- normalization: normalized artifact reports.
+- quality: missing values, duplicates, schema checks.
+- leakage: data leakage check reports.
+- schema_mismatch: schema mismatch reports.
+
+logs/stage-two/
+- Runtime logs для ingestion, parser routing, normalization, parquet writing, DuckDB checks.
+
+backups/
+- PostgreSQL catalog dumps.
+- Export metadata snapshots.
+- Не хранить большие raw copies без необходимости.
+
+temp_data/
+- Временные ingestion summaries.
+- Parser batch state.
+- Normalization intermediate files.
+- Можно очищать только после проверки регистрации artifacts в PostgreSQL.
+
+schemas/
+- JSON/YAML schema contracts для normalized/features/model_ready.
+- Версии должны соответствовать schema_versions в PostgreSQL.
+
+config/
+- parser_registry_seed.json: начальное наполнение parser_registry.
+- label_mapping_rules.json: правила label resolver.
+- duckdb_views.sql: SQL views поверх Parquet.
+
+4. .ENV
+================================================================================
+
+Рекомендуемый .env.example:
+
 PATH_DATA_STORAGE=C:\Users\Public\PythonProjects\storage
+PATH_FOLDER_DATASETS=C:\Users\Public\PythonProjects\storages\datasets
+PATH_FOLDER_DATASETS_FILTER=C:\Users\Public\PythonProjects\storages\datasets-filter
 
 POSTGRES_DB=proposal_catalog
 POSTGRES_USER=proposal_user
 POSTGRES_PASSWORD=proposal_password
 POSTGRES_PORT=5432
+DATABASE_URL=postgresql+psycopg://proposal_user:proposal_password@localhost:5432/proposal_catalog
 
 PGADMIN_PORT=5050
 PGADMIN_DEFAULT_EMAIL=admin@example.com
 PGADMIN_DEFAULT_PASSWORD=admin
-# ==========================
 
+PATH_REPORT=${PATH_DATA_STORAGE}/reports
+PATH_TEMP_DATA=${PATH_DATA_STORAGE}/temp_data
 
-docker-compose.yml
-# ==========================
+Правила:
+- .env не коммитить;
+- .env.example можно коммитить только с placeholder values;
+- production passwords не хранить в Git;
+- DATABASE_URL нужен SQLAlchemy/Alembic;
+- PATH_DATA_STORAGE должен быть единственным корнем для generated artifacts.
+
+5. DOCKER-COMPOSE
+================================================================================
+
+Рекомендуемый docker-compose.yml:
+
 services:
   postgres:
     image: postgres:16
@@ -53,7 +224,7 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4:8
-    container_name: proposal_pgadmin
+    container_name: proposal-pgadmin
     restart: unless-stopped
     depends_on:
       postgres:
@@ -80,4 +251,35 @@ volumes:
       type: none
       o: bind
       device: ${PATH_DATA_STORAGE}/pgadmin
-# ==========================
+
+6. PATH POLICY
+================================================================================
+
+В PostgreSQL хранить:
+- raw_absolute_path: допускается для исходных файлов, если они вне PATH_DATA_STORAGE;
+- raw_relative_path: путь относительно PATH_FOLDER_DATASETS или PATH_FOLDER_DATASETS_FILTER;
+- artifact_relative_path: путь относительно PATH_DATA_STORAGE для generated artifacts;
+- artifact_uri: optional, если позже появится object storage.
+
+Для Parquet artifacts использовать относительные пути:
+- parquet/normalized/dns/TRAIN/...
+- parquet/features/dns_features/TRAIN/...
+- parquet/model_ready/tabular/dns/TRAIN/...
+
+Причина:
+- переносимость проекта;
+- стабильный catalog при переносе storage root;
+- меньше риска сломать artifacts при смене машины.
+
+8. ACCEPTANCE CRITERIA
+================================================================================
+
+- Все directories создаются без ручного вмешательства.
+- Docker PostgreSQL и pgAdmin стартуют через docker compose.
+- PostgreSQL healthcheck успешен.
+- DATABASE_URL работает для SQLAlchemy.
+- Generated artifacts пишутся только в PATH_DATA_STORAGE.
+- Raw datasets не изменяются.
+- Parquet directories физически разделены по normalized/features/model_ready.
+- Reports directories содержат ru|en/stage-two.
+- В catalog хранятся относительные artifact paths.

@@ -1,1430 +1,848 @@
-ЗАДАЧИ ДЛЯ CODEX: PostgreSQL catalog schema + SQLAlchemy/Alembic DB layer
-Проект: Proposal — Behaviour-driven hybrid learning for data exfiltration detection
-Этап: Stage Two — Data Normalization
-Версия обновлена: к каждой задаче добавлено обязательное создание RU/EN Markdown-отчетов в PATH_REPORT/ru|en/stage-two/ до git add / git commit / git push.
+Проект: Proposal - Behaviour-driven hybrid learning for data exfiltration detection
+Этап: Stage Two - Data Normalization
+Дата подготовки: 2026-06-13
+Формат: TXT
 
-================================================================================
-0. ОСНОВА АНАЛИЗА
-================================================================================
 
-Проанализированные источники:
-- Postgres Catalog Shema Structure.txt
-- SqlAlchemy Catalog Recommendation.txt
-- STAGE TWO (DATA NORMALIZATION).txt
-- README.md
-- analysis-dataset.md
-- dns_dataset_strategy.md
-- host_datasets_analysis.md
-- dataset_feature_extraction_map.md
-- functional_project_cheatsheet.md
-- repository_qa_section_3_8.md
-- project_proposal_analysis.md
-
-Ключевые выводы для реализации:
-
-1. PostgreSQL в проекте должен быть catalog / pipeline-control слоем, а не хранилищем больших данных.
-2. Большие данные должны оставаться вне PostgreSQL:
-   - raw datasets — в raw filesystem layer;
-   - normalized events — в Parquet;
-   - feature tables — в Parquet;
-   - model-ready artifacts — в Parquet / NPZ;
-   - аналитика по Parquet — через DuckDB.
-3. PostgreSQL должен хранить metadata, статусы, связи, версии parser-ов, версии схем, пути к artifacts, quality reports и контроль TRAIN / VALIDATION / TEST.
-4. SQLAlchemy нужно использовать как Python access layer к PostgreSQL catalog.
-5. Alembic нужно использовать как migration layer.
-6. SQLAlchemy ORM использовать для обычной работы с сущностями catalog.
-7. SQLAlchemy Core использовать для bulk insert / upsert, особенно для dataset_files.
-8. Текущая большая задача должна быть разбита на небольшие логически завершенные задачи.
-9. На этом этапе нельзя реализовывать parser routing, parser implementations, Parquet normalization, feature extraction, model training, SHAP и LSTM sequence windows.
-10. Главная цель текущего набора задач — получить стабильный DB foundation для последующего catalog ingestion.
-
-Обязательные таблицы catalog schema:
-1. datasets
-2. ingestion_runs
-3. dataset_files
-4. parser_registry
-5. parser_runs
-6. schema_versions
-7. normalized_artifacts
-8. feature_artifacts
-9. model_ready_artifacts
-10. data_quality_reports
-
-Обязательные architectural constraints:
-- raw-файлы не изменять;
-- пути к artifacts хранить как относительные пути от PATH_DATA_STORAGE там, где это возможно;
-- role должен быть явно ограничен значениями TRAIN / VALIDATION / TEST / EXPERIMENTS;
-- branch должен быть явно ограничен значениями dns / host / network / hybrid;
-- TEST нельзя использовать для обучения scaler, encoder, feature selector, модели или настройки threshold;
-- traceability должна позволять пройти цепочку:
-  model_ready_artifacts -> feature_artifacts -> normalized_artifacts -> parser_runs -> dataset_files -> datasets.
-
-================================================================================
-1. ОБЩИЕ ТРЕБОВАНИЯ К КОДУ ДЛЯ ВСЕХ ЗАДАЧ
+ОБНОВЛЕННЫЕ ЗАДАЧИ ДЛЯ CODEX: ПОЛНАЯ РЕАЛИЗАЦИЯ STAGE TWO DATA NORMALIZATION
 ================================================================================
 
-Эти требования применяются к каждой задаче ниже.
-
-1. Код должен быть простым, читаемым и поддерживаемым.
-2. Каждый новый Python-модуль должен иметь module docstring с кратким назначением файла.
-3. Каждый публичный класс должен иметь docstring: что представляет класс и где используется.
-4. Каждый публичный метод и функция должны иметь docstring: входные параметры, результат, побочные эффекты.
-5. Для нетривиальных участков логики нужны короткие комментарии в коде.
-6. Не добавлять комментарии, которые просто повторяют очевидный код.
-7. Использовать type hints для аргументов и возвращаемых значений.
-8. Не хранить реальные credentials в коде, .env.example или миграциях.
-9. Не коммитить .env.
-10. Не читать содержимое больших raw-файлов в задачах DB foundation.
-11. Не создавать normalized Parquet artifacts в этих задачах.
-12. Не смешивать DNS и Host логику без явного поля branch.
-13. Не смешивать TRAIN / VALIDATION / TEST.
-14. Все изменения должны проходить базовые проверки:
-    - python -m compileall manage.py scripts
-    - git diff --check
-15. Если в проекте есть тестовый runner, запускать его после задач, где добавлены тесты.
-16. После выполнения каждой задачи нужно сформировать два Markdown-отчета: русский и английский.
-   Обязательный шаблон пути: PATH_REPORT/ru|en/stage-two/Task<number>(<название задачи>).md.
-17. Отчеты сохранять в:
-    - PATH_REPORT/ru/stage-two/Task<number>(<название задачи>).md
-    - PATH_REPORT/en/stage-two/Task<number>(<name task>).md
-18. Если в названии задачи есть символы, недопустимые для имени файла, например /, \, :, *, ?, ", <, >, |, заменить их на дефис.
-19. Каждый отчет должен содержать: цель задачи, выполненные изменения, измененные файлы, команды проверки, результат проверок, git commit message, статус git push, проблемы/ограничения, следующий шаг.
-20. Отчеты должны создаваться до команд git add / git commit / git push, чтобы они попали в коммит задачи.
-
-================================================================================
-2. ЗАДАЧИ ДЛЯ CODEX
+0. ОБЩИЕ ПРАВИЛА ДЛЯ ВСЕХ ЗАДАЧ
 ================================================================================
 
---------------------------------------------------------------------------------
-ЗАДАЧА 1. Проверить текущую структуру репозитория и подготовить место для DB layer
---------------------------------------------------------------------------------
-
-Цель:
-Подготовить безопасную основу для добавления PostgreSQL catalog DB layer, не ломая текущие команды анализа датасетов.
-
-Что сделать:
-1. Проверить текущую структуру проекта:
-   - manage.py
-   - requirements.txt
-   - .env.example
-   - scripts/
-   - docs/
-   - planning/
-2. Проверить, существует ли scripts/db/.
-3. Если scripts/db/ отсутствует — создать директорию scripts/db/.
-4. Добавить scripts/db/__init__.py.
-5. В scripts/db/__init__.py добавить краткий module docstring.
-6. Не менять текущие handler-ы, CLI-команды анализа DNS/Host и существующие JSON utilities.
-
-Acceptance criteria:
-- scripts/db/ существует.
-- scripts/db/__init__.py существует.
-- Существующие команды проекта не изменены.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task1(Проверить текущую структуру репозитория и подготовить место для DB layer).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task1(Check the current repository structure and prepare space for the DB layer).md
-3. В каждом отчете указать:
-   - номер и название задачи;
+1. Работать малыми логически завершенными задачами.
+2. После каждой задачи создавать два отчета:
+   - PATH_REPORT/ru/stage-two/Task<number>(<русское название>).md
+   - PATH_REPORT/en/stage-two/Task<number>(<english name>).md
+3. Отчеты создавать до git add / git commit / git push.
+4. Каждый отчет должен содержать:
    - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
+   - выполненные изменения;
+   - измененные/созданные файлы;
+   - команды проверки;
+   - результат проверок;
+   - commit message;
+   - статус git push;
+   - проблемы/ограничения;
+   - следующий шаг.
+5. Код должен использовать type hints.
+6. Каждый новый модуль должен иметь module docstring.
+7. Каждый публичный класс и метод должен иметь docstring.
+8. Комментарии добавлять только для нетривиальной логики.
+9. Не хранить реальные credentials.
+10. Не коммитить .env.
+11. Не изменять raw datasets.
+12. Не читать большие raw files в DB foundation задачах.
+13. Если поле отсутствует в датасете, сохранять NULL / None.
+14. Не смешивать TRAIN, VALIDATION и TEST.
+15. TEST нельзя использовать для fit scaler/encoder/imputer/feature selector/model.
+16. PostgreSQL не использовать для хранения больших normalized events/features.
+17. Parquet использовать для normalized/features/model-ready artifacts.
+18. DuckDB использовать для SQL analytics over Parquet.
+19. Базовые проверки после каждой задачи:
+   - python -m compileall manage.py scripts
+   - git diff --check
+20. Если добавлены тесты, запускать project test runner.
 
-git add .
-git commit -m "Prepare DB package structure for PostgreSQL catalog"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 2. Добавить зависимости для SQLAlchemy, PostgreSQL driver и Alembic
---------------------------------------------------------------------------------
-
-Цель:
-Подготовить Python-зависимости для работы с PostgreSQL catalog через SQLAlchemy и Alembic.
-
-Что сделать:
-1. Открыть requirements.txt.
-2. Добавить зависимости:
-   - sqlalchemy
-   - psycopg[binary]
-   - alembic
-3. Если в проекте уже есть python-dotenv — не дублировать.
-4. Не добавлять ML/DL-зависимости в этой задаче.
-5. Не добавлять pandas, pyarrow, duckdb, scikit-learn, torch, tensorflow в этой задаче.
-
-Acceptance criteria:
-- requirements.txt содержит sqlalchemy.
-- requirements.txt содержит psycopg[binary].
-- requirements.txt содержит alembic.
-- Нет дубликатов существующих зависимостей.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task2(Добавить зависимости для SQLAlchemy, PostgreSQL driver и Alembic).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task2(Add dependencies for SQLAlchemy, PostgreSQL driver, and Alembic).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add SQLAlchemy Alembic and PostgreSQL dependencies"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 3. Обновить .env.example для PostgreSQL catalog
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 1. Проверить storage foundation и обновить .env.example
+================================================================================
 
 Цель:
-Добавить переносимую конфигурацию подключения к PostgreSQL catalog без реальных credentials.
+Подготовить конфигурацию Stage Two storage, PostgreSQL, SQLAlchemy и reports.
 
 Что сделать:
-1. Открыть .env.example.
-2. Добавить переменную:
-   DATABASE_URL=postgresql+psycopg://proposal_user:proposal_password@localhost:5432/proposal_catalog
-3. Проверить, что PATH_DATA_STORAGE уже присутствует или добавить placeholder, если отсутствует.
-4. Добавить комментарий в .env.example, что .env не должен коммититься.
-5. Не добавлять реальные production-пароли.
-6. Не менять локальный .env.
+1. Проверить наличие .env.example.
+2. Добавить/проверить переменные:
+   - PATH_DATA_STORAGE
+   - PATH_FOLDER_DATASETS
+   - PATH_FOLDER_DATASETS_FILTER
+   - PATH_REPORT
+   - PATH_TEMP_DATA
+   - POSTGRES_DB
+   - POSTGRES_USER
+   - POSTGRES_PASSWORD placeholder
+   - POSTGRES_PORT
+   - DATABASE_URL
+   - PGADMIN_PORT
+   - PGADMIN_DEFAULT_EMAIL
+   - PGADMIN_DEFAULT_PASSWORD placeholder
+3. Добавить комментарий, что .env нельзя коммитить.
+4. Не добавлять реальные credentials.
+5. Не менять локальный .env.
 
 Acceptance criteria:
 - .env.example содержит DATABASE_URL.
-- DATABASE_URL использует placeholder credentials.
-- .env не добавлен в git.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- .env.example содержит PATH_DATA_STORAGE.
+- .env.example не содержит production secrets.
+- compileall и git diff --check проходят.
 
+Commit:
+Add Stage Two environment configuration
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Ta3(Обновить .env.example для PostgreSQL catalog).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task3(Update .env.example for PostgreSQL catalog).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Document PostgreSQL catalog environment configuration"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 4. Реализовать scripts/db/config.py
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 2. Создать/обновить storage bootstrap utility
+================================================================================
 
 Цель:
-Создать единый модуль конфигурации DB layer.
+Автоматически создавать directories внутри PATH_DATA_STORAGE.
 
 Что сделать:
-1. Создать scripts/db/config.py.
-2. Реализовать чтение DATABASE_URL из переменных окружения.
-3. Реализовать чтение PATH_DATA_STORAGE из переменных окружения, если он нужен для проверки относительных путей в будущем.
-4. Если DATABASE_URL отсутствует — выбрасывать понятную ошибку.
-5. Не хранить credentials в коде.
-6. Добавить type hints.
-7. Добавить docstring к модулю и функциям.
-8. Не создавать engine в config.py. Engine должен быть в session.py.
-
-Рекомендуемые функции:
-- get_database_url() -> str
-- get_path_data_storage() -> str | None
+1. Создать scripts/stage_two/storage/.
+2. Реализовать StorageBootstrapper class.
+3. Создавать директории:
+   - postgres, pgadmin
+   - parquet/normalized, parquet/features, parquet/model_ready
+   - duckdb/sql, duckdb/exports
+   - reports/ru/stage-two, reports/en/stage-two
+   - reports/parser, reports/normalization, reports/quality, reports/leakage, reports/schema_mismatch
+   - logs/stage-two
+   - backups/postgres_catalog
+   - temp_data/ingestion, temp_data/parser_runs, temp_data/normalization
+   - schemas/normalized, schemas/features, schemas/model_ready
+   - config
+4. Добавить CLI route или management function, если текущая архитектура это поддерживает.
+5. Не удалять существующие файлы.
 
 Acceptance criteria:
-- scripts/db/config.py существует.
-- DATABASE_URL читается из environment.
-- При отсутствии DATABASE_URL ошибка понятная.
-- В коде нет hardcoded production credentials.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- Bootstrapper создает директории idempotently.
+- Повторный запуск безопасен.
+- compileall и git diff --check проходят.
 
+Commit:
+Add Stage Two storage bootstrapper
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task4(Реализовать scripts-db-config.py).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task4(Implement scripts-db-config.py).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add PostgreSQL catalog configuration module"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 5. Реализовать scripts/db/session.py
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 3. Добавить зависимости Stage Two DB foundation
+================================================================================
 
 Цель:
-Создать SQLAlchemy engine, sessionmaker и безопасный transaction context manager.
+Добавить зависимости для PostgreSQL catalog.
 
 Что сделать:
-1. Создать scripts/db/session.py.
-2. Импортировать DATABASE_URL через scripts/db/config.py.
-3. Создать SQLAlchemy engine.
-4. Создать SessionLocal через sessionmaker.
-5. Реализовать context manager для транзакций.
-6. При успешном выполнении делать commit.
-7. При ошибке делать rollback и повторно поднимать исключение.
-8. После выполнения закрывать session.
-9. Добавить docstring к модулю, функциям и context manager.
-10. Не выполнять create_all() в session.py.
-
-Рекомендуемые элементы:
-- engine
-- SessionLocal
-- get_session()
-- session_scope()
+1. Обновить requirements.txt.
+2. Добавить:
+   - sqlalchemy
+   - psycopg[binary]
+   - alembic
+3. Если python-dotenv уже есть, не дублировать.
+4. Не добавлять ML/DL зависимости.
+5. Не добавлять pandas/pyarrow/duckdb в этой задаче.
 
 Acceptance criteria:
-- scripts/db/session.py существует.
-- Engine создается через DATABASE_URL.
-- Есть transaction context manager.
-- Нет автоматического создания таблиц через create_all().
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- requirements.txt содержит sqlalchemy, psycopg[binary], alembic.
+- Нет дубликатов.
+- compileall и git diff --check проходят.
 
+Commit:
+Add SQLAlchemy Alembic and PostgreSQL dependencies
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task5(Реализовать scripts-db-session.py).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task5(Implement scripts-db-session.py).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add SQLAlchemy session and transaction management"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 6. Создать SQLAlchemy Base и naming convention для constraints
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 4. Создать scripts/db config/session layer
+================================================================================
 
 Цель:
-Подготовить единый Base для ORM-моделей и стабильных Alembic migrations.
+Подготовить DB access foundation.
 
 Что сделать:
-1. Создать scripts/db/models/.
-2. Создать scripts/db/models/__init__.py.
-3. Создать scripts/db/models/base.py.
-4. В base.py определить MetaData с naming_convention для:
-   - ix
-   - uq
-   - ck
-   - fk
-   - pk
-5. Создать Declarative Base на основе metadata.
-6. Добавить docstring к модулю.
-7. Не описывать таблицы в этой задаче.
+1. Создать scripts/db/__init__.py.
+2. Создать scripts/db/config.py.
+3. Создать scripts/db/session.py.
+4. config.py должен читать DATABASE_URL.
+5. session.py должен создать engine/sessionmaker/session_scope.
+6. Реализовать rollback on exception.
+7. Не создавать таблицы вручную.
 
 Acceptance criteria:
-- scripts/db/models/base.py существует.
-- Есть единый Base для всех catalog models.
-- Есть naming_convention для Alembic.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- DB config импортируется.
+- session_scope доступен.
+- Нет hardcoded credentials.
+- compileall и git diff --check проходят.
 
+Commit:
+Add SQLAlchemy configuration and session layer
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task6(Создать SQLAlchemy Base и naming convention для constraints).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task6(Create SQLAlchemy Base and naming convention for constraints).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add SQLAlchemy declarative base with constraint naming"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 7. Реализовать ORM-модели datasets, ingestion_runs и dataset_files
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 5. Настроить Alembic migrations
+================================================================================
 
 Цель:
-Описать raw/catalog входной слой: датасеты, ingestion-запуски и raw-файлы.
+Подготовить migration layer.
 
 Что сделать:
-1. Создать модели:
+1. Создать scripts/db/migrations или стандартную alembic структуру.
+2. Настроить alembic.ini / env.py.
+3. Подключить metadata из SQLAlchemy Base.
+4. DATABASE_URL брать из config/env.
+5. Не создавать business tables в этой задаче.
+
+Acceptance criteria:
+- alembic current/head работает на пустой конфигурации.
+- env.py использует project metadata.
+- compileall и git diff --check проходят.
+
+Commit:
+Configure Alembic for PostgreSQL catalog migrations
+
+================================================================================
+ЗАДАЧА 6. Создать SQLAlchemy Base и naming convention
+================================================================================
+
+Цель:
+Подготовить Base для стабильных constraints and migrations.
+
+Что сделать:
+1. Создать scripts/db/models/base.py.
+2. Определить MetaData naming_convention.
+3. Создать Declarative Base.
+4. Добавить __init__.py exports.
+
+Acceptance criteria:
+- Base доступен для Alembic.
+- naming_convention есть для ix/uq/ck/fk/pk.
+- compileall и git diff --check проходят.
+
+Commit:
+Add SQLAlchemy declarative base with naming convention
+
+================================================================================
+ЗАДАЧА 7. Реализовать ORM models: datasets, ingestion_runs, dataset_files
+================================================================================
+
+Цель:
+Описать raw/catalog входной слой.
+
+Что сделать:
+1. Создать models:
    - Dataset
    - IngestionRun
    - DatasetFile
-2. Разместить их в отдельных файлах или логически понятной структуре:
-   - scripts/db/models/datasets.py
-   - scripts/db/models/ingestion_runs.py
-   - scripts/db/models/dataset_files.py
-3. Реализовать поля согласно Postgres Catalog Shema Structure.txt.
-4. Для role добавить CHECK constraint:
-   - TRAIN
-   - VALIDATION
-   - TEST
-   - EXPERIMENTS
-5. Для branch добавить CHECK constraint:
-   - dns
-   - host
-   - network
-   - hybrid
-6. Для dataset_files.status добавить допустимые статусы:
-   - NEW
-   - REGISTERED
-   - READY_FOR_PARSING
-   - PARSING
-   - PARSED
-   - PARTIALLY_PARSED
-   - FAILED
-   - SKIPPED
-   - NORMALIZED
-   - FEATURE_EXTRACTED
-   - MODEL_READY
-   - NO_PARSER_AVAILABLE
-   - EMPTY_FILE
-7. Добавить foreign keys:
-   - dataset_files.dataset_id -> datasets.id
-   - dataset_files.ingestion_run_id -> ingestion_runs.id
-8. Добавить unique constraint / unique index для защиты от повторной регистрации одного файла в одном dataset:
-   - dataset_id + file_path
-9. Добавить индексы для:
-   - dataset_id
-   - ingestion_run_id
-   - branch + role + source_format
-   - status
-   - file_hash
-10. Добавить relationship там, где это упрощает traceability.
-11. Добавить docstring к каждому классу.
+2. Реализовать все колонки из PostgreSQL catalog schema.
+3. Добавить CHECK constraints for role/branch/status.
+4. Добавить UNIQUE(dataset_id, file_path).
+5. Добавить indexes.
+6. Добавить relationships.
 
 Acceptance criteria:
-- Три ORM-модели созданы.
-- CHECK constraints для role и branch есть.
-- UNIQUE для dataset_id + file_path есть.
-- Индексы соответствуют catalog design.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- Models импортируются.
+- Constraints есть.
+- dataset_files поддерживает raw file metadata.
+- compileall и git diff --check проходят.
 
+Commit:
+Add dataset ingestion and file catalog models
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task7(Реализовать ORM-модели datasets, ingestion_runs и dataset_files).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task7(Implement the ORM models datasets, ingestion_runs, and dataset_files).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add core catalog ORM models for datasets ingestion and files"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 8. Реализовать ORM-модели parser_registry, parser_runs и schema_versions
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 8. Реализовать ORM models: parser_registry, schema_versions, parser_runs
+================================================================================
 
 Цель:
-Описать слой parser metadata, parser execution history и versioned schemas.
+Описать parser routing and parser run history.
 
 Что сделать:
-1. Создать модели:
+1. Создать models:
    - ParserRegistry
-   - ParserRun
    - SchemaVersion
-2. Разместить их в файлах:
-   - scripts/db/models/parser_registry.py
-   - scripts/db/models/parser_runs.py
-   - scripts/db/models/schema_versions.py
-3. Реализовать поля согласно catalog schema.
-4. Для parser_registry добавить CHECK по branch и supported_role.
-5. Для parser_runs.status добавить CHECK:
-   - RUNNING
-   - SUCCESS
-   - PARTIAL_SUCCESS
-   - FAILED
-   - SKIPPED
-6. Для schema_versions.layer добавить CHECK:
-   - normalized
-   - features
-   - model_ready
-7. Для schema_versions.branch добавить CHECK с возможностью NULL.
-8. Добавить foreign key:
-   - parser_runs.file_id -> dataset_files.id
-9. Добавить unique constraint для parser_registry:
-   - parser_name + parser_version + branch + source_format + supported_role
-10. Добавить unique constraint для schema_versions:
-   - schema_name + schema_version + layer + branch
-11. Добавить индексы для lookup parser-а и статусов parser_runs.
-12. Добавить docstring к каждому классу.
+   - ParserRun
+2. Реализовать constraints.
+3. parser_runs.file_id -> dataset_files.id.
+4. parser_runs.parser_registry_id -> parser_registry.id.
+5. parser_runs.schema_version_id -> schema_versions.id.
+6. Добавить lookup indexes.
 
 Acceptance criteria:
-- Три ORM-модели созданы.
-- Parser metadata можно выразить через model fields.
+- Parser routing metadata выражена в models.
 - Parser run history связана с dataset_files.
-- Schema versions имеют versioning constraints.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- compileall и git diff --check проходят.
 
+Commit:
+Add parser registry schema version and parser run models
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task8(Реализовать ORM-модели parser_registry, parser_runs и schema_versions).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task8(Implement the ORM models datasets, ingestion_runs, and dataset_files).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add parser and schema version catalog ORM models"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 9. Реализовать ORM-модели normalized_artifacts, feature_artifacts и model_ready_artifacts
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 9. Реализовать ORM models: artifacts, preprocessing, labels, quality
+================================================================================
 
 Цель:
-Описать artifact registry для normalized, feature и model-ready слоев.
+Описать artifact registry, label rules, preprocessing artifacts and quality reports.
 
 Что сделать:
-1. Создать или обновить файл:
-   - scripts/db/models/artifacts.py
-2. Реализовать модели:
+1. Создать models:
    - NormalizedArtifact
    - FeatureArtifact
    - ModelReadyArtifact
-3. Реализовать поля согласно catalog schema.
-4. Добавить foreign keys:
-   - normalized_artifacts.dataset_id -> datasets.id
-   - normalized_artifacts.file_id -> dataset_files.id
-   - normalized_artifacts.parser_run_id -> parser_runs.id
-   - feature_artifacts.dataset_id -> datasets.id
-   - feature_artifacts.normalized_artifact_id -> normalized_artifacts.id
-   - model_ready_artifacts.feature_artifact_id -> feature_artifacts.id
-5. Добавить CHECK constraints для role и branch.
-6. Для normalized_artifacts.status добавить CHECK:
-   - CREATED
-   - VALIDATED
-   - FAILED
-   - PARTIAL
-7. Для model_ready_artifacts.data_type добавить CHECK:
-   - X
-   - y
-   - sequences
-   - metadata
-   - split_index
-   - preprocessing_object
-8. Для label_distribution использовать JSON/JSONB тип PostgreSQL через SQLAlchemy.
-9. Добавить индексы:
-   - normalized_artifacts.dataset_id
-   - normalized_artifacts.file_id
-   - normalized_artifacts.role + branch
-   - feature_artifacts.dataset_id
-   - feature_artifacts.normalized_artifact_id
-   - feature_artifacts.feature_group
-   - feature_artifacts.role + branch
-   - model_ready_artifacts.role + branch
-   - model_ready_artifacts.data_type
-10. Добавить docstring к каждому классу.
-
-Acceptance criteria:
-- Artifact ORM-модели созданы.
-- Traceability raw -> normalized -> features -> model-ready выражается через foreign keys.
-- JSONB label_distribution поддерживается.
-- CHECK constraints защищают role, branch, status и data_type.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task9(Реализовать ORM-модели normalized_artifacts, feature_artifacts и model_ready_artifacts).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task9(Implement ORM models normalized_artifacts, feature_artifacts and model_ready_artifacts).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add catalog artifact ORM models"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 10. Реализовать ORM-модель data_quality_reports
---------------------------------------------------------------------------------
-
-Цель:
-Описать хранение summary quality checks для dataset_file, parser_run, normalized_artifact, feature_artifact и model_ready_artifact.
-
-Что сделать:
-1. Создать scripts/db/models/data_quality_reports.py.
-2. Реализовать модель DataQualityReport.
-3. Реализовать поля согласно catalog schema:
-   - artifact_id
-   - artifact_type
-   - rows_total
-   - rows_valid
-   - rows_failed
-   - missing_values_count
-   - duplicate_rows_count
-   - schema_mismatch_count
-   - label_distribution
-   - timestamp_coverage
-   - report_path
-   - created_at
-4. Для artifact_type добавить CHECK:
-   - dataset_file
-   - parser_run
-   - normalized_artifact
-   - feature_artifact
-   - model_ready_artifact
-5. Добавить индексы:
-   - artifact_type + artifact_id
-   - created_at
-6. Использовать JSONB для label_distribution.
-7. Добавить docstring к классу.
-
-Acceptance criteria:
-- DataQualityReport ORM-модель создана.
-- artifact_type ограничен CHECK constraint.
-- Индексы для поиска отчетов есть.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task10(Реализовать ORM-модель data_quality_reports).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task10(Implement the data_quality_reports ORM model).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add data quality report ORM model"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 11. Экспортировать все модели через scripts/db/models/__init__.py
---------------------------------------------------------------------------------
-
-Цель:
-Сделать импорт моделей единым и удобным для Alembic autogenerate и repository layer.
-
-Что сделать:
-1. Обновить scripts/db/models/__init__.py.
-2. Импортировать Base.
-3. Импортировать все ORM-модели:
-   - Dataset
-   - IngestionRun
-   - DatasetFile
-   - ParserRegistry
-   - ParserRun
-   - SchemaVersion
-   - NormalizedArtifact
-   - FeatureArtifact
-   - ModelReadyArtifact
+   - PreprocessingArtifact
+   - LabelMappingRule
    - DataQualityReport
-4. Добавить __all__.
-5. Добавить module docstring.
-6. Не добавлять бизнес-логику в __init__.py.
+2. Реализовать FK links:
+   - normalized -> dataset/file/parser_run/schema
+   - feature -> dataset/normalized
+   - preprocessing -> feature
+   - model_ready -> feature/preprocessing
+3. Добавить CHECK preprocessing fitted_on_role='TRAIN'.
+4. Добавить constraints role/branch/status/data_type.
 
 Acceptance criteria:
-- Все модели доступны из scripts.db.models.
-- Alembic сможет увидеть metadata через Base.metadata.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- Traceability chain выражена на уровне моделей.
+- TEST cannot be fitted_on_role for preprocessing.
+- compileall и git diff --check проходят.
 
+Commit:
+Add artifact label preprocessing and quality catalog models
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task11(Экспортировать все модели через scripts-db-models-__init__.py).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task11(Export all models via scripts-db-models-__init__.py).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Export catalog ORM models for migrations"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 12. Настроить Alembic внутри scripts/db/migrations
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 10. Создать первую Alembic migration catalog schema
+================================================================================
 
 Цель:
-Добавить воспроизводимый migration layer для PostgreSQL catalog.
+Создать PostgreSQL catalog tables воспроизводимо.
 
 Что сделать:
-1. Создать директорию:
-   - scripts/db/migrations/
-2. Создать Alembic config:
-   - scripts/db/migrations/alembic.ini
-   - scripts/db/migrations/env.py
-   - scripts/db/migrations/versions/
-3. Настроить env.py так, чтобы:
-   - DATABASE_URL читался через scripts/db/config.py;
-   - target_metadata указывал на Base.metadata;
-   - все модели импортировались до autogenerate.
-4. Не хранить DATABASE_URL напрямую в alembic.ini.
-5. Добавить comments/docstrings в env.py для нетривиальной логики.
-6. Проверить, что Alembic можно запустить из корня проекта.
+1. Создать Alembic revision.
+2. Проверить autogenerate вручную.
+3. Убедиться, что migration содержит:
+   - tables
+   - FK
+   - CHECK
+   - UNIQUE
+   - indexes
+4. Применить alembic upgrade head на local dev DB.
+5. Не добавлять seed data в migration, если это не schema-level константы.
 
 Acceptance criteria:
-- Alembic structure создана.
-- env.py использует DATABASE_URL из environment.
-- target_metadata подключен к ORM-моделям.
-- alembic.ini не содержит реальные credentials.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- alembic upgrade head успешен.
+- alembic downgrade -1 работает.
+- Все tables созданы.
+- compileall и git diff --check проходят.
 
+Commit:
+Create initial Stage Two catalog schema migration
 
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task12(Настроить Alembic внутри scripts-db-migrations).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task12(Configure Alembic within scripts-db-migrations).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Configure Alembic migrations for PostgreSQL catalog"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 13. Создать initial Alembic migration для 10 catalog tables
---------------------------------------------------------------------------------
+================================================================================
+ЗАДАЧА 11. Реализовать repository layer
+================================================================================
 
 Цель:
-Создать первую миграцию, которая воспроизводимо создает PostgreSQL catalog schema.
-
-Что сделать:
-1. Создать revision в scripts/db/migrations/versions/.
-2. Назвать migration логически, например:
-   - 001_create_catalog_schema.py
-3. Migration должна создавать 10 таблиц:
-   - datasets
-   - ingestion_runs
-   - dataset_files
-   - parser_registry
-   - parser_runs
-   - schema_versions
-   - normalized_artifacts
-   - feature_artifacts
-   - model_ready_artifacts
-   - data_quality_reports
-4. Migration должна создавать CHECK constraints.
-5. Migration должна создавать UNIQUE constraints.
-6. Migration должна создавать indexes.
-7. Migration должна иметь downgrade(), который удаляет таблицы в корректном порядке зависимостей.
-8. Вручную проверить autogenerate output перед коммитом.
-9. Не использовать Base.metadata.create_all() вместо Alembic migration.
-
-Acceptance criteria:
-- Есть initial migration для catalog schema.
-- upgrade() создает 10 обязательных таблиц.
-- downgrade() удаляет таблицы без нарушения FK order.
-- Constraints и indexes включены.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task13(Создать initial Alembic migration для 10 catalog tables).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task13(Create an initial Alembic migration for 10 catalog tables).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Create initial PostgreSQL catalog schema migration"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 14. Добавить smoke script для проверки подключения и структуры catalog schema
---------------------------------------------------------------------------------
-
-Цель:
-Создать простой проверочный скрипт, который подтверждает, что PostgreSQL catalog доступен и таблицы созданы.
-
-Что сделать:
-1. Создать scripts/db/smoke_check.py или scripts/db/check_catalog_schema.py.
-2. Скрипт должен:
-   - подключаться к PostgreSQL через session/engine;
-   - проверять наличие 10 обязательных таблиц;
-   - выводить понятный summary;
-   - возвращать non-zero exit code при ошибке.
-3. Не создавать таблицы автоматически.
-4. Не создавать тестовые данные в этой задаче.
-5. Добавить docstring к модулю и функциям.
-
-Acceptance criteria:
-- Скрипт проверки существует.
-- Скрипт проверяет наличие 10 таблиц.
-- При отсутствии таблиц скрипт сообщает, что именно отсутствует.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task14(Добавить smoke script для проверки подключения и структуры catalog schema).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task14(Add a smoke script to check the connection and catalog schema structure).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add PostgreSQL catalog schema smoke check"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 15. Создать repository package и базовый repository helper
---------------------------------------------------------------------------------
-
-Цель:
-Подготовить repository layer для безопасной работы с catalog entities.
+Создать безопасный слой доступа к catalog.
 
 Что сделать:
 1. Создать scripts/db/repositories/.
-2. Создать scripts/db/repositories/__init__.py.
-3. Создать базовый helper-модуль, например:
-   - scripts/db/repositories/base_repository.py
-4. Базовый repository helper должен содержать общие операции, если они реально нужны:
-   - get_by_id
-   - list_all
-   - flush/refresh helper
-5. Не делать чрезмерно абстрактный generic framework.
-6. Добавить docstrings к модулям, классам и методам.
-7. Не реализовывать catalog ingestion в этой задаче.
+2. Реализовать:
+   - BaseRepository
+   - DatasetRepository
+   - IngestionRepository
+   - DatasetFileRepository
+   - ParserRepository
+   - SchemaRepository
+   - ArtifactRepository
+   - LabelRepository
+   - PreprocessingRepository
+   - DataQualityRepository
+3. Не коммитить прямые DB операции в parser classes.
 
 Acceptance criteria:
-- Repository package создан.
-- Есть минимальный base repository helper или обоснованно простой skeleton.
-- Нет логики сканирования raw datasets.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
+- Repositories принимают Session.
+- Нет создания engine внутри repositories.
+- compileall и git diff --check проходят.
 
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task15(Создать repository package и базовый repository helper).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task15(Create a repository package and a basic repository helper).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add repository package skeleton for catalog access"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 16. Реализовать DatasetRepository и IngestionRepository
---------------------------------------------------------------------------------
-
-Цель:
-Добавить repository methods для datasets и ingestion_runs.
-
-Что сделать:
-1. Создать:
-   - scripts/db/repositories/dataset_repository.py
-   - scripts/db/repositories/ingestion_repository.py
-2. DatasetRepository должен уметь:
-   - создать dataset;
-   - найти dataset по name + branch + role;
-   - получить active datasets;
-   - не создавать дубликат при существующем dataset.
-3. IngestionRepository должен уметь:
-   - создать ingestion_run со status=RUNNING;
-   - завершить ingestion_run со status=SUCCESS / PARTIAL_SUCCESS / FAILED;
-   - обновить counters files_seen, files_new, files_existing, files_changed, files_failed;
-   - записать error_message при ошибке.
-4. Методы должны принимать session извне, а не создавать скрытую глобальную session.
-5. Добавить docstrings и type hints.
-6. Не сканировать файловую систему в этой задаче.
-
-Acceptance criteria:
-- DatasetRepository реализован.
-- IngestionRepository реализован.
-- Методы не создают скрытые транзакции без необходимости.
-- Дубликаты datasets обрабатываются предсказуемо.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task16(Реализовать DatasetRepository и IngestionRepository).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task16(Implement DatasetRepository and IngestionRepository).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add dataset and ingestion catalog repositories"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 17. Реализовать DatasetFileRepository с bulk insert / upsert skeleton
---------------------------------------------------------------------------------
-
-Цель:
-Подготовить быстрый слой регистрации raw-файлов для будущего catalog ingestion.
-
-Что сделать:
-1. Создать scripts/db/repositories/dataset_file_repository.py.
-2. Реализовать методы:
-   - get_by_dataset_and_path(dataset_id, file_path)
-   - list_by_status(status, limit=None)
-   - list_by_branch_role_format(branch, role, source_format, limit=None)
-   - bulk_upsert_files(records)
-3. bulk_upsert_files должен использовать SQLAlchemy Core insert с PostgreSQL ON CONFLICT по dataset_id + file_path.
-4. При повторном ingestion логика должна быть подготовлена для:
-   - нового файла;
-   - существующего файла без изменения hash;
-   - существующего файла с измененным hash;
-   - пустого файла;
-   - failed registration.
-5. В этой задаче можно реализовать skeleton upsert без реального filesystem scanning.
-6. Добавить подробный docstring к bulk_upsert_files, потому что это критичный метод.
-7. Не читать содержимое raw-файлов.
-
-Acceptance criteria:
-- DatasetFileRepository создан.
-- Есть lookup methods по status и branch/role/source_format.
-- Есть bulk_upsert_files через SQLAlchemy Core.
-- ON CONFLICT использует dataset_id + file_path.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task17(Реализовать DatasetFileRepository с bulk insert - upsert skeleton).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task17(Implement DatasetFileRepository with bulk insert - upsert skeleton).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add dataset file repository with bulk upsert support"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 18. Реализовать ParserRepository и SchemaVersionRepository
---------------------------------------------------------------------------------
-
-Цель:
-Добавить repository layer для parser registry, parser runs и schema versions.
-
-Что сделать:
-1. Создать scripts/db/repositories/parser_repository.py.
-2. Создать scripts/db/repositories/schema_repository.py или schema_version_repository.py.
-3. ParserRepository должен уметь:
-   - найти active parser по branch + source_format + role;
-   - создать parser_run;
-   - завершить parser_run со status, rows_read, rows_parsed, rows_failed, output_parquet_path, error_message;
-   - получить parser_runs по file_id.
-4. SchemaVersionRepository должен уметь:
-   - найти active schema по schema_name + layer + branch;
-   - создать schema version;
-   - отключить старую schema version, если это потребуется явно.
-5. Не реализовывать parser routing logic как отдельный pipeline.
-6. Не писать parser implementations.
-7. Добавить docstrings и type hints.
-
-Acceptance criteria:
-- ParserRepository создан.
-- SchemaVersionRepository создан.
-- Parser lookup учитывает supported_role NULL как fallback для всех ролей.
-- Parser run lifecycle можно фиксировать через repository.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task18(Реализовать ParserRepository и SchemaVersionRepository).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task18(Implement ParserRepository and SchemaVersionRepository).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add parser and schema catalog repositories"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 19. Реализовать ArtifactRepository и DataQualityRepository
---------------------------------------------------------------------------------
-
-Цель:
-Добавить repository layer для регистрации artifacts и quality reports.
-
-Что сделать:
-1. Создать scripts/db/repositories/artifact_repository.py.
-2. Создать scripts/db/repositories/data_quality_repository.py.
-3. ArtifactRepository должен уметь:
-   - register_normalized_artifact
-   - register_feature_artifact
-   - register_model_ready_artifact
-   - получить artifacts по role + branch
-   - получить chain metadata для traceability, если это просто реализуется через join/query
-4. DataQualityRepository должен уметь:
-   - create_report
-   - list_reports_for_artifact
-   - list_recent_reports
-5. Методы регистрации artifacts должны принимать относительные пути к Parquet/NPZ artifacts.
-6. Не создавать сами Parquet/NPZ файлы в этой задаче.
-7. Добавить docstrings и type hints.
-
-Acceptance criteria:
-- ArtifactRepository создан.
-- DataQualityRepository создан.
-- Методы не создают большие данные.
-- Repository layer поддерживает будущую traceability.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task19(Реализовать ArtifactRepository и DataQualityRepository).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task19(Implement ArtifactRepository and DataQualityRepository).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add artifact and data quality catalog repositories"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 20. Добавить integration smoke test для constraints и rollback
---------------------------------------------------------------------------------
-
-Цель:
-Проверить, что DB layer реально защищает catalog от неправильных role, branch и дубликатов.
-
-Что сделать:
-1. Создать тестовый скрипт или test module, например:
-   - scripts/db/integration_smoke_test.py
-   или tests/test_catalog_db_smoke.py, если в проекте уже есть tests/.
-2. Тест должен проверять:
-   - подключение к PostgreSQL;
-   - создание test dataset;
-   - создание ingestion_run;
-   - создание dataset_file;
-   - невозможность создать dataset_file с неправильным role;
-   - невозможность создать dataset_file с неправильным branch;
-   - невозможность повторно создать тот же file_path для того же dataset_id;
-   - rollback при IntegrityError.
-3. Тестовые записи должны иметь явно распознаваемые имена, например smoke_test_*.
-4. По возможности тест должен очищать за собой созданные записи.
-5. Не использовать реальные dataset paths.
-6. Не читать raw-файлы.
-7. Добавить docstrings к тестовым helper-функциям.
-
-Acceptance criteria:
-- Integration smoke test существует.
-- CHECK constraints проверяются.
-- UNIQUE constraints проверяются.
-- Rollback проверяется.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task20(Добавить integration smoke test для constraints и rollback).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task20(Add smoke test integration for constraints and rollback)).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Add catalog database integration smoke tests"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 21. Обновить README / project docs по DB foundation
---------------------------------------------------------------------------------
-
-Цель:
-Задокументировать, как использовать PostgreSQL catalog DB layer и что входит в текущий scope.
-
-Что сделать:
-1. Обновить README.md или создать отдельный документ, например:
-   - docs/ru/postgresql_catalog_db_layer.md
-   - docs/en/postgresql_catalog_db_layer.md
-2. Описать:
-   - роль PostgreSQL как catalog metadata layer;
-   - роль SQLAlchemy как Python access layer;
-   - роль Alembic как migration layer;
-   - что хранится в PostgreSQL;
-   - что не хранится в PostgreSQL;
-   - как задать DATABASE_URL;
-   - как применить migration;
-   - как запустить smoke check;
-   - почему raw/normalized/features/model-ready big data остаются вне PostgreSQL.
-3. Указать, что parser routing, parser implementations, Parquet normalization, feature extraction и training не входят в этот DB foundation scope.
-4. Добавить краткий troubleshooting:
-   - DATABASE_URL missing;
-   - PostgreSQL unavailable;
-   - migration not applied;
-   - constraints failed.
-
-Acceptance criteria:
-- Документация обновлена.
-- Есть команды для Alembic upgrade и smoke check.
-- Scope clearly separated от будущих Stage Two задач.
-- python -m compileall manage.py scripts проходит без ошибок.
-- git diff --check проходит без ошибок.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task21(Обновить README - project docs по DB foundation).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task21(Update README - project docs for DB Foundation).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Document PostgreSQL catalog DB layer usage"
-git push origin dev
-
---------------------------------------------------------------------------------
-ЗАДАЧА 22. Финальная проверка DB foundation перед catalog ingestion
---------------------------------------------------------------------------------
-
-Цель:
-Проверить, что вся DB foundation часть готова к следующему этапу — catalog ingestion.
-
-Что сделать:
-1. Установить зависимости из requirements.txt.
-2. Проверить, что PostgreSQL container / service запущен.
-3. Проверить, что proposal_catalog database существует.
-4. Проверить, что proposal_user имеет доступ.
-5. Применить Alembic migration:
-   - alembic upgrade head
-   или эквивалентную команду из настроенного alembic.ini.
-6. Запустить schema smoke check.
-7. Запустить integration smoke test.
-8. Проверить compileall:
-   - python -m compileall manage.py scripts
-9. Проверить whitespace:
-   - git diff --check
-10. Проверить, что в Git не попал .env.
-11. Проверить, что не были добавлены parser implementations, Parquet writers, feature extraction или ML/DL код.
-12. Сформировать короткий текстовый отчет в docs или planning:
-   - какие таблицы созданы;
-   - какие проверки пройдены;
-   - какие команды запускались;
-   - что является следующей задачей.
-
-Acceptance criteria:
-- Все 10 catalog tables созданы.
-- CHECK constraints работают.
-- UNIQUE constraints работают.
-- Индексы созданы.
-- SQLAlchemy подключается к PostgreSQL.
-- Alembic migration применима воспроизводимо.
-- Smoke checks проходят.
-- README/docs обновлены.
-- Scope не расширен за пределы DB foundation.
-
-
-Отчет после выполнения:
-1. Создать русский отчет:
-   PATH_REPORT/ru/stage-two/Task22(Финальная проверка DB foundation перед catalog ingestion).md
-2. Создать английский отчет:
-   PATH_REPORT/en/stage-two/Task22(Финальная проверка DB foundation перед catalog ingestion).md
-3. В каждом отчете указать:
-   - номер и название задачи;
-   - цель задачи;
-   - что было изменено;
-   - список измененных/созданных файлов;
-   - какие проверки запускались;
-   - результат каждой проверки;
-   - commit message из этой задачи;
-   - результат git push origin dev;
-   - проблемы, ограничения или TODO, если есть;
-   - следующий рекомендуемый шаг.
-4. Отчеты должны быть созданы до git add ., чтобы попасть в commit этой задачи.
-Команды завершения:
-
-git add .
-git commit -m "Finalize PostgreSQL catalog DB foundation"
-git push origin dev
+Commit:
+Add PostgreSQL catalog repository layer
 
 ================================================================================
-3. ЧТО НЕ ДЕЛАТЬ В ЭТОМ НАБОРЕ ЗАДАЧ
+ЗАДАЧА 12. Реализовать smoke tests для DB foundation
 ================================================================================
 
-Не реализовывать сейчас:
-1. Catalog ingestion filesystem scanner.
-2. Parser routing pipeline.
-3. DNS parser.
-4. PCAP / PCAPNG / CAP parser.
-5. BSON parser.
-6. JSON / JSONL parser.
-7. TXT syscall/API trace parser.
-8. Normalized event Parquet writer.
-9. Feature extraction.
-10. DuckDB analytics.
-11. Model-ready dataset creation.
-12. Scaler / encoder / feature selector.
-13. ML/DL training.
-14. SHAP reports.
-15. LSTM sequence windows.
+Цель:
+Проверить catalog schema and repositories.
 
-Причина:
-Сначала должна быть стабильная catalog schema + SQLAlchemy/Alembic access layer. Только после этого можно безопасно переходить к catalog ingestion.
+Что сделать:
+1. Добавить минимальные tests или smoke script.
+2. Проверить:
+   - create dataset
+   - create ingestion_run
+   - insert dataset_file
+   - unique constraint
+   - check constraint
+   - parser_run
+   - normalized artifact
+   - preprocessing artifact TRAIN-only
+   - data_quality_report
+3. Не использовать реальные raw datasets.
+
+Acceptance criteria:
+- Smoke test проходит на test DB.
+- Rollback работает.
+- compileall и git diff --check проходят.
+
+Commit:
+Add PostgreSQL catalog smoke checks
 
 ================================================================================
-4. РЕКОМЕНДУЕМАЯ СЛЕДУЮЩАЯ БОЛЬШАЯ ЗАДАЧА ПОСЛЕ ЭТИХ TASKS
+ЗАДАЧА 13. Реализовать catalog ingestion service
 ================================================================================
 
-Следующая большая задача после успешного завершения DB foundation:
+Цель:
+Сканировать raw/sorted dataset directories and register files in PostgreSQL.
 
-CATALOG INGESTION
+Что сделать:
+1. Создать scripts/stage_two/ingestion/.
+2. Реализовать DatasetFileScanner.
+3. Реализовать FileHashService.
+4. Реализовать CatalogIngestionService.
+5. Поддержать PATH_FOLDER_DATASETS and PATH_FOLDER_DATASETS_FILTER.
+6. Определять dataset_name, branch, role, source_format.
+7. Считать sha256, file size, modified time.
+8. Использовать bulk upsert через SQLAlchemy Core.
+9. Не читать содержимое больших файлов.
 
-Она должна быть разбита на отдельные задачи:
-1. Scanner config и dataset role mapping.
-2. Filesystem traversal без чтения содержимого больших файлов.
-3. Source format detection.
-4. SHA256 hash calculation.
-5. Dataset registration.
-6. Dataset file bulk upsert.
-7. Ingestion run counters.
-8. Error report для failed file registrations.
-9. Smoke test на небольшом fake dataset tree.
-10. Documentation update.
+Acceptance criteria:
+- Files регистрируются в dataset_files.
+- Повторный запуск idempotent.
+- ingestion_runs получает SUCCESS/PARTIAL_SUCCESS/FAILED.
+- compileall и git diff --check проходят.
 
+Commit:
+Implement Stage Two catalog ingestion service
+
+================================================================================
+ЗАДАЧА 14. Реализовать parser registry seed and resolver
+================================================================================
+
+Цель:
+Подготовить routing parser-а по branch/role/source_format.
+
+Что сделать:
+1. Создать config/parser_registry_seed.json.
+2. Описать parsers for DNS csv/pcap/pcap.csv/txt and Host csv/log/json/txt/sc/ghc/bson/cap/pcap/pcapng/netflow_day/wls_day.
+3. Реализовать ParserResolver.
+4. Resolver должен искать parser по branch + role + source_format.
+5. Если parser не найден, file status UNSUPPORTED_FORMAT or SKIPPED.
+
+Acceptance criteria:
+- parser_registry можно seed/update.
+- ParserResolver возвращает parser metadata.
+- Unsupported format не ломает pipeline.
+- compileall и git diff --check проходят.
+
+Commit:
+Add parser registry seed and resolver
+
+================================================================================
+ЗАДАЧА 15. Реализовать normalized schema contracts
+================================================================================
+
+Цель:
+Зафиксировать canonical normalized event schema.
+
+Что сделать:
+1. Создать schemas/normalized/normalized_event_v1.json или equivalent.
+2. Описать базовые поля:
+   event_uid, dataset_id, file_id, dataset_role, branch, source_format,
+   parser_name, parser_version, timestamp, timestamp_source, timestamp_type,
+   event_index, entity_type, entity_id, event_type, modality, label fields,
+   features_json, raw_fields_json, metadata_json.
+3. Зарегистрировать schema_versions.
+4. Описать NULL policy.
+
+Acceptance criteria:
+- Schema contract есть в repository.
+- schema_versions содержит normalized schema.
+- NULL policy documented.
+- compileall и git diff --check проходят.
+
+Commit:
+Add normalized event schema contract
+
+================================================================================
+ЗАДАЧА 16. Реализовать Parquet writer foundation
+================================================================================
+
+Цель:
+Подготовить запись normalized/features/model-ready Parquet artifacts.
+
+Что сделать:
+1. Добавить зависимости pyarrow and/or polars only in this task if needed.
+2. Создать scripts/stage_two/parquet/.
+3. Реализовать ParquetArtifactWriter.
+4. Поддержать paths:
+   - parquet/normalized/{branch}/{role}/{modality}/{dataset_slug}/schema={version}/...
+   - parquet/features/{feature_group}/{role}/{dataset_slug}/schema={version}/...
+   - parquet/model_ready/...
+5. Не писать в PostgreSQL сами events/features.
+6. Регистрировать artifact path through ArtifactRepository.
+
+Acceptance criteria:
+- Writer создает partitioned paths.
+- Missing fields сохраняются as NULL.
+- Artifact registry получает row_count and path.
+- compileall и git diff --check проходят.
+
+Commit:
+Add Parquet artifact writer foundation
+
+================================================================================
+ЗАДАЧА 17. Реализовать базовые parser interfaces
+================================================================================
+
+Цель:
+Создать единый parser contract.
+
+Что сделать:
+1. Создать scripts/stage_two/parsers/.
+2. Реализовать BaseParser abstract class.
+3. Реализовать ParserResult dataclass.
+4. ParserResult должен содержать rows_read, rows_parsed, rows_failed, events, warnings.
+5. Parser должен отдавать normalized event dicts matching schema.
+6. Parser не должен напрямую commit в DB.
+
+Acceptance criteria:
+- BaseParser есть.
+- ParserResult есть.
+- Parser contract documented.
+- compileall и git diff --check проходят.
+
+Commit:
+Add Stage Two parser interface contract
+
+================================================================================
+ЗАДАЧА 18. Реализовать DNS normalization parsers MVP
+================================================================================
+
+Цель:
+Нормализовать DNS csv/txt/pcap.csv MVP; pcap может быть stub/custom parser task.
+
+Что сделать:
+1. Реализовать DNS CSV parser with schema-aware handling.
+2. Реализовать DNS TXT domain-list parser.
+3. Реализовать DNS pcap.csv parser.
+4. Headerless DNS TEST CSV поддержать positional schema.
+5. Missing values -> NULL.
+6. Labels through LabelResolver, not hardcoded in feature columns.
+
+Acceptance criteria:
+- DNS normalized events write to Parquet.
+- TRAIN/VALIDATION/TEST separated.
+- parser_runs and normalized_artifacts registered.
+- compileall и git diff --check проходят.
+
+Commit:
+Implement DNS normalized parser MVP
+
+================================================================================
+ЗАДАЧА 19. Реализовать Host normalization parsers MVP
+================================================================================
+
+Цель:
+Нормализовать ключевые Host текстовые/табличные источники MVP.
+
+Что сделать:
+1. Реализовать Host CSV parser for 9-column system event schema.
+2. Реализовать JSON-lines metric parser for Metricbeat-like logs.
+3. Реализовать raw syslog/auth line parser MVP.
+4. Реализовать syscall/txt/sc trace parser MVP with event_index.
+5. Missing fields -> NULL.
+6. raw_fields_json сохраняет нестандартные поля.
+
+Acceptance criteria:
+- Host normalized events write to Parquet.
+- event_index работает для streams without timestamp.
+- parser_runs and normalized_artifacts registered.
+- compileall и git diff --check проходят.
+
+Commit:
+Implement Host normalized parser MVP
+
+================================================================================
+ЗАДАЧА 20. Реализовать custom parser tasks для PCAP/CAP/PCAPNG/BSON
+================================================================================
+
+Цель:
+Поддержать сложные форматы без упрощения данных.
+
+Что сделать:
+1. Добавить зависимости/tools только если нужны:
+   - scapy/pyshark/tshark wrapper for packet parsing
+   - bson package for BSON parsing
+2. Реализовать packet summary parser:
+   - timestamp, src/dst IP, ports, protocol, packet size, TCP flags, DNS fields if decoded.
+3. Реализовать BSON parser:
+   - descriptor mapping, event documents, args, relative time, event_order.
+4. Full payload не сохранять в PostgreSQL.
+5. Unknown fields -> raw_fields_json.
+
+Acceptance criteria:
+- PCAP/CAP/PCAPNG produce packet/flow normalized summaries.
+- BSON produces host behaviour normalized events.
+- parser errors are recorded, not destructive.
+- compileall и git diff --check проходят.
+
+Commit:
+Add custom parsers for packet captures and BSON telemetry
+
+================================================================================
+ЗАДАЧА 21. Реализовать LabelResolver
+================================================================================
+
+Цель:
+Единообразно назначать labels без leakage.
+
+Что сделать:
+1. Создать scripts/stage_two/labels/.
+2. Реализовать LabelResolver.
+3. Поддержать label_mapping_rules from DB/config.
+4. Priority:
+   embedded label -> ground_truth -> scenario metadata -> filename -> weak IDS alert -> unlabeled.
+5. Unknown labels сохранять as label_binary=NULL, label_status='unlabeled'.
+6. Не считать unlabeled as benign.
+
+Acceptance criteria:
+- label fields populated consistently.
+- label_source/status/confidence/rule_id сохранены.
+- TEST labels не используются для training decisions.
+- compileall и git diff --check проходят.
+
+Commit:
+Add canonical label resolver
+
+================================================================================
+ЗАДАЧА 22. Реализовать feature artifact contracts
+================================================================================
+
+Цель:
+Подготовить feature layer для последующего feature engineering.
+
+Что сделать:
+1. Создать schemas/features/feature_artifact_v1.json.
+2. Описать required traceability fields.
+3. Описать feature groups:
+   dns_features, host_syscall_features, host_eventlog_features, host_metrics_features,
+   network_flow_features, hybrid_features, sequence_features.
+4. Создать placeholder writers/registrars without final ML feature extraction.
+5. Исключить label/source leakage columns from X contract.
+
+Acceptance criteria:
+- Feature schema contract exists.
+- feature_artifacts can be registered.
+- X exclude list documented.
+- compileall и git diff --check проходят.
+
+Commit:
+Add feature artifact schema contracts
+
+================================================================================
+ЗАДАЧА 23. Реализовать model-ready artifact contracts and preprocessing registry
+================================================================================
+
+Цель:
+Подготовить model-ready layer without training final models.
+
+Что сделать:
+1. Создать schemas/model_ready/model_ready_v1.json.
+2. Описать artifacts:
+   - X_train.parquet, y_train.parquet
+   - X_validation.parquet, y_validation.parquet
+   - X_test.parquet, y_test.parquet
+   - train_sequences.npz, validation_sequences.npz, test_sequences.npz
+   - preprocessing objects
+3. Реализовать registry service.
+4. Enforce preprocessing fitted_on_role='TRAIN'.
+
+Acceptance criteria:
+- model_ready_artifacts registered.
+- preprocessing_artifacts linked.
+- TEST cannot be fitted_on_role.
+- compileall и git diff --check проходят.
+
+Commit:
+Add model ready artifact and preprocessing contracts
+
+================================================================================
+ЗАДАЧА 24. Реализовать DuckDB analytics layer
+================================================================================
+
+Цель:
+Выполнять SQL checks over Parquet.
+
+Что сделать:
+1. Добавить duckdb dependency.
+2. Создать scripts/stage_two/duckdb/.
+3. Реализовать DuckDBAnalyticsService.
+4. Создать SQL views/scripts:
+   - normalized_all
+   - features_all
+   - model_ready_all
+5. Реализовать checks:
+   - row counts by role/branch
+   - missing required columns
+   - split contamination
+   - schema mismatch
+6. Сохранять reports.
+
+Acceptance criteria:
+- DuckDB reads Parquet using read_parquet.
+- SQL checks execute without loading data into PostgreSQL.
+- Reports saved and registered in data_quality_reports.
+- compileall и git diff --check проходят.
+
+Commit:
+Add DuckDB analytics checks over Parquet
+
+================================================================================
+ЗАДАЧА 25. Реализовать DataQualityChecker and LeakageChecker
+================================================================================
+
+Цель:
+Блокировать плохие artifacts before downstream stages.
+
+Что сделать:
+1. Создать scripts/stage_two/quality/.
+2. Реализовать DataQualityChecker.
+3. Реализовать LeakageChecker.
+4. Проверки:
+   - required columns;
+   - null counts;
+   - duplicate event_uid/sample_uid;
+   - role/branch values;
+   - label columns absent from X;
+   - source_file/scenario_name absent from X;
+   - TEST absent from TRAIN artifacts;
+   - preprocessing fit only on TRAIN.
+5. Сохранять RU/EN report where applicable.
+
+Acceptance criteria:
+- Failed leakage check creates CRITICAL report.
+- model_ready SUCCESS blocked if leakage check failed.
+- compileall и git diff --check проходят.
+
+Commit:
+Add Stage Two data quality and leakage checks
+
+================================================================================
+ЗАДАЧА 26. Реализовать traceability service
+================================================================================
+
+Цель:
+Проверять цепочку model_ready -> feature -> normalized -> parser_run -> raw file.
+
+Что сделать:
+1. Создать TraceabilityService.
+2. Реализовать query by model_ready artifact id/path.
+3. Вернуть dataset, file, parser, normalized, feature metadata.
+4. Добавить smoke check.
+
+Acceptance criteria:
+- Traceability works for registered artifacts.
+- Missing link returns explicit error, not silent pass.
+- compileall и git diff --check проходят.
+
+Commit:
+Add artifact traceability service
+
+================================================================================
+ЗАДАЧА 27. Добавить CLI routes для Stage Two
+================================================================================
+
+Цель:
+Встроить Stage Two services в существующую CLI архитектуру.
+
+Что сделать:
+1. Проверить текущие routers manage.py -> router_script -> handlers.
+2. Добавить service/action routes without breaking existing Stage One commands.
+3. Минимальные actions:
+   - stage-two bootstrap-storage
+   - stage-two catalog-ingest
+   - stage-two seed-parser-registry
+   - stage-two normalize-dns
+   - stage-two normalize-host
+   - stage-two run-duckdb-checks
+   - stage-two run-leakage-checks
+   - stage-two trace-artifact
+4. Обновить manage_commands.
+
+Acceptance criteria:
+- Existing commands still work.
+- New routes show clear output.
+- compileall и git diff --check проходят.
+
+Commit:
+Add Stage Two CLI routes
+
+================================================================================
+ЗАДАЧА 28. Создать финальную документацию Stage Two в docs/ru и docs/en
+================================================================================
+
+Цель:
+Задокументировать реализацию для пользователя и дальнейшего Codex work.
+
+Что сделать:
+1. Создать docs/ru/normalization/README.md.
+2. Создать docs/ru/normalization/storage_architecture.md.
+3. Создать docs/ru/normalization/postgresql_catalog_schema.md.
+4. Создать docs/ru/normalization/normalized_event_schema.md.
+5. Создать docs/ru/normalization/parser_strategy.md.
+6. Создать docs/ru/normalization/parquet_duckdb_artifacts.md.
+7. Создать docs/ru/normalization/data_quality_checks.md.
+8. Создать docs/ru/normalization/data_leakage_prevention.md.
+9. Создать английские версии в docs/en/normalization/.
+
+Acceptance criteria:
+- RU/EN docs exist.
+- Docs match implemented code.
+- compileall и git diff --check проходят.
+
+Commit:
+Document Stage Two normalization implementation
+
+================================================================================
+ЗАДАЧА 29. Провести end-to-end dry run на small sample
+================================================================================
+
+Цель:
+Проверить весь Stage Two pipeline без обработки полного массива.
+
+Что сделать:
+1. Выбрать small sample files from DNS and Host.
+2. Запустить bootstrap.
+3. Запустить catalog ingestion.
+4. Seed parser registry.
+5. Normalize sample.
+6. Register artifacts.
+7. Run DuckDB checks.
+8. Run leakage checks.
+9. Run traceability.
+10. Сохранить report.
+
+Acceptance criteria:
+- E2E dry run passes.
+- All reports generated.
+- Raw files unchanged.
+- compileall и git diff --check проходят.
+
+Commit:
+Run Stage Two end to end dry run on sample data
+
+================================================================================
+ЗАДАЧА 30. Финальная проверка Stage Two readiness
+================================================================================
+
+Цель:
+Подтвердить готовность перехода к feature engineering/model training.
+
+Что сделать:
+1. Проверить DB migrations.
+2. Проверить storage paths.
+3. Проверить catalog counts.
+4. Проверить parser coverage by source_format.
+5. Проверить normalized artifacts.
+6. Проверить quality/leakage reports.
+7. Проверить traceability.
+8. Сформировать итоговый RU/EN report.
+
+Acceptance criteria:
+- Stage Two readiness report exists.
+- Нет CRITICAL leakage issues.
+- Все raw files untouched.
+- Все artifacts registered.
+- compileall и git diff --check проходят.
+
+Commit:
+Finalize Stage Two normalization readiness checks

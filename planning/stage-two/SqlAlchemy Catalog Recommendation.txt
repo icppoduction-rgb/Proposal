@@ -1,717 +1,365 @@
-ФИНАЛЬНАЯ РЕКОМЕНДАЦИЯ ПО ИСПОЛЬЗОВАНИЮ SQLALCHEMY ДЛЯ POSTGRESQL CATALOG
-Проект: Proposal — Behaviour-driven hybrid learning for data exfiltration detection
-Этап: Stage Two — Data Normalization
-Файл: final_sqlalchemy_catalog_recommendation.txt
+Проект: Proposal - Behaviour-driven hybrid learning for data exfiltration detection
+Этап: Stage Two - Data Normalization
+Дата подготовки: 2026-06-13
+Формат: TXT
 
 
-================================================================================
-1. КРАТКИЙ ВЫВОД
-================================================================================
-
-Использовать SQLAlchemy в проекте — правильное решение.
-
-Рекомендуемая позиция:
-
-SQLAlchemy нужно использовать как основной Python-слой доступа к PostgreSQL catalog,
-но не как инструмент хранения больших данных.
-
-PostgreSQL в проекте должен оставаться управляющим catalog/pipeline-control слоем.
-Он должен хранить metadata, статусы, связи, версии parser-ов, версии схем,
-пути к Parquet artifacts, quality reports и контроль TRAIN / VALIDATION / TEST.
-
-Большие данные должны оставаться вне PostgreSQL:
-
-- raw datasets — в raw filesystem layer;
-- normalized events — в Parquet;
-- feature tables — в Parquet;
-- model-ready tabular artifacts — в Parquet;
-- sequence windows для LSTM — в NPZ / Parquet / similar artifact format;
-- аналитические SQL-запросы по большим данным — через DuckDB поверх Parquet.
-
-Итоговая рекомендация:
-
-    SQLAlchemy + Alembic + PostgreSQL catalog = да.
-    SQLAlchemy для хранения normalized events/features = нет.
-    SQLAlchemy для catalog ingestion, parser runs и artifact registry = да.
-
-
-================================================================================
-2. ПОЧЕМУ SQLALCHEMY ПОДХОДИТ ДЛЯ ЭТОГО ПРОЕКТА
+ОБНОВЛЕННАЯ РЕКОМЕНДАЦИЯ ПО SQLALCHEMY ДЛЯ STAGE TWO
 ================================================================================
 
-SQLAlchemy хорошо подходит, потому что Stage Two требует не просто создать таблицы,
-а постоянно взаимодействовать с catalog из Python pipeline.
-
-В проекте нужно будет программно:
-
-1. Создавать записи о датасетах.
-2. Регистрировать raw-файлы.
-3. Считать и сохранять file hash.
-4. Фиксировать role: TRAIN / VALIDATION / TEST / EXPERIMENTS.
-5. Фиксировать branch: dns / host / network / hybrid.
-6. Назначать parser.
-7. Создавать parser_runs.
-8. Обновлять статусы обработки.
-9. Регистрировать normalized Parquet artifacts.
-10. Регистрировать feature Parquet artifacts.
-11. Регистрировать model-ready artifacts.
-12. Сохранять data quality reports.
-13. Проверять data leakage conditions.
-14. Обеспечивать traceability от model-ready artifact до raw-файла.
-
-Писать все эти операции вручную через raw SQL можно, но это быстро станет
-неудобным и рискованным. SQLAlchemy позволяет централизовать работу с БД,
-сделать код чище и уменьшить вероятность ошибок при изменении схемы.
-
-
-================================================================================
-3. КАК ИМЕННО ИСПОЛЬЗОВАТЬ SQLALCHEMY
+1. ФИНАЛЬНОЕ РЕШЕНИЕ
 ================================================================================
 
-Рекомендуется использовать два режима SQLAlchemy:
+SQLAlchemy использовать нужно.
 
-1. SQLAlchemy ORM
-   Для обычной работы с catalog entities:
-   - datasets;
-   - ingestion_runs;
-   - dataset_files;
-   - parser_registry;
-   - parser_runs;
-   - schema_versions;
-   - normalized_artifacts;
-   - feature_artifacts;
-   - model_ready_artifacts;
-   - data_quality_reports.
+Роль SQLAlchemy:
+- основной Python access layer к PostgreSQL catalog;
+- catalog ingestion;
+- parser registry lookup;
+- parser_runs lifecycle;
+- artifact registry;
+- data quality report registry;
+- traceability queries.
 
-2. SQLAlchemy Core
-   Для bulk operations:
-   - массовая регистрация сотен тысяч raw-файлов;
-   - batch insert dataset_files;
-   - upsert при повторном catalog ingestion;
-   - быстрые update статусов;
-   - массовая запись ingestion summaries.
+SQLAlchemy не использовать для:
+- хранения normalized events;
+- хранения feature matrix;
+- чтения PCAP/BSON/raw logs;
+- аналитики по Parquet;
+- training/inference data storage.
+
+Формула:
+
+SQLAlchemy + Alembic + PostgreSQL catalog = да.
+SQLAlchemy для больших данных = нет.
+DuckDB + Parquet для больших SQL-выборок = да.
+
+2. РЕКОМЕНДУЕМАЯ СТРУКТУРА КОДА
+================================================================================
+
+scripts/db/
+|-- __init__.py
+|-- config.py
+|-- session.py
+|-- models/
+|   |-- __init__.py
+|   |-- base.py
+|   |-- datasets.py
+|   |-- ingestion_runs.py
+|   |-- dataset_files.py
+|   |-- parser_registry.py
+|   |-- schema_versions.py
+|   |-- parser_runs.py
+|   |-- label_mapping_rules.py
+|   |-- artifacts.py
+|   |-- preprocessing_artifacts.py
+|   `-- data_quality_reports.py
+|-- repositories/
+|   |-- __init__.py
+|   |-- base_repository.py
+|   |-- dataset_repository.py
+|   |-- ingestion_repository.py
+|   |-- dataset_file_repository.py
+|   |-- parser_repository.py
+|   |-- schema_repository.py
+|   |-- artifact_repository.py
+|   |-- label_repository.py
+|   |-- preprocessing_repository.py
+|   `-- data_quality_repository.py
+`-- migrations/
+    |-- alembic.ini
+    |-- env.py
+    `-- versions/
+        `-- 001_create_stage_two_catalog_schema.py
+
+scripts/stage_two/
+|-- ingestion/
+|-- parser_registry/
+|-- parsers/
+|-- normalization/
+|-- parquet/
+|-- labels/
+|-- duckdb/
+|-- quality/
+`-- reports/
+
+3. CONFIG LAYER
+================================================================================
+
+scripts/db/config.py должен:
+- читать DATABASE_URL из environment/.env;
+- валидировать, что DATABASE_URL задан;
+- не содержать credentials в коде;
+- поддерживать testing DATABASE_URL override;
+- возвращать immutable config object.
+
+Пример публичного интерфейса:
+
+class DatabaseSettings:
+    database_url: str
+    echo_sql: bool = False
+    pool_pre_ping: bool = True
+
+4. SESSION LAYER
+================================================================================
+
+scripts/db/session.py должен:
+- создать SQLAlchemy engine;
+- создать sessionmaker;
+- дать context manager для транзакций;
+- гарантировать rollback при exception;
+- не скрывать IntegrityError.
+
+Публичный интерфейс:
+
+- get_engine(settings: DatabaseSettings) -> Engine
+- create_session_factory(engine: Engine) -> sessionmaker[Session]
+- session_scope() -> Iterator[Session]
+
+Правила транзакций:
+- маленькие операции: одна транзакция на бизнес-операцию;
+- bulk ingestion: batch transactions;
+- не держать одну огромную транзакцию на сотни тысяч файлов;
+- не делать commit после каждого файла;
+- все partial failures отражать в ingestion_runs/parser_runs.
+
+5. ORM VS CORE
+================================================================================
+
+Использовать SQLAlchemy ORM для:
+- datasets;
+- ingestion_runs;
+- parser_registry;
+- schema_versions;
+- parser_runs;
+- artifact registry;
+- data_quality_reports;
+- label_mapping_rules;
+- preprocessing_artifacts.
+
+Использовать SQLAlchemy Core для:
+- массового insert/upsert dataset_files;
+- повторного ingestion;
+- обновления last_seen_at;
+- batch update statuses.
 
 Практическое правило:
+- ORM = читаемый бизнес-код;
+- Core = высокая производительность для массовых операций.
 
-    ORM использовать для читаемого бизнес-кода.
-    Core использовать для больших batch-операций.
-
-
-================================================================================
-4. ОБЯЗАТЕЛЬНО ИСПОЛЬЗОВАТЬ ALEMBIC
+6. MODELS REQUIREMENTS
 ================================================================================
 
-SQLAlchemy отвечает за работу с БД из Python.
-Alembic отвечает за миграции схемы БД.
+Общие требования к ORM models:
+- Declarative Base with naming_convention;
+- type annotations через SQLAlchemy 2.x Mapped[];
+- constraints совпадают с PostgreSQL schema contract;
+- relationship использовать там, где нужна traceability;
+- JSONB поля использовать для metadata_json/raw details;
+- nullable=True только там, где значение реально может отсутствовать.
 
-Рекомендация:
+Naming convention:
+- ix_%(column_0_label)s
+- uq_%(table_name)s_%(column_0_name)s
+- ck_%(table_name)s_%(constraint_name)s
+- fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s
+- pk_%(table_name)s
 
-    Использовать SQLAlchemy вместе с Alembic.
-
-Почему Alembic нужен:
-
-1. Схема catalog будет развиваться.
-2. Таблицы будут дополняться новыми полями.
-3. Понадобятся новые индексы.
-4. Понадобятся новые CHECK / UNIQUE constraints.
-5. Нужно будет воспроизводимо разворачивать БД на другой машине.
-6. Нужно будет откатывать изменения при ошибках.
-7. SQL-файл 001_create_catalog_schema.sql подходит для старта, но неудобен
-   для долгосрочного сопровождения.
-
-Правильный подход:
-
-- начальную схему можно зафиксировать в первой migration;
-- дальше любые изменения делать через Alembic revision;
-- не редактировать вручную уже применённые migration-файлы.
-
-
-================================================================================
-5. РЕКОМЕНДУЕМАЯ АРХИТЕКТУРА DB-СЛОЯ
+7. REPOSITORY LAYER
 ================================================================================
 
-Рекомендуемая структура проекта:
+BaseRepository:
+- получает Session;
+- не создает engine;
+- не коммитит без явного service-level решения;
+- возвращает ORM entity или DTO.
 
-scripts/
-└── db/
-    ├── __init__.py
-    ├── config.py
-    ├── session.py
-    ├── models/
-    │   ├── __init__.py
-    │   ├── base.py
-    │   ├── datasets.py
-    │   ├── ingestion_runs.py
-    │   ├── dataset_files.py
-    │   ├── parser_registry.py
-    │   ├── parser_runs.py
-    │   ├── schema_versions.py
-    │   ├── artifacts.py
-    │   └── data_quality_reports.py
-    ├── repositories/
-    │   ├── __init__.py
-    │   ├── dataset_repository.py
-    │   ├── ingestion_repository.py
-    │   ├── dataset_file_repository.py
-    │   ├── parser_repository.py
-    │   ├── artifact_repository.py
-    │   └── data_quality_repository.py
-    └── migrations/
-        ├── alembic.ini
-        ├── env.py
-        └── versions/
-            └── 001_create_catalog_schema.py
+DatasetRepository:
+- get_or_create_dataset;
+- get_by_name_branch_role;
+- list_active.
 
-================================================================================
-6. РЕКОМЕНДУЕМЫЕ PYTHON-ЗАВИСИМОСТИ
-================================================================================
+IngestionRepository:
+- start_run;
+- finish_run;
+- mark_partial_success;
+- mark_failed.
 
-В requirements.txt нужно добавить:
+DatasetFileRepository:
+- bulk_upsert_files;
+- get_files_ready_for_parsing;
+- mark_file_status;
+- get_by_hash/path.
 
-sqlalchemy
-psycopg[binary]
-alembic
+ParserRepository:
+- resolve_parser(branch, role, source_format);
+- create_parser_run;
+- finish_parser_run;
+- fail_parser_run.
 
-Опционально:
+ArtifactRepository:
+- register_normalized_artifact;
+- register_feature_artifact;
+- register_model_ready_artifact;
+- trace_model_ready_to_raw_files.
 
-pydantic
-python-dotenv
+LabelRepository:
+- list_active_rules;
+- find_matching_rules;
+- register_rule.
 
-Назначение:
+DataQualityRepository:
+- create_report;
+- list_failed_checks;
+- get_latest_for_artifact.
 
-- sqlalchemy — основной DB toolkit;
-- psycopg[binary] — PostgreSQL driver;
-- alembic — database migrations;
-- pydantic — валидация config / DTO / input metadata;
-- python-dotenv — загрузка DATABASE_URL и PATH_* переменных.
-
-
-================================================================================
-7. РЕКОМЕНДУЕМАЯ КОНФИГУРАЦИЯ .ENV
+8. SERVICE LAYER
 ================================================================================
 
-Добавить в .env.example:
+SQLAlchemy должен использоваться через service layer, а не напрямую из parser code.
 
-DATABASE_URL=postgresql+psycopg://proposal_user:proposal_password@localhost:5432/proposal_catalog
+Рекомендуемые services:
 
-PATH_DATA_STORAGE=C:\Users\Public\PythonProjects\storage
-PATH_FOLDER_DATASETS=C:\Users\Public\PythonProjects\storages\datasets
-PATH_FOLDER_DATASETS_FILTER=C:\Users\Public\PythonProjects\storages\datasets-filter
+CatalogIngestionService:
+- сканирует directories;
+- считает file metadata/hash;
+- вызывает DatasetRepository и DatasetFileRepository;
+- обновляет ingestion_runs.
 
-Важно:
+ParserRunService:
+- берет files READY_FOR_PARSING;
+- получает parser via ParserRepository;
+- создает parser_run;
+- передает parser output в ArtifactRegistryService.
 
-1. DATABASE_URL не должен содержать реальные production-пароли в Git.
-2. .env не коммитить.
-3. .env.example можно коммитить с placeholder values.
-4. В PostgreSQL catalog лучше хранить относительные пути от PATH_DATA_STORAGE,
-   а не абсолютные пути.
+ArtifactRegistryService:
+- регистрирует normalized/feature/model-ready/preprocessing artifacts;
+- проверяет role/branch compatibility;
+- фиксирует row_count and schema_version.
 
+TraceabilityService:
+- строит цепочку model_ready -> feature -> normalized -> parser_run -> file -> dataset.
 
-================================================================================
-8. КАКИЕ ТАБЛИЦЫ ОСТАВИТЬ В CATALOG SCHEMA
-================================================================================
+LeakageGuardService:
+- проверяет, что TEST не участвует в preprocessing fit;
+- проверяет, что X artifacts не содержат label/source leakage columns;
+- сохраняет data_quality_reports.
 
-Финальная catalog schema должна включать минимум 10 таблиц:
-
-1. datasets
-2. ingestion_runs
-3. dataset_files
-4. parser_registry
-5. parser_runs
-6. schema_versions
-7. normalized_artifacts
-8. feature_artifacts
-9. model_ready_artifacts
-10. data_quality_reports
-
-Эта структура достаточна для Stage Two.
-
-Таблица datasets:
-- хранит список датасетов;
-- фиксирует branch;
-- фиксирует role;
-- позволяет не дублировать dataset_name везде.
-
-Таблица ingestion_runs:
-- фиксирует каждый запуск сканирования raw datasets;
-- хранит root_path, started_at, finished_at, status;
-- хранит files_seen, files_new, files_existing, files_changed, files_failed.
-
-Таблица dataset_files:
-- самая важная таблица raw layer;
-- каждая запись = один raw-файл;
-- хранит path, relative_path, file hash, size, format, role, branch;
-- служит входом для parser routing.
-
-Таблица parser_registry:
-- хранит доступные parser-ы;
-- связывает branch + source_format + role с parser_name;
-- позволяет управлять parser routing через catalog.
-
-Таблица parser_runs:
-- фиксирует попытки parsing по каждому файлу;
-- хранит parser_name, parser_version, rows_read, rows_parsed, rows_failed;
-- хранит output_parquet_path и error_message.
-
-Таблица schema_versions:
-- хранит версии normalized/features/model-ready схем;
-- нужна для воспроизводимости и совместимости artifacts.
-
-Таблица normalized_artifacts:
-- хранит ссылки на normalized Parquet;
-- связывает raw file -> parser run -> normalized artifact.
-
-Таблица feature_artifacts:
-- хранит ссылки на feature Parquet;
-- фиксирует feature_group, row_count, feature_count.
-
-Таблица model_ready_artifacts:
-- хранит финальные X/y/sequences/split_index/preprocessing_object artifacts;
-- фиксирует role, branch, sample_count, label_distribution.
-
-Таблица data_quality_reports:
-- хранит результаты проверок качества;
-- нужна для parser reports, normalization reports, leakage checks и schema mismatch reports.
-
-
-================================================================================
-9. ЧТО НЕ НУЖНО ДЕЛАТЬ ЧЕРЕЗ SQLALCHEMY
+9. ALEMBIC REQUIREMENTS
 ================================================================================
 
-SQLAlchemy не должен использоваться для:
+Alembic обязателен.
 
-1. Чтения PCAP / PCAPNG / CAP.
-2. Чтения BSON event streams.
-3. Потоковой обработки больших TXT syscall traces.
-4. Загрузки всех JSON Lines events в PostgreSQL.
-5. Хранения normalized events как строк PostgreSQL.
-6. Хранения feature matrix в PostgreSQL.
-7. Хранения sequence windows для LSTM в PostgreSQL.
-8. Массовой аналитики по Parquet.
-9. Feature engineering по миллионам событий внутри PostgreSQL.
-10. Training / inference данных.
+Правила:
+- первая migration создает всю Stage Two catalog schema;
+- новые изменения только через новые revisions;
+- не редактировать migration, если она уже применялась в shared/dev database;
+- autogenerate можно использовать, но migration нужно проверять вручную;
+- migration должна содержать indexes, unique constraints, check constraints and foreign keys.
 
-Для этих задач использовать:
+Команды:
 
-- PyArrow / Polars / pandas — чтение и запись Parquet;
-- DuckDB — SQL-запросы по Parquet;
-- Scapy / tshark / pyshark — packet parsing;
-- bson / pymongo bson tools — BSON parsing;
-- streaming readers — большие text/json/jsonl/log/txt источники.
-
-
-================================================================================
-10. КАК SQLALCHEMY ВПИСЫВАЕТСЯ В STAGE TWO PIPELINE
-================================================================================
-
-Правильная схема:
-
-RAW DATASETS
-    ↓
-CATALOG INGESTION
-    ↓
-PostgreSQL catalog через SQLAlchemy
-    ↓
-PARSER ROUTING
-    ↓
-parser_runs обновляются через SQLAlchemy
-    ↓
-NORMALIZED EVENTS
-    ↓
-Parquet files
-    ↓
-normalized_artifacts регистрируются через SQLAlchemy
-    ↓
-FEATURE EXTRACTION
-    ↓
-feature_artifacts регистрируются через SQLAlchemy
-    ↓
-MODEL-READY DATASETS
-    ↓
-model_ready_artifacts регистрируются через SQLAlchemy
-    ↓
-DATA QUALITY REPORTS
-    ↓
-data_quality_reports сохраняются через SQLAlchemy
-
-
-================================================================================
-11. РЕКОМЕНДУЕМАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ РЕАЛИЗАЦИИ
-================================================================================
-
-Шаг 1. Зафиксировать database configuration
-
-Создать:
-
-scripts/db/config.py
-
-Задача:
-- читать DATABASE_URL из .env;
-- валидировать наличие переменной;
-- не хранить credentials в коде.
-
-Шаг 2. Создать SQLAlchemy session layer
-
-Создать:
-
-scripts/db/session.py
-
-Задача:
-- создать engine;
-- создать sessionmaker;
-- дать context manager для работы с транзакциями.
-
-Шаг 3. Описать модели catalog tables
-
-Создать модели для:
-
-- Dataset;
-- IngestionRun;
-- DatasetFile;
-- ParserRegistry;
-- ParserRun;
-- SchemaVersion;
-- NormalizedArtifact;
-- FeatureArtifact;
-- ModelReadyArtifact;
-- DataQualityReport.
-
-Шаг 4. Создать migration
-
-Лучший вариант:
-
-alembic revision --autogenerate -m "create catalog schema"
-
-Затем вручную проверить migration.
-
-Шаг 5. Применить migration
-
-Через Alembic:
-
+alembic init scripts/db/migrations
+alembic revision --autogenerate -m "create stage two catalog schema"
 alembic upgrade head
+alembic downgrade -1
 
-Шаг 6. Реализовать repository layer
-
-Создать repository-классы:
-
-- DatasetRepository;
-- IngestionRepository;
-- DatasetFileRepository;
-- ParserRepository;
-- ArtifactRepository;
-- DataQualityRepository.
-
-Шаг 7. Реализовать smoke test
-
-Проверить:
-
-1. Подключение к PostgreSQL.
-2. Создание test dataset.
-3. Создание ingestion_run.
-4. Создание dataset_file.
-5. Проверка UNIQUE constraints.
-6. Проверка CHECK constraints.
-7. Rollback при ошибке.
-
-Шаг 8. Только после этого переходить к catalog ingestion
-
-Catalog ingestion должен:
-
-- сканировать raw dataset folders;
-- определять dataset_name;
-- определять branch;
-- определять role;
-- определять source_format;
-- считать file_size_bytes;
-- считать sha256 hash;
-- записывать dataset_files;
-- обновлять ingestion_runs;
-- не читать содержимое больших файлов;
-- не изменять raw-файлы.
-
-
-================================================================================
-12. РЕКОМЕНДУЕМЫЕ РЕЖИМЫ РАБОТЫ С ТРАНЗАКЦИЯМИ
+10. BULK UPSERT DATASET_FILES
 ================================================================================
 
-Для маленьких операций:
-
-- одна транзакция на логическую операцию;
-- commit после успешной операции;
-- rollback при ошибке.
-
-Для catalog ingestion:
-
-- ingestion_run создается в начале со status = RUNNING;
-- файлы вставляются batch-ами;
-- при частичной ошибке run получает status = PARTIAL_SUCCESS;
-- при полной ошибке run получает status = FAILED;
-- при полном успехе run получает status = SUCCESS.
-
-Не рекомендуется:
-
-- держать одну огромную транзакцию на сотни тысяч файлов;
-- делать commit после каждого отдельного файла;
-- игнорировать IntegrityError;
-- молча пропускать файлы без записи error_message.
-
-
-================================================================================
-13. BULK INSERT / UPSERT РЕКОМЕНДАЦИЯ
-================================================================================
-
-Так как в проекте много файлов, особенно в host datasets, обычный ORM insert по одному
-файлу будет слишком медленным.
-
-Рекомендация:
-
-1. Для небольших таблиц использовать ORM:
-   - datasets;
-   - parser_registry;
-   - schema_versions.
-
-2. Для dataset_files использовать SQLAlchemy Core bulk insert.
-
-3. Для повторного ingestion использовать PostgreSQL ON CONFLICT:
-
-Уникальность:
-
-    UNIQUE(dataset_id, file_path)
+Нужен PostgreSQL ON CONFLICT по UNIQUE(dataset_id, file_path).
 
 Поведение:
+- новый файл -> INSERT status='REGISTERED';
+- файл уже есть и hash не изменился -> update last_seen_at;
+- файл уже есть и hash изменился -> update hash, size, modified_at, status='CHANGED';
+- пустой файл -> status='EMPTY_FILE';
+- unsupported format -> status='UNSUPPORTED_FORMAT';
+- ошибка -> status='FAILED', error_message заполнен.
 
-- если файл новый — insert;
-- если файл уже есть и hash не изменился — обновить last_seen_at;
-- если файл уже есть и hash изменился — обновить file_hash, file_size_bytes,
-  modified_at, status = REGISTERED или CHANGED;
-- если файл пустой — status = EMPTY_FILE;
-- если не удалось обработать — status = FAILED и error_message.
-
-
-================================================================================
-14. КОНТРОЛЬ DATA LEAKAGE
+11. NULL POLICY В SQLALCHEMY MODELS
 ================================================================================
 
-SQLAlchemy должен помогать контролировать data leakage через catalog.
+Если значение отсутствует в датасете, записывать Python None.
+SQLAlchemy должен передавать это как SQL NULL.
 
-Обязательные правила:
+Не использовать:
+- пустую строку вместо None;
+- 0 вместо отсутствующего numeric value;
+- False вместо отсутствующего boolean value;
+- 'unknown' вместо NULL для технических колонок.
 
-1. role должен быть обязательным на уровне datasets, dataset_files,
-   normalized_artifacts, feature_artifacts, model_ready_artifacts.
+Допустимое исключение:
+- label_status='unlabeled' и label_source='none' как явный статус label resolver;
+- label_family='unknown' только если это согласовано в label schema.
 
-2. CHECK constraints должны ограничивать role:
-   TRAIN / VALIDATION / TEST / EXPERIMENTS.
-
-3. branch должен быть обязательным почти во всех ключевых таблицах:
-   dns / host / network / hybrid.
-
-4. TEST artifacts нельзя использовать при fit scaler, encoder, feature selector
-   или модели.
-
-5. Если preprocessing_object сохраняется в model_ready_artifacts, он должен быть
-   связан с TRAIN-only fit.
-
-6. Любое изменение role у dataset после создания artifacts должно требовать
-   пересборки downstream layers.
-
-7. Не смешивать DNS и Host без явного branch/modality.
-
-
-================================================================================
-15. TRACEABILITY REQUIREMENTS
+12. DATA LEAKAGE GUARDS НА УРОВНЕ DB LAYER
 ================================================================================
 
-Catalog должен позволять пройти цепочку назад:
+DB layer должен помогать контролировать leakage:
+- role обязателен в split-bearing tables;
+- branch обязателен в branch-bearing tables;
+- preprocessing_artifacts.fitted_on_role должен быть только TRAIN;
+- model_ready_artifacts должен ссылаться на preprocessing_artifact_id;
+- data_quality_reports должен фиксировать leakage check;
+- репозиторий не должен создавать model_ready SUCCESS, если leakage check failed.
 
-model_ready_artifacts.artifact_path
-    ↓
-feature_artifacts.feature_path
-    ↓
-normalized_artifacts.normalized_path
-    ↓
-parser_runs.file_id
-    ↓
-dataset_files.file_path
-    ↓
-datasets.name
-
-Для этого важно:
-
-1. normalized_artifacts должен ссылаться на file_id и parser_run_id.
-2. feature_artifacts должен ссылаться на normalized_artifact_id, если возможно.
-3. model_ready_artifacts должен ссылаться на feature_artifact_id, если возможно.
-4. dataset_files должен хранить file_hash.
-5. parser_runs должен хранить parser_version.
-6. artifacts должны хранить schema_version.
-7. quality reports должны ссылаться на artifact_type + artifact_id.
-
-
-================================================================================
-16. КОНТРОЛЬ КАЧЕСТВА
+13. CODE STYLE REQUIREMENTS
 ================================================================================
 
-В catalog нужно сохранять summary quality checks:
+Для каждого нового Python файла:
+- module docstring;
+- type hints;
+- публичные классы с docstring;
+- публичные методы с docstring;
+- короткие комментарии на нетривиальную логику;
+- нет hardcoded credentials;
+- нет чтения больших raw files в DB foundation tasks.
 
-- rows_total;
-- rows_valid;
-- rows_failed;
-- missing_values_count;
-- duplicate_rows_count;
-- schema_mismatch_count;
-- label_distribution;
-- timestamp_coverage;
-- report_path.
+ООП применять для:
+- repositories;
+- services;
+- parser abstractions;
+- writers;
+- quality checkers.
 
-Quality reports должны создаваться для:
+Функциональный стиль допустим для:
+- small pure helpers;
+- path normalization;
+- hash calculation;
+- SQL string templates for DuckDB.
 
-1. dataset_file;
-2. parser_run;
-3. normalized_artifact;
-4. feature_artifact;
-5. model_ready_artifact.
+14. TESTING / SMOKE CHECKS
+================================================================================
 
 Минимальные проверки:
+- python -m compileall manage.py scripts
+- git diff --check
+- Alembic upgrade head на test database
+- create test dataset
+- create ingestion run
+- bulk upsert dataset_files
+- create parser_run
+- register normalized artifact
+- register feature artifact
+- register preprocessing artifact fitted_on_role TRAIN
+- attempt preprocessing artifact fitted_on_role TEST should fail
+- register model_ready artifact
+- traceability query returns raw file
+- rollback works on IntegrityError
 
-- file exists;
-- file size > 0;
-- hash calculated;
-- role exists;
-- branch exists;
-- source_format exists;
-- parser_name exists where needed;
-- parser_version exists where needed;
-- schema_version exists where needed;
-- row_count exists for artifacts;
-- timestamp coverage calculated where possible;
-- label coverage calculated where possible.
-
-
-================================================================================
-17. ЧТО СДЕЛАТЬ ПРЯМО СЕЙЧАС
-================================================================================
-
-Финальная рекомендация для текущего момента:
-
-1. Оставить текущую PostgreSQL catalog schema как основу.
-2. Добавить SQLAlchemy как Python access layer.
-3. Добавить Alembic как migration layer.
-4. Не переносить normalized/events/features в PostgreSQL.
-5. Реализовать сначала только DB infrastructure:
-   - config.py;
-   - session.py;
-   - models;
-   - initial migration;
-   - repository skeleton;
-   - smoke test.
-6. После успешной проверки перейти к catalog ingestion.
-
-Не начинать пока:
-
-- parser routing;
-- parser implementations;
-- Parquet normalization;
-- feature extraction;
-- model training;
-- SHAP;
-- LSTM sequence windows.
-
-Причина:
-Сначала catalog schema и DB access layer должны быть стабильными. Иначе следующие
-этапы будут строиться на нестабильной основе.
-
-
-================================================================================
-18. МИНИМАЛЬНЫЙ ACCEPTANCE CHECKLIST
+15. ACCEPTANCE CRITERIA
 ================================================================================
 
-Текущая задача считается выполненной, если:
-
-[ ] PostgreSQL container работает.
-[ ] proposal_catalog database существует.
-[ ] proposal_user имеет доступ.
-[ ] Создана catalog schema.
-[ ] Есть 10 обязательных таблиц.
-[ ] CHECK constraints работают.
-[ ] UNIQUE constraints работают.
-[ ] Индексы созданы.
-[ ] SQLAlchemy подключается к PostgreSQL.
-[ ] Alembic или SQL migration применяются воспроизводимо.
-[ ] Можно создать test dataset.
-[ ] Можно создать test ingestion_run.
-[ ] Можно создать test dataset_file.
-[ ] Нельзя создать dataset_file с неправильным role.
-[ ] Нельзя создать dataset_file с неправильным branch.
-[ ] Нельзя повторно создать один и тот же file_path для одного dataset_id.
-[ ] Есть repository layer или хотя бы начальная структура под него.
-[ ] Есть smoke test.
-[ ] README / docs обновлены.
-
-
-================================================================================
-19. ФИНАЛЬНАЯ ТЕХНИЧЕСКАЯ ПОЗИЦИЯ
-================================================================================
-
-Правильное решение для проекта:
-
-    PostgreSQL — catalog metadata and pipeline control.
-    SQLAlchemy — Python access layer to PostgreSQL.
-    Alembic — controlled database migrations.
-    Parquet — storage for normalized/features/model-ready big data.
-    DuckDB — analytics over Parquet.
-    Raw filesystem — immutable source datasets.
-
-SQLAlchemy использовать обязательно имеет смысл, потому что проект будет активно
-создавать, обновлять и проверять metadata на каждом шаге Stage Two.
-
-Но важно не нарушить архитектурное разделение:
-
-    SQLAlchemy управляет catalog.
-    SQLAlchemy не управляет большими ML datasets.
-
-Такой подход соответствует требованиям Stage Two:
-- raw-файлы остаются неизменными;
-- traceability сохраняется;
-- TRAIN / VALIDATION / TEST не смешиваются;
-- parser/version/schema metadata фиксируются;
-- Parquet остается основным форматом больших данных;
-- PostgreSQL не превращается в хранилище всех событий;
-- проект остается переносимым и воспроизводимым.
-
-
-================================================================================
-20. РЕКОМЕНДУЕМЫЙ СЛЕДУЮЩИЙ TASK
-================================================================================
-
-Следующая задача после принятия этой рекомендации:
-
-TASK: Implement PostgreSQL catalog access layer with SQLAlchemy and Alembic.
-
-Подзадачи:
-
-1. Add dependencies:
-   - sqlalchemy;
-   - psycopg[binary];
-   - alembic.
-
-2. Add DATABASE_URL to .env.example.
-
-3. Create scripts/db/config.py.
-
-4. Create scripts/db/session.py.
-
-5. Create SQLAlchemy Base.
-
-6. Create models for 10 catalog tables.
-
-7. Initialize Alembic.
-
-8. Generate and review initial migration.
-
-9. Apply migration to PostgreSQL.
-
-10. Create repository skeleton.
-
-11. Create smoke test.
-
-12. Document DB setup in docs/ru/normalization/postgresql_catalog_schema.md
-    and docs/en/normalization/postgresql_catalog_schema.md.
+SQLAlchemy layer считается готовым, если:
+- DATABASE_URL читается из .env;
+- engine/session/session_scope работают;
+- Alembic migration создает все catalog tables;
+- ORM models покрывают все таблицы;
+- repositories покрывают основные операции;
+- bulk upsert dataset_files реализован через Core;
+- parser/artifact/quality lifecycle работает через services;
+- constraints защищают role/branch/status values;
+- NULL policy соблюдается;
+- TEST не может стать fitted_on_role for preprocessing artifacts;
+- traceability service возвращает цепочку до raw file.
