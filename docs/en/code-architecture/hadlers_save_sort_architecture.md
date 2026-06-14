@@ -1,190 +1,55 @@
-# Handlers Architecture: save_sort
+﻿# Handler: `save_sort`
 
-## Table of Contents
+## Purpose
 
-- [1. Purpose](#1-purpose)
-- [2. Package Files](#2-package-files)
-- [3. Service Startup](#3-service-startup)
-- [4. Call Chain](#4-call-chain)
-- [5. Router Functions](#5-router-functions)
-- [6. DNSSortedPathExportHandler](#6-dnssortedpathexporthandler)
-- [7. HostSortedPathExportHandler](#7-hostsortedpathexporthandler)
-- [8. Output JSON Artifacts](#8-output-json-artifacts)
-- [9. Errors and Limitations](#9-errors-and-limitations)
+`save_sort` scans an already sorted `PATH_*_DATASETS_FILTER` tree and creates a JSON path map consumed by `dns_analyze` and `host_analyze`.
 
-## 1. Purpose
+## CLI
 
-`scripts/handlers/save_sort` scans the already sorted dataset tree and writes JSON files with paths grouped by role and format.
+| Command | Class | Input root | Output JSON |
+|---|---|---|---|
+| `python manage.py handlers save-sort save-sort-dns-dataset-handler` | `DNSSortedPathExportHandler` | `PATH_DNS_DATASETS_FILTER` | `sort-path-dns-file.json`, `sort-path-dns-file-summary.json` |
+| `python manage.py handlers save-sort save-sort-host-dataset-handler` | `HostSortedPathExportHandler` | `PATH_HOST_DATASETS_FILTER` | `sort-path-host-file.json`, `sort-path-host-file-summary.json` |
 
-This service does not copy or move files. It only reads `PATH_*_DATASETS_FILTER` and creates an index for content-analysis handlers.
-
-## 2. Package Files
+## Components
 
 | File | Purpose |
 |---|---|
-| `router_save.py` | Routes `save-sort-host-dataset-handler` and `save-sort-dns-dataset-handler`. |
-| `save_sort_dns_path_handler.py` | Exports DNS file paths. |
-| `save_sort_host_path_handler.py` | Exports Host file paths. |
-| `__init__.py` | Package marker. |
+| `scripts/handlers/save_sort/router_save.py` | Routes DNS/host save-sort actions. |
+| `scripts/handlers/save_sort/save_sort_dns_path_handler.py` | Exports DNS sorted paths. |
+| `scripts/handlers/save_sort/save_sort_host_path_handler.py` | Exports host sorted paths. |
 
-## 3. Service Startup
+## `sort-path-*-file.json` Contract
 
-DNS:
-
-```bash
-python manage.py handlers save-sort save-sort-dns-dataset-handler
-```
-
-Host:
-
-```bash
-python manage.py handlers save-sort save-sort-host-dataset-handler
-```
-
-Before running, `sort` must have created `PATH_DNS_DATASETS_FILTER` or `PATH_HOST_DATASETS_FILTER`.
-
-## 4. Call Chain
-
-DNS:
-
-```text
-python manage.py handlers save-sort save-sort-dns-dataset-handler
--> router_commands(...)
--> router_commands_handlers("save-sort", "save-sort-dns-dataset-handler")
--> router_save("save-sort-dns-dataset-handler")
--> save_sort_dns_dataset_handler()
--> DNSSortedPathExportHandler(PATH_DNS_DATASETS_FILTER, PATH_TEMP_DATA)
--> export_paths()
--> _validate_source_root()
--> _scan_role_directory(...)
--> JsonDataManager(sort-path-dns-file.json).write(...)
-```
-
-Host:
-
-```text
-python manage.py handlers save-sort save-sort-host-dataset-handler
--> router_save("save-sort-host-dataset-handler")
--> save_sort_host_dataset_handler()
--> HostSortedPathExportHandler(PATH_HOST_DATASETS_FILTER, PATH_TEMP_DATA)
--> export_paths()
--> _scan_role_directory(...)
--> JsonDataManager(sort-path-host-file.json).write(...)
-```
-
-## 5. Router Functions
-
-### `router_save(action: str)`
-
-| Action | Called function |
-|---|---|
-| `save-sort-host-dataset-handler` | `save_sort_host_dataset_handler()` |
-| `save-sort-dns-dataset-handler` | `save_sort_dns_dataset_handler()` |
-| any other value | prints `manage_commands` |
-
-## 6. DNSSortedPathExportHandler
-
-File:
-
-- `scripts/handlers/save_sort/save_sort_dns_path_handler.py`
-
-### Classes
-
-| Class | Purpose |
-|---|---|
-| `DNSSortedPathExportResult` | DNS path export result dataclass. |
-| `DNSSortedPathExportHandler` | Scans `PATH_DNS_DATASETS_FILTER`. |
-
-### Roles
-
-```text
-TRAIN, TEST, VALIDATION, EXPERIMENTS
-```
-
-### Main Method
-
-`export_paths()`:
-
-1. Validates source root through `_validate_source_root()`.
-2. Creates `{role: {}}`.
-3. For each role, checks `PATH_DNS_DATASETS_FILTER/<ROLE>`.
-4. Scans format directories through `_scan_role_directory()`.
-5. Counts files.
-6. Writes `sort-path-dns-file.json`.
-7. Writes `sort-path-dns-file-summary.json`.
-8. Returns `DNSSortedPathExportResult`.
-
-## 7. HostSortedPathExportHandler
-
-File:
-
-- `scripts/handlers/save_sort/save_sort_host_path_handler.py`
-
-### Classes
-
-| Class | Purpose |
-|---|---|
-| `HostSortedPathExportResult` | Host path export result dataclass. |
-| `HostSortedPathExportHandler` | Scans `PATH_HOST_DATASETS_FILTER`. |
-
-### Roles
-
-```text
-TRAIN, TEST, VALIDATION
-```
-
-### Main Method
-
-`export_paths()` mirrors DNS logic, but works with the Host root and writes Host JSON.
-
-### `_scan_role_directory(role_directory)`
-
-Common algorithm:
-
-1. Iterates over child directories of the role.
-2. Each child directory is treated as `format`.
-3. Recursively collects all files with `format_directory.rglob("*")`.
-4. Stores absolute paths through `path.resolve()`.
-5. Returns `{format_name: [paths]}` only for non-empty format directories.
-
-## 8. Output JSON Artifacts
-
-DNS:
-
-```text
-PATH_TEMP_DATA/sort-path-dns-file.json
-PATH_TEMP_DATA/sort-path-dns-file-summary.json
-```
-
-Host:
-
-```text
-PATH_TEMP_DATA/sort-path-host-file.json
-PATH_TEMP_DATA/sort-path-host-file-summary.json
-```
-
-Main JSON shape:
+The file represents a role/format tree:
 
 ```json
 {
   "TRAIN": {
-    "csv": ["/absolute/path/file.csv"]
+    "csv": ["path/to/file.csv"],
+    "pcap": ["path/to/file.pcap"]
   },
-  "TEST": {},
-  "VALIDATION": {}
+  "VALIDATION": {
+    "txt": ["path/to/file.txt"]
+  },
+  "TEST": {
+    "json": ["path/to/file.json"]
+  }
 }
 ```
 
-Summary contains:
+Content-analysis handlers read this JSON and select the role/format bucket matching the action.
 
-- `json_file`;
-- `scanned_files_count`;
-- `counts_by_role_and_format`.
+## Pipeline Position
 
-## 9. Errors and Limitations
+```text
+sort -> save_sort -> dns_analyze / host_analyze
+```
 
-- Missing root path raises `ValueError`.
-- Non-existing root path raises `FileNotFoundError`.
-- Non-directory root path raises `NotADirectoryError`.
-- Empty format directories are omitted from the output JSON.
-- The service does not validate file contents; it indexes paths only.
+`dns_analyze` reads `sort-path-dns-file.json`. `host_analyze` reads `sort-path-host-file.json`.
+
+## Constraints
+
+- `save_sort` does not inspect file contents.
+- If the sorted tree is empty or a bucket is missing, downstream content-analysis handlers usually create a blocking summary or raise an error, depending on the concrete implementation.
+- JSON path export does not replace Stage Two catalog ingestion; the PostgreSQL Catalog is populated by `stage-two catalog-ingest`.
