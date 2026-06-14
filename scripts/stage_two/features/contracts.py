@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from config import FEATURE_ARTIFACT_SCHEMA_PATH as CONFIG_FEATURE_ARTIFACT_SCHEMA_PATH
 
-FEATURE_ARTIFACT_SCHEMA_PATH = Path("schemas/features/feature_artifact_v1.json")
+
+FEATURE_ARTIFACT_SCHEMA_PATH = Path(CONFIG_FEATURE_ARTIFACT_SCHEMA_PATH)
 FEATURE_SCHEMA_NAME = "feature_artifact"
 FEATURE_SCHEMA_VERSION = "v1"
 FEATURE_GROUPS: tuple[str, ...] = (

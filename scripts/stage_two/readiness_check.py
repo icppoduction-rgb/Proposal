@@ -13,7 +13,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from config import PATH_DATA_STORAGE, PROJECT_ROOT
+from config import ALEMBIC_INI_PATH, PATH_DATA_STORAGE, REPORTS_EN_STAGE_TWO, REPORTS_RU_STAGE_TWO
 from scripts.db import session_scope
 from scripts.db.models import (
     DataQualityReport,
@@ -69,7 +69,7 @@ def _configured_storage_root() -> Path:
 
 
 def _migration_check() -> dict[str, Any]:
-    config = Config(str(PROJECT_ROOT / "scripts" / "db" / "migrations" / "alembic.ini"))
+    config = Config(ALEMBIC_INI_PATH)
     script = ScriptDirectory.from_config(config)
     expected_heads = sorted(script.get_heads())
     with session_scope() as session:
@@ -283,9 +283,9 @@ def _all_checks_success(checks: dict[str, Any]) -> bool:
 
 def _save_reports(storage_root: Path, result: StageTwoReadinessResult) -> dict[str, str]:
     paths = {
-        "en": "reports/en/stage-two/stage_two_readiness_report.md",
-        "ru": "reports/ru/stage-two/stage_two_readiness_report.md",
-        "json": "reports/en/stage-two/stage_two_readiness_report.json",
+        "en": f"{REPORTS_EN_STAGE_TWO}/stage_two_readiness_report.md",
+        "ru": f"{REPORTS_RU_STAGE_TWO}/stage_two_readiness_report.md",
+        "json": f"{REPORTS_EN_STAGE_TWO}/stage_two_readiness_report.json",
     }
     payload = {**asdict(result), "report_paths": paths}
     for language in ("en", "ru"):

@@ -8,6 +8,12 @@ from uuid import uuid4
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from config import (
+    NORMALIZED_SCHEMA_PATH,
+    PARQUET_FEATURES_RELATIVE,
+    PARQUET_MODEL_READY_RELATIVE,
+    PARQUET_NORMALIZED_RELATIVE,
+)
 from scripts.db import create_session_factory, get_engine
 from scripts.db.models import Dataset, PreprocessingArtifact
 from scripts.db.repositories import (
@@ -131,7 +137,7 @@ def run_smoke_checks() -> SmokeCheckResult:
             schema_version="v1",
             layer="normalized",
             branch="dns",
-            schema_path="schemas/normalized/normalized_event_v1.json",
+            schema_path=NORMALIZED_SCHEMA_PATH,
         )
         parser_run = parser_repo.create_parser_run(
             file=dataset_file,
@@ -146,7 +152,7 @@ def run_smoke_checks() -> SmokeCheckResult:
             rows_parsed=1,
             rows_failed=0,
             events_emitted=1,
-            output_parquet_path="parquet/normalized/dns/TRAIN/smoke/schema=v1/part-smoke.parquet",
+            output_parquet_path=f"{PARQUET_NORMALIZED_RELATIVE}/dns/TRAIN/smoke/schema=v1/part-smoke.parquet",
         )
         checks.append("parser_run")
 
@@ -160,7 +166,7 @@ def run_smoke_checks() -> SmokeCheckResult:
             branch="dns",
             modality="dns_query",
             source_format="csv",
-            normalized_path="parquet/normalized/dns/TRAIN/smoke/schema=v1/part-smoke.parquet",
+            normalized_path=f"{PARQUET_NORMALIZED_RELATIVE}/dns/TRAIN/smoke/schema=v1/part-smoke.parquet",
             schema_name="normalized_event",
             schema_version="v1",
             row_count=1,
@@ -175,7 +181,7 @@ def run_smoke_checks() -> SmokeCheckResult:
             role="TRAIN",
             branch="dns",
             feature_group="dns_features",
-            feature_path="parquet/features/dns_features/TRAIN/smoke/schema=v1/part-smoke.parquet",
+            feature_path=f"{PARQUET_FEATURES_RELATIVE}/dns_features/TRAIN/smoke/schema=v1/part-smoke.parquet",
             feature_schema_name="feature_artifact",
             feature_schema_version="v1",
             row_count=1,
@@ -188,7 +194,7 @@ def run_smoke_checks() -> SmokeCheckResult:
             branch="dns",
             feature_group="dns_features",
             preprocessing_type="scaler",
-            artifact_path="parquet/model_ready/preprocessing/dns/schema=v1/train.pkl",
+            artifact_path=f"{PARQUET_MODEL_READY_RELATIVE}/preprocessing/dns/schema=v1/train.pkl",
             fitted_on_role="TRAIN",
             fitted_on_feature_artifact_id=feature.id,
             schema_version="v1",
@@ -217,7 +223,7 @@ def run_smoke_checks() -> SmokeCheckResult:
             role="TRAIN",
             branch="dns",
             data_type="X",
-            artifact_path="parquet/model_ready/tabular/dns/TRAIN/schema=v1/X_train.parquet",
+            artifact_path=f"{PARQUET_MODEL_READY_RELATIVE}/tabular/dns/TRAIN/schema=v1/X_train.parquet",
             schema_name="model_ready",
             schema_version="v1",
             sample_count=1,

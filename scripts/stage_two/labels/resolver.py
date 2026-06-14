@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.orm import Session
 
-from config import PATH_DATA_STORAGE
+from config import LABEL_MAPPING_RULES_CONFIG
 from scripts.db.models import LabelMappingRule
 from scripts.db.repositories import LabelRepository
 
@@ -71,7 +71,7 @@ MALICIOUS_TOKEN_FAMILIES: dict[str, str] = {
     "zmap": "lateral_movement",
 }
 UNKNOWN_TOKENS: frozenset[str] = frozenset({"", "none", "null", "unknown", "unlabeled", "na", "n/a"})
-DEFAULT_CONFIG_PATH = Path(PATH_DATA_STORAGE) / "config" / "label_mapping_rules.json" if PATH_DATA_STORAGE else None
+DEFAULT_CONFIG_PATH = Path(LABEL_MAPPING_RULES_CONFIG) if LABEL_MAPPING_RULES_CONFIG else None
 
 
 class LabelResolverProtocol(Protocol):

@@ -12,7 +12,12 @@ from uuid import uuid4
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from config import PATH_DATA_STORAGE
+from config import (
+    PARQUET_FEATURES_RELATIVE,
+    PARQUET_MODEL_READY_RELATIVE,
+    PARQUET_NORMALIZED_RELATIVE,
+    PATH_DATA_STORAGE,
+)
 from scripts.db.models import FeatureArtifact, ModelReadyArtifact, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository
 
@@ -53,8 +58,7 @@ class ParquetArtifactWriter:
     ) -> ParquetWriteResult:
         """Write normalized events to the normalized Parquet layer."""
         relative_path = (
-            Path("parquet")
-            / "normalized"
+            Path(PARQUET_NORMALIZED_RELATIVE)
             / branch
             / role
             / modality
@@ -77,8 +81,7 @@ class ParquetArtifactWriter:
     ) -> ParquetWriteResult:
         """Write feature rows to the feature Parquet layer."""
         relative_path = (
-            Path("parquet")
-            / "features"
+            Path(PARQUET_FEATURES_RELATIVE)
             / feature_group
             / role
             / dataset_slug
@@ -100,8 +103,7 @@ class ParquetArtifactWriter:
     ) -> ParquetWriteResult:
         """Write model-ready tabular/label/split-index rows."""
         relative_path = (
-            Path("parquet")
-            / "model_ready"
+            Path(PARQUET_MODEL_READY_RELATIVE)
             / artifact_type
             / branch
             / role

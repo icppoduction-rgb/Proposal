@@ -12,6 +12,7 @@ import duckdb
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from config import REPORTS_EN_STAGE_TWO, REPORTS_RU_STAGE_TWO
 from scripts.db.models import DataQualityReport, ModelReadyArtifact, PreprocessingArtifact
 from scripts.db.repositories import DataQualityRepository
 from scripts.stage_two.duckdb import DuckDBAnalyticsService
@@ -263,8 +264,9 @@ def build_report(
 def save_quality_report(report: QualityReportResult, storage_root: Path) -> dict[str, str]:
     """Save the same JSON quality report under RU and EN report directories."""
     paths: dict[str, str] = {}
-    for language in ("en", "ru"):
-        report_dir = storage_root / "reports" / language / "stage-two" / report.check_group
+    report_roots = {"en": REPORTS_EN_STAGE_TWO, "ru": REPORTS_RU_STAGE_TWO}
+    for language, report_root in report_roots.items():
+        report_dir = storage_root / report_root / report.check_group
         report_dir.mkdir(parents=True, exist_ok=True)
         path = report_dir / f"{report.check_group}_report.json"
         payload = asdict(report)

@@ -6,10 +6,11 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from config import MODEL_READY_SCHEMA_PATH as CONFIG_MODEL_READY_SCHEMA_PATH
 from scripts.stage_two.features import X_EXCLUDED_COLUMNS
 
 
-MODEL_READY_SCHEMA_PATH = Path("schemas/model_ready/model_ready_v1.json")
+MODEL_READY_SCHEMA_PATH = Path(CONFIG_MODEL_READY_SCHEMA_PATH)
 MODEL_READY_SCHEMA_NAME = "model_ready"
 MODEL_READY_SCHEMA_VERSION = "v1"
 MODEL_READY_DATA_TYPES: tuple[str, ...] = (

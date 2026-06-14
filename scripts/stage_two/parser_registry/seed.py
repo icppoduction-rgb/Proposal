@@ -10,12 +10,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from config import PARSER_REGISTRY_SEED_PATH
 from scripts.db import session_scope
 from scripts.db.models import ParserRegistry, SchemaVersion
 from scripts.stage_two.normalization.schema_contracts import NormalizedSchemaRegistry
 
 
-DEFAULT_SEED_PATH = Path(__file__).with_name("parser_registry_seed.json")
+DEFAULT_SEED_PATH = Path(PARSER_REGISTRY_SEED_PATH)
 
 
 @dataclass(frozen=True)

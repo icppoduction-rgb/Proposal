@@ -11,13 +11,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from config import NORMALIZED_SCHEMA_PATH as CONFIG_NORMALIZED_SCHEMA_PATH
 from scripts.db import session_scope
 from scripts.db.models import SchemaVersion
 
 
-DEFAULT_NORMALIZED_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[3] / "schemas" / "normalized" / "normalized_event_v1.json"
-)
+DEFAULT_NORMALIZED_SCHEMA_PATH = Path(CONFIG_NORMALIZED_SCHEMA_PATH)
 
 
 @dataclass(frozen=True)

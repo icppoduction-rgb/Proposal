@@ -5,6 +5,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from config import (
+    BACKUPS_METADATA_EXPORTS_RELATIVE,
+    BACKUPS_POSTGRES_CATALOG_RELATIVE,
+    CONFIG_RELATIVE,
+    DUCKDB_EXPORTS_RELATIVE,
+    DUCKDB_SQL_RELATIVE,
+    LOGS_STAGE_TWO_RELATIVE,
+    PARQUET_FEATURES_RELATIVE,
+    PARQUET_MODEL_READY_RELATIVE,
+    PARQUET_NORMALIZED_RELATIVE,
+    PGADMIN_RELATIVE,
+    POSTGRES_RELATIVE,
+    REPORTS_EN_STAGE_TWO,
+    REPORTS_EN_ROOT,
+    REPORTS_RU_ROOT,
+    REPORTS_RU_STAGE_TWO,
+    SCHEMAS_FEATURES_RELATIVE,
+    SCHEMAS_MODEL_READY_RELATIVE,
+    SCHEMAS_NORMALIZED_RELATIVE,
+    TEMP_DATA_DUCKDB_RELATIVE,
+    TEMP_DATA_INGESTION_RELATIVE,
+    TEMP_DATA_NORMALIZATION_RELATIVE,
+    TEMP_DATA_PARSER_RUNS_RELATIVE,
+)
+
 
 BRANCHES: tuple[str, ...] = ("dns", "host", "network", "hybrid")
 ROLES: tuple[str, ...] = ("TRAIN", "VALIDATION", "TEST")
@@ -74,24 +99,24 @@ class StorageBootstrapper:
     def required_relative_paths(cls) -> tuple[Path, ...]:
         """Return the required Stage Two storage paths relative to PATH_DATA_STORAGE."""
         paths: list[Path] = [
-            Path("postgres"),
-            Path("pgadmin"),
-            Path("parquet") / "normalized",
-            Path("parquet") / "features",
-            Path("parquet") / "model_ready",
-            Path("duckdb") / "sql",
-            Path("duckdb") / "exports",
-            Path("logs") / "stage-two",
-            Path("backups") / "postgres_catalog",
-            Path("backups") / "metadata_exports",
-            Path("temp_data") / "ingestion",
-            Path("temp_data") / "parser_runs",
-            Path("temp_data") / "normalization",
-            Path("temp_data") / "duckdb",
-            Path("schemas") / "normalized",
-            Path("schemas") / "features",
-            Path("schemas") / "model_ready",
-            Path("config"),
+            Path(POSTGRES_RELATIVE),
+            Path(PGADMIN_RELATIVE),
+            Path(PARQUET_NORMALIZED_RELATIVE),
+            Path(PARQUET_FEATURES_RELATIVE),
+            Path(PARQUET_MODEL_READY_RELATIVE),
+            Path(DUCKDB_SQL_RELATIVE),
+            Path(DUCKDB_EXPORTS_RELATIVE),
+            Path(LOGS_STAGE_TWO_RELATIVE),
+            Path(BACKUPS_POSTGRES_CATALOG_RELATIVE),
+            Path(BACKUPS_METADATA_EXPORTS_RELATIVE),
+            Path(TEMP_DATA_INGESTION_RELATIVE),
+            Path(TEMP_DATA_PARSER_RUNS_RELATIVE),
+            Path(TEMP_DATA_NORMALIZATION_RELATIVE),
+            Path(TEMP_DATA_DUCKDB_RELATIVE),
+            Path(SCHEMAS_NORMALIZED_RELATIVE),
+            Path(SCHEMAS_FEATURES_RELATIVE),
+            Path(SCHEMAS_MODEL_READY_RELATIVE),
+            Path(CONFIG_RELATIVE),
         ]
 
         paths.extend(cls._parquet_paths())
@@ -103,21 +128,25 @@ class StorageBootstrapper:
         paths: list[Path] = []
         for branch in BRANCHES:
             for role in ROLES:
-                paths.append(Path("parquet") / "normalized" / branch / role)
+                paths.append(Path(PARQUET_NORMALIZED_RELATIVE) / branch / role)
         for feature_group in FEATURE_GROUPS:
-            paths.append(Path("parquet") / "features" / feature_group)
+            paths.append(Path(PARQUET_FEATURES_RELATIVE) / feature_group)
         for artifact_type in MODEL_READY_TYPES:
-            paths.append(Path("parquet") / "model_ready" / artifact_type)
+            paths.append(Path(PARQUET_MODEL_READY_RELATIVE) / artifact_type)
         return paths
 
     @staticmethod
     def _report_paths() -> list[Path]:
         paths: list[Path] = []
-        for language in ("ru", "en"):
-            paths.append(Path("reports") / language / "stage-two")
+        report_roots = (
+            (REPORTS_RU_ROOT, REPORTS_RU_STAGE_TWO),
+            (REPORTS_EN_ROOT, REPORTS_EN_STAGE_TWO),
+        )
+        for language_root, stage_two_root in report_roots:
+            paths.append(Path(stage_two_root))
             for group in REPORT_GROUPS:
-                paths.append(Path("reports") / language / "stage-two" / group)
-                paths.append(Path("reports") / language / group)
+                paths.append(Path(stage_two_root) / group)
+                paths.append(Path(language_root) / group)
         return paths
 
 

@@ -10,15 +10,22 @@ from uuid import uuid4
 
 import duckdb
 
-from config import PATH_DATA_STORAGE
+from config import (
+    DUCKDB_DATABASE_RELATIVE,
+    PARQUET_FEATURES_RELATIVE,
+    PARQUET_MODEL_READY_RELATIVE,
+    PARQUET_NORMALIZED_RELATIVE,
+    PATH_DATA_STORAGE,
+    REPORTS_EN_STAGE_TWO_QUALITY,
+)
 from scripts.db.models import DataQualityReport
 from scripts.db.repositories import DataQualityRepository
 
 
 VIEW_PATTERNS: dict[str, str] = {
-    "normalized_all": "parquet/normalized/**/*.parquet",
-    "features_all": "parquet/features/**/*.parquet",
-    "model_ready_all": "parquet/model_ready/**/*.parquet",
+    "normalized_all": f"{PARQUET_NORMALIZED_RELATIVE}/**/*.parquet",
+    "features_all": f"{PARQUET_FEATURES_RELATIVE}/**/*.parquet",
+    "model_ready_all": f"{PARQUET_MODEL_READY_RELATIVE}/**/*.parquet",
 }
 EMPTY_VIEW_COLUMNS: tuple[str, ...] = ("role", "branch", "dataset_role", "feature_group", "data_type")
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
@@ -61,7 +68,7 @@ class DuckDBAnalyticsService:
         self.storage_root = Path(storage_root or PATH_DATA_STORAGE).expanduser()
         if not str(self.storage_root).strip():
             raise ValueError("PATH_DATA_STORAGE must be configured for DuckDB analytics.")
-        self.database_path = Path(database_path) if database_path is not None else self.storage_root / "duckdb" / "proposal_analytics.duckdb"
+        self.database_path = Path(database_path) if database_path is not None else self.storage_root / DUCKDB_DATABASE_RELATIVE
 
     def create_views(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         """Create normalized_all, features_all, and model_ready_all DuckDB views."""
@@ -103,7 +110,7 @@ class DuckDBAnalyticsService:
 
     def save_report(self, report: DuckDBAnalyticsReport, report_name: str) -> str:
         """Persist a DuckDB analytics JSON report under PATH_DATA_STORAGE reports."""
-        report_dir = self.storage_root / "reports" / "en" / "stage-two" / "quality"
+        report_dir = self.storage_root / REPORTS_EN_STAGE_TWO_QUALITY
         report_dir.mkdir(parents=True, exist_ok=True)
         path = report_dir / report_name
         payload = asdict(report)

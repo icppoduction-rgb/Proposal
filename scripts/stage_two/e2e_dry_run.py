@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from config import PATH_DATA_STORAGE
+from config import PATH_DATA_STORAGE, REPORTS_EN_STAGE_TWO, REPORTS_RU_STAGE_TWO, TEMP_DATA_RELATIVE
 from scripts.db import session_scope
 from scripts.db.models import DatasetFile, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository, DataQualityRepository, DatasetFileRepository
@@ -75,7 +75,7 @@ def run_stage_two_e2e_dry_run() -> StageTwoDryRunResult:
     storage_root = _configured_storage_root()
     bootstrap_stage_two_storage(storage_root)
 
-    dry_storage_root = storage_root / "temp_data" / "stage_two_e2e_dry_run" / "storage"
+    dry_storage_root = storage_root / TEMP_DATA_RELATIVE / "stage_two_e2e_dry_run" / "storage"
     StorageBootstrapper(dry_storage_root).bootstrap()
     sample_root = dry_storage_root / "raw"
     sample_files = _ensure_sample_files(sample_root)
@@ -252,8 +252,9 @@ def _register_sample_model_ready_artifact(
 
 def _save_dry_run_reports(storage_root: Path, result: StageTwoDryRunResult) -> dict[str, str]:
     paths: dict[str, str] = {}
-    for language in ("en", "ru"):
-        report_dir = storage_root / "reports" / language / "stage-two"
+    report_roots = {"en": REPORTS_EN_STAGE_TWO, "ru": REPORTS_RU_STAGE_TWO}
+    for language, report_root in report_roots.items():
+        report_dir = storage_root / report_root
         report_dir.mkdir(parents=True, exist_ok=True)
         path = report_dir / "stage_two_e2e_dry_run_report.json"
         paths[language] = path.relative_to(storage_root).as_posix()
