@@ -33,6 +33,77 @@ PATH_REPORT: str = f'{PATH_DATA_STORAGE}/reports'
 PATH_TEMP_DATA: str = f'{PATH_DATA_STORAGE}/temp_data'
 PATH_FILTER_LOG = f"{PATH_DATA_STORAGE}/logs/filter_log",
 
+# ------------------------ PATH CONFIG -------------------------------- #
+
+CONFIG_PATH: str = f"{PATH_DATA_STORAGE}/config"
+
+# --------------------------- PATH DUCKDB ----------------------------- #
+
+DUCKDB_PATH: str = f"{PATH_DATA_STORAGE}/duckdb"
+
+EXPORTS_PATH: str = f"{DUCKDB_PATH}/exports"
+
+SQL_PATH: str = f"{DUCKDB_PATH}/sql"
+
+# --------------------------- PATH PARQUET ---------------------------- #
+
+PARQUET_PATH: str = f"{PATH_DATA_STORAGE}/parquet"
+
+FEATURES_PATH: str = f"{PARQUET_PATH}/features"
+
+MODELS_READY: str = f"{PARQUET_PATH}/models_ready"
+
+NORMALIZED: str = f"{PARQUET_PATH}/normalized"
+
+# -------------------------- PATH REPORT ------------------------------ #
+
+EN_PATH_REPORT: str = f"{PATH_REPORT}/en"
+RU_PATH_REPORT: str = f"{PATH_REPORT}/ru"
+
+STAGE_TWO_EN: str = f"{EN_PATH_REPORT}/stage-two"
+
+STAGE_TWO_RU: str = f"{EN_PATH_REPORT}/stage-two"
+
+# ---------------------- PATH FILE TEMP_DATA -------------------------- #
+
+PATH_TEMP_DATA_DNS: str = f'{PATH_TEMP_DATA}/dns'
+
+ANALYSIS_DNS_TEST_CSV_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/test/analysis-dns-test-csv-summary.json'
+ANALYSIS_DNS_TEST_PCAP_CSV_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/test/analysis-dns-test-pcap-csv-summary.json'
+ANALYSIS_DNS_TEST_PCAP_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/test/analysis-dns-test-pcap-summary.json'
+
+ANALYSIS_DNS_TRAIN_CSV_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/train/analysis-dns-train-csv-summary.json'
+ANALYSIS_DNS_TRAIN_PCAP_CSV_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/train/analysis-dns-train-pcap-csv-summary.json'
+ANALYSIS_DNS_TRAIN_PCAP_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/tain/analysis-dns-train-pcap-summary.json'
+
+ANALYSIS_DNS_VALIDATION_PCAP_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/validation/analysis-dns-validation-pcap-summary.json'
+ANALYSIS_DNS_VALIDATION_TXT_SUMMARY: str = f'{PATH_TEMP_DATA_DNS}/validationanalysis-dns-validation-txt-summary.json'
+
+# Общий путь к host
+PATH_TEMP_DATA_HOST: str = f'{PATH_TEMP_DATA}/host'
+
+# Общий пути к проанализированы файлам
+PATH_TEMP_DATA_HOST_TRAIN: str = f'{PATH_TEMP_DATA_HOST}/train'
+PATH_TEMP_DATA_HOST_TEST: str = f'{PATH_TEMP_DATA_HOST}/test'
+PATH_TEMP_DATA_HOST_VALIDATION: str = f'{PATH_TEMP_DATA_HOST}/validation'
+
+ANALYSIS_HOST_CSV_SUMMARY: str = f'{PATH_TEMP_DATA}/analysis-host-csv-summary.json'
+
+DNS_FILE: str = f'{PATH_DATA_STORAGE}/dns-file.json'
+DNS_PATH_FILE: str = f'{PATH_DATA_STORAGE}/dns-path-file.json'
+SORT_DNS_FORMAT_SUMMARY: str = f'{PATH_DATA_STORAGE}/sort-dns-format-summary.json'
+SORT_PATH_DNS_FILE: str = f'{PATH_DATA_STORAGE}/sort-path-dns-file.json'
+SORT_PATH_DNS_FILE_SUMMARY: str = f'{PATH_DATA_STORAGE}/sort-path-dns-file-summary.json'
+
+HOST_FILE: str = f'{PATH_DATA_STORAGE}/host-file.json'
+HOST_PATH_FILE: str = f'{PATH_DATA_STORAGE}/host-path-file.json'
+FILTER_HOST_FILE: str = f'{PATH_DATA_STORAGE}/filter-host-file.json'
+FILTER_HOST_PATH_FILE: str = f'{PATH_DATA_STORAGE}/filter-host-path-file.json'
+SORT_HOST_FORMAT_SUMMARY: str = f'{PATH_DATA_STORAGE}/sort-host-format-summary.json'
+SORT_PATH_HOST_FILE: str = f'{PATH_DATA_STORAGE}/sort-path-host-file.json'
+SORT_PATH_HOST_FILE_SUMMARY: str = f'{PATH_DATA_STORAGE}/sort-path-host-file-summary.json'
+
+# --------------------------- PATH DOCS ------------------------------- #
 
 DOCS_EN_ANALYSIS_HOST_TRAIN: str = "docs/en/analysis-dataset/host/train"
 DOCS_RU_ANALYSIS_HOST_TRAIN: str = "docs/ru/analysis-dataset/host/train"
@@ -51,6 +122,8 @@ DOCS_RU_ANALYSIS_DNS_TEST: str = "docs/ru/analysis-dataset/dns/test"
 
 DOCS_EN_ANALYSIS_DNS_VALIDATION: str = "docs/en/analysis-dataset/dns/validation"
 DOCS_RU_ANALYSIS_DNS_VALIDATION: str = "docs/ru/analysis-dataset/dns/validation"
+
+# --------------------------- PATH REPORT ------------------------------- #
 
 REPORTS_EN_STAGE_ONE_ANALYSIS_HOST_TRAIN: str = "en/stage-one/analysis-dataset/host/train"
 REPORTS_RU_STAGE_ONE_ANALYSIS_HOST_TRAIN: str = "ru/stage-one/analysis-dataset/host/train"
