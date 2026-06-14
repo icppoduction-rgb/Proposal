@@ -15,7 +15,7 @@ from scripts.stage_two.duckdb import DuckDBAnalyticsService
 from scripts.stage_two.ingestion.catalog_ingestion_service import ingest_configured_catalog_roots
 from scripts.stage_two.normalization.dns_service import DnsNormalizationService
 from scripts.stage_two.normalization.host_service import HostNormalizationService
-from scripts.stage_two.parser_registry.seed import seed_default_parser_registry
+from scripts.stage_two.parser_registry.seed import seed_stage_two_metadata
 from scripts.stage_two.quality import LeakageChecker
 from scripts.stage_two.storage.bootstrap import bootstrap_stage_two_storage
 from scripts.stage_two.traceability import TraceabilityError, TraceabilityService
@@ -76,12 +76,15 @@ def _catalog_ingest() -> None:
 
 
 def _seed_parser_registry() -> None:
-    result = seed_default_parser_registry()
+    result = seed_stage_two_metadata()
     console.print(
         {
             "service": "stage-two seed-parser-registry",
-            "inserted": result.inserted,
-            "updated": result.updated,
+            "schema_version_id": result.schema_version_id,
+            "schema_name": result.schema_name,
+            "schema_version": result.schema_version,
+            "inserted": result.parser_registry.inserted,
+            "updated": result.parser_registry.updated,
         }
     )
 

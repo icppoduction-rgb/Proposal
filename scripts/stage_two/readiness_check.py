@@ -23,6 +23,7 @@ from scripts.db.models import (
     ModelReadyArtifact,
     NormalizedArtifact,
     ParserRegistry,
+    SchemaVersion,
 )
 from scripts.db.repositories import ParserRepository
 from scripts.stage_two.storage.bootstrap import StorageBootstrapper
@@ -47,6 +48,7 @@ def run_stage_two_readiness_check() -> StageTwoReadinessResult:
     }
     with session_scope() as session:
         checks["catalog_counts"] = _catalog_counts(session)
+        checks["schema_versions"] = _schema_version_check(session)
         checks["parser_coverage"] = _parser_coverage(session)
         checks["normalized_artifacts"] = _normalized_artifact_check(session)
         checks["artifact_registration"] = _artifact_registration_check(session)
@@ -102,6 +104,7 @@ def _catalog_counts(session: Session) -> dict[str, Any]:
         "feature_artifacts": FeatureArtifact,
         "model_ready_artifacts": ModelReadyArtifact,
         "data_quality_reports": DataQualityReport,
+        "schema_versions": SchemaVersion,
     }
     counts = {
         name: session.execute(select(func.count()).select_from(model)).scalar_one()
@@ -115,9 +118,32 @@ def _catalog_counts(session: Session) -> dict[str, Any]:
         "feature_artifacts",
         "model_ready_artifacts",
         "data_quality_reports",
+        "schema_versions",
     )
     missing = [name for name in required_non_empty if counts[name] == 0]
     return {"status": "SUCCESS" if not missing else "FAILED", "counts": counts, "empty_required_tables": missing}
+
+
+def _schema_version_check(session: Session) -> dict[str, Any]:
+    schema = session.execute(
+        select(SchemaVersion).where(
+            SchemaVersion.schema_name == "normalized_event",
+            SchemaVersion.schema_version == "v1",
+            SchemaVersion.layer == "normalized",
+            SchemaVersion.branch.is_(None),
+            SchemaVersion.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if schema is None:
+        return {"status": "FAILED", "error": "Active normalized_event v1 schema was not found."}
+    return {
+        "status": "SUCCESS",
+        "schema_version_id": schema.id,
+        "schema_name": schema.schema_name,
+        "schema_version": schema.schema_version,
+        "layer": schema.layer,
+        "schema_path": schema.schema_path,
+    }
 
 
 def _parser_coverage(session: Session) -> dict[str, Any]:

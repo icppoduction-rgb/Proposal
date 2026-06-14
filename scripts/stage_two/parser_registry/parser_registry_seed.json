@@ -160,8 +160,10 @@
       "parser_module": "scripts.stage_two.parsers.host",
       "parser_class": "HostNetflowParser",
       "priority": 50,
+      "is_active": false,
       "supports_streaming": true,
-      "requires_external_tools": false
+      "requires_external_tools": false,
+      "config_json": {"status": "planned", "reason": "HostNetflowParser is not implemented yet"}
     },
     {
       "parser_name": "host_packet_capture_parser",

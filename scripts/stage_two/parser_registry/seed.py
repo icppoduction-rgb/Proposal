@@ -11,7 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from scripts.db import session_scope
-from scripts.db.models import ParserRegistry
+from scripts.db.models import ParserRegistry, SchemaVersion
+from scripts.stage_two.normalization.schema_contracts import NormalizedSchemaRegistry
 
 
 DEFAULT_SEED_PATH = Path(__file__).with_name("parser_registry_seed.json")
@@ -23,6 +24,16 @@ class ParserRegistrySeedResult:
 
     inserted: int
     updated: int
+
+
+@dataclass(frozen=True)
+class StageTwoMetadataSeedResult:
+    """Summary of Stage Two metadata seed/update operations."""
+
+    schema_version_id: int
+    schema_name: str
+    schema_version: str
+    parser_registry: ParserRegistrySeedResult
 
 
 class ParserRegistrySeeder:
@@ -100,3 +111,23 @@ def seed_default_parser_registry() -> ParserRegistrySeedResult:
     """Seed the default parser registry in a managed transaction."""
     with session_scope() as session:
         return ParserRegistrySeeder(session).seed_from_file(DEFAULT_SEED_PATH)
+
+
+def seed_stage_two_metadata() -> StageTwoMetadataSeedResult:
+    """Seed required Stage Two schema and parser metadata in one transaction."""
+    with session_scope() as session:
+        schema_version = NormalizedSchemaRegistry(session).register_contract()
+        parser_registry = ParserRegistrySeeder(session).seed_from_file(DEFAULT_SEED_PATH)
+        return _metadata_seed_result(schema_version, parser_registry)
+
+
+def _metadata_seed_result(
+    schema_version: SchemaVersion,
+    parser_registry: ParserRegistrySeedResult,
+) -> StageTwoMetadataSeedResult:
+    return StageTwoMetadataSeedResult(
+        schema_version_id=schema_version.id,
+        schema_name=schema_version.schema_name,
+        schema_version=schema_version.schema_version,
+        parser_registry=parser_registry,
+    )
