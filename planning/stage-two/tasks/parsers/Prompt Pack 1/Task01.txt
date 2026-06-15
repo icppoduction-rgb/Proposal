@@ -1,0 +1,42 @@
+Task 01. Зафиксировать baseline и проверить текущие контракты Stage Two
+--------------------------------------------------------------------------------
+
+Цель:
+Перед изменениями получить точную картину текущих parser contracts, normalization services, registry и CLI.
+
+Файлы для просмотра:
+- config.py
+- manage.py
+- scripts/router_script.py
+- scripts/stage_two/cli.py
+- scripts/stage_two/parsers/base.py
+- scripts/stage_two/parsers/dns.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/packet.py
+- scripts/stage_two/parsers/bson.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- scripts/stage_two/parser_registry/resolver.py
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+- scripts/stage_two/ingestion/scanner.py
+
+Что сделать:
+1. Определить фактические имена классов BaseParser, ParserContext, ParsedEvent, ParseResult.
+2. Определить обязательные поля ParseResult и ParsedEvent.
+3. Проверить, как normalization services создают parser_runs и normalized_artifacts.
+4. Проверить, как ParserResolver выбирает parser entry.
+5. Проверить, как scanner определяет source_format.
+6. Проверить, есть ли SORT_PATH_HOST_FILE и SORT_PATH_DNS_FILE в config.py.
+7. Составить короткий internal report в stdout или временном markdown/txt отчете.
+
+Ограничения:
+- Не менять бизнес-логику.
+- Не начинать parser implementation.
+
+Критерии приемки:
+- Codex знает точные текущие class/function names.
+- Зафиксированы точки изменения для последующих задач.
+- compileall и git diff --check проходят.
+
+Связь со следующей задачей:
+Task 02 использует результаты inspection, чтобы безопасно добавить config aliases и CLI compatibility handling.

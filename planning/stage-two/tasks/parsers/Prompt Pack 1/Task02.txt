@@ -1,0 +1,31 @@
+--------------------------------------------------------------------------------
+Task 02. Добавить безопасные config aliases и технические constants
+--------------------------------------------------------------------------------
+
+Цель:
+Подготовить config.py к новым parser utilities без поломки Stage One/Stage Two путей.
+
+Файлы:
+- config.py
+
+Что сделать:
+1. Если SORT_PATH_HOST_FILE отсутствует, добавить backward-compatible alias:
+   SORT_PATH_HOST_FILE = PATH_TEMP_DATA / "sort-path-host-file.json"
+2. Если SORT_PATH_DNS_FILE отсутствует, добавить backward-compatible alias:
+   SORT_PATH_DNS_FILE = PATH_TEMP_DATA / "sort-path-dns-file.json"
+3. Добавить безопасные constants для reader/parser layer, если их нет:
+   - STAGE_TWO_MAX_BASE64_DECODE_BYTES
+   - STAGE_TWO_MAX_ERROR_SAMPLES
+   - STAGE_TWO_MAX_RAW_PREVIEW_BYTES
+   - STAGE_TWO_TEXT_ENCODINGS
+4. Не менять существующие PATH_TEMP_DATA/sort-path-*.json paths.
+5. Не удалять существующие config variables.
+
+Критерии приемки:
+- Existing imports не сломаны.
+- Stage One save_sort still writes/read same files.
+- Stage Two catalog-ingest remains primary production input.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 03 проверит CLI/router behavior до добавления новых команд.

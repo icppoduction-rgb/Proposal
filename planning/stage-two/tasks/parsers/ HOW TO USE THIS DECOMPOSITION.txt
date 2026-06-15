@@ -1,0 +1,51 @@
+================================================================================
+1. КАК ИСПОЛЬЗОВАТЬ ЭТУ ДЕКОМПОЗИЦИЮ
+================================================================================
+
+1.1. Правило выполнения
+
+Codex должен выполнять задачи строго по порядку. Нельзя сразу начинать с реализации всех parser classes, пока не закрыты:
+- baseline inspection;
+- input reader;
+- source_format inference;
+- parser registry consistency;
+- parser coverage diagnostics.
+
+1.2. Коммитная стратегия
+
+Рекомендуется один commit на одну задачу или на небольшой логически цельный блок задач. В конце каждой задачи Codex должен дать:
+- список измененных файлов;
+- краткое описание изменений;
+- команды проверки;
+- результат проверок;
+- что является входом для следующей задачи.
+
+1.3. Минимальная проверка после каждой задачи
+
+После каждой задачи, которая меняет Python-код:
+
+python -m compileall manage.py config.py scripts
+git diff --check
+
+Если задача меняет DB/catalog behavior:
+
+python -m scripts.db.smoke_check
+python -m alembic -c scripts/db/migrations/alembic.ini current
+
+Если задача меняет parser registry/resolver:
+
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two parser-coverage
+
+1.4. Что не входит в эту цепочку задач
+
+Не реализовывать здесь:
+- финальное обучение ML/DL моделей;
+- hyperparameter tuning;
+- SHAP reports;
+- финальную evaluation-таблицу модели;
+- production feature generation для всех normalized artifacts, кроме минимальных smoke-заглушек если они уже нужны existing checks;
+- production model-ready build pipeline;
+- объединение всех данных в один CSV;
+- хранение all normalized events в PostgreSQL;
+- удаление или исправление raw datasets.

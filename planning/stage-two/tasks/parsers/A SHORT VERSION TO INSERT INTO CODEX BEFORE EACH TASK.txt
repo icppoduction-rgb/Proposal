@@ -1,0 +1,21 @@
+================================================================================
+5. КРАТКИЙ ВАРИАНТ ДЛЯ ВСТАВКИ В CODEX ПЕРЕД КАЖДОЙ ЗАДАЧЕЙ
+================================================================================
+
+Работай строго внутри текущей Stage Two architecture. Не ломай existing commands.
+Не меняй raw datasets. PostgreSQL используй только как catalog/control plane.
+Большие normalized outputs пиши только в Parquet через существующий writer. Сохраняй traceability raw -> parser_run -> normalized_artifact.
+Не смешивай TRAIN/VALIDATION/TEST. TEST не используй для filename label heuristic, training, preprocessing fit или threshold tuning.
+Missing values сохраняй как NULL/None. Unknown fields сохраняй в raw_fields_json/features_json/metadata_json.
+После изменений запускай compileall и git diff --check; для DB/catalog изменений запускай scripts.db.smoke_check.
+В конце дай список changed files, commands executed, smoke results и next task.
+
+Для каждой задачи работай так:
+- Сначала сверяю задачу с текущей архитектурой репозитория.
+- Проверяю, какие файлы реально должны измениться.
+- Не трогаю соседние задачи и не забегаю вперед.
+- Сохраняю обратную совместимость, если задача явно не требует другого.
+- После изменений запускаю минимальные проверки.
+- В ответе фиксирую: что изменено, где риск, как проверить.
+- Особенно важно: для чувствительных задач вроде Task 08, Task 15, Task 30 и любых DB/status/parser-contract
+- изменений я буду сначала явно указывать риск и делать только минимально необходимый scope.

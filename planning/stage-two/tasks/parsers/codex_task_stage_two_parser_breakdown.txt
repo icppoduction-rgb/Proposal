@@ -1,0 +1,1961 @@
+ДЕКОМПОЗИЦИЯ ЗАДАЧИ ДЛЯ CODEX
+Расширение Stage Two parser layer для полного покрытия форматов датасетов
+
+Проект:
+Proposal - Behaviour-driven hybrid learning for data exfiltration detection
+
+Источник декомпозиции:
+/mnt/data/codex_task_stage_two_full_parser_implementation.txt
+
+Цель этого документа:
+Разбить одну большую задачу по реализации полного Stage Two parser layer на последовательные малые задачи для Codex так, чтобы каждая задача имела четкий вход, выход, критерии приемки и связь со следующей задачей. Логика реализации не должна обрываться: каждая задача либо готовит foundation для следующих задач, либо подключает уже реализованные части к текущему pipeline.
+
+================================================================================
+0. КОНТЕКСТ, КОТОРЫЙ НЕЛЬЗЯ ТЕРЯТЬ
+================================================================================
+
+0.1. Текущий статус проекта
+
+В проекте уже реализован Stage Two Data Normalization foundation:
+- PostgreSQL Catalog;
+- SQLAlchemy repositories;
+- Alembic migration;
+- DB smoke checks;
+- storage bootstrap;
+- catalog ingestion;
+- parser registry seed/resolver;
+- normalized schema contracts;
+- Parquet writer;
+- LabelResolver;
+- DuckDB checks;
+- quality/leakage checks;
+- traceability services;
+- MVP DNS/Host parser classes.
+
+Уже существующие MVP parser classes:
+- DNS:
+  - DnsCsvParser;
+  - DnsPcapCsvParser;
+  - DnsTxtDomainListParser;
+  - DnsPacketCaptureParser.
+- Host:
+  - HostCsvParser;
+  - HostJsonLinesParser;
+  - HostLineLogParser;
+  - HostSyscallTraceParser;
+  - HostPacketCaptureParser;
+  - HostBsonSandboxParser.
+
+Главные известные ограничения:
+- full-corpus processing всех датасетов еще не выполнен;
+- parser coverage неполный;
+- Host netflow_day, netflow_ids, wls_day сейчас являются главным gap;
+- catalog-ingest не переводит файлы автоматически в READY_FOR_PARSING;
+- normalization services обрабатывают только dataset_files.status = READY_FOR_PARSING;
+- feature/model-ready production CLI не входит в текущую parser-задачу.
+
+0.2. Главная цель большой задачи
+
+Реализовать non-breaking расширение Stage Two parser layer так, чтобы Stage Two мог читать, парсить и нормализовать все source_format buckets из списка ниже через существующую архитектуру:
+
+- auth.log
+- bson
+- cap
+- cpu.log
+- csv
+- diskio.log
+- filesystem.log
+- fsstat.log
+- ghc
+- info
+- journal
+- journal~
+- json
+- json-1
+- load.log
+- log
+- log-1
+- log-2
+- log-3
+- mail-info-1
+- mail-warn-1
+- mainlog
+- mainlog-1
+- mainlog-2
+- mainlog-3
+- memory.log
+- messages
+- messages-1
+- netflow_day
+- netflow_ids
+- network.log
+- pcap
+- pcap.csv
+- pcapng
+- process.log
+- process.summary.log
+- sc
+- service.log
+- socket.summary.log
+- syslog
+- syslog-1
+- syslog-2
+- syslog-3
+- syslog-4
+- syslog.log
+- txt
+- uptime.log
+- wls_day
+- xml
+
+0.3. Архитектурная цепочка, которую нельзя ломать
+
+RAW DATASETS
+  -> CATALOG INGESTION
+  -> POSTGRESQL CATALOG
+  -> PARSER REGISTRY / RESOLVER
+  -> PARSER RUN
+  -> NORMALIZED EVENTS
+  -> PARQUET NORMALIZED LAYER
+  -> NORMALIZED_ARTIFACTS REGISTRATION
+  -> DUCKDB QUALITY / LEAKAGE CHECKS
+  -> TRACEABILITY
+
+0.4. Жесткие инварианты
+
+- Raw datasets не изменять, не исправлять, не перемещать, не перезаписывать.
+- PostgreSQL не использовать как storage для больших normalized events, feature matrix, packet payload, BSON streams или raw logs.
+- Большие outputs писать в Parquet через существующий Parquet writer.
+- Сохранять traceability raw file -> parser_run -> normalized_artifact.
+- TRAIN, VALIDATION и TEST не смешивать.
+- TEST не использовать для filename-based label heuristic, preprocessing fit, model training или threshold tuning.
+- Labels не должны попадать в X/features как input columns.
+- Missing/unknown значения писать как None/NULL, а не synthetic placeholders.
+- Нестандартные поля сохранять в raw_fields_json, features_json или metadata_json.
+- Существующие команды normalize-dns и normalize-host должны продолжить работать.
+- Новый функционал должен быть backward-compatible.
+
+0.5. Существующие команды, которые должны продолжить работать
+
+python manage.py stage-two bootstrap-storage
+python manage.py stage-two catalog-ingest
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two normalize-dns [limit]
+python manage.py stage-two normalize-host [limit]
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python manage.py stage-two trace-artifact <id-or-path>
+
+0.6. Новые команды, которые должны появиться по итогам задач
+
+Предпочтительный CLI-вариант:
+
+python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage host
+python manage.py stage-two parser-coverage dns
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format pcap --limit 100
+
+python manage.py stage-two normalize-all --branch host --limit 1000
+python manage.py stage-two normalize-all --branch dns --limit 1000
+
+Fallback-вариант, если текущий module/service/action router нельзя безопасно расширить:
+
+python manage.py stage-two parser-coverage host
+python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
+python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
+python manage.py stage-two normalize-format host:TRAIN:auth.log:100
+python manage.py stage-two normalize-all host:1000
+
+================================================================================
+1. КАК ИСПОЛЬЗОВАТЬ ЭТУ ДЕКОМПОЗИЦИЮ
+================================================================================
+
+1.1. Правило выполнения
+
+Codex должен выполнять задачи строго по порядку. Нельзя сразу начинать с реализации всех parser classes, пока не закрыты:
+- baseline inspection;
+- input reader;
+- source_format inference;
+- parser registry consistency;
+- parser coverage diagnostics.
+
+1.2. Коммитная стратегия
+
+Рекомендуется один commit на одну задачу или на небольшой логически цельный блок задач. В конце каждой задачи Codex должен дать:
+- список измененных файлов;
+- краткое описание изменений;
+- команды проверки;
+- результат проверок;
+- что является входом для следующей задачи.
+
+1.3. Минимальная проверка после каждой задачи
+
+После каждой задачи, которая меняет Python-код:
+
+python -m compileall manage.py config.py scripts
+git diff --check
+
+Если задача меняет DB/catalog behavior:
+
+python -m scripts.db.smoke_check
+python -m alembic -c scripts/db/migrations/alembic.ini current
+
+Если задача меняет parser registry/resolver:
+
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two parser-coverage
+
+1.4. Что не входит в эту цепочку задач
+
+Не реализовывать здесь:
+- финальное обучение ML/DL моделей;
+- hyperparameter tuning;
+- SHAP reports;
+- финальную evaluation-таблицу модели;
+- production feature generation для всех normalized artifacts, кроме минимальных smoke-заглушек если они уже нужны existing checks;
+- production model-ready build pipeline;
+- объединение всех данных в один CSV;
+- хранение all normalized events в PostgreSQL;
+- удаление или исправление raw datasets.
+
+================================================================================
+2. ОБЩАЯ КАРТА ЗАВИСИМОСТЕЙ
+================================================================================
+
+Блок A. Baseline and safety
+  Task 01 -> Task 02 -> Task 03
+
+Блок B. Input foundation
+  Task 04 -> Task 05 -> Task 06 -> Task 07 -> Task 08
+
+Блок C. Catalog format detection and registry
+  Task 09 -> Task 10 -> Task 11 -> Task 12
+
+Блок D. Operational CLI
+  Task 13 -> Task 14 -> Task 15
+
+Блок E. Parser implementation groups
+  Task 16 -> Task 17 -> Task 18 -> Task 19 -> Task 20
+  Task 21 -> Task 22 -> Task 23 -> Task 24 -> Task 25
+  Task 26 -> Task 27 -> Task 28 -> Task 29
+
+Блок F. Normalization integration
+  Task 30 -> Task 31 -> Task 32
+
+Блок G. Tests, reports, readiness
+  Task 33 -> Task 34 -> Task 35 -> Task 36 -> Task 37 -> Task 38 -> Task 39
+
+Блок H. Final validation
+  Task 40
+
+================================================================================
+3. МАЛЫЕ ЗАДАЧИ ДЛЯ CODEX
+================================================================================
+
+--------------------------------------------------------------------------------
+Task 01. Зафиксировать baseline и проверить текущие контракты Stage Two
+--------------------------------------------------------------------------------
+
+Цель:
+Перед изменениями получить точную картину текущих parser contracts, normalization services, registry и CLI.
+
+Файлы для просмотра:
+- config.py
+- manage.py
+- scripts/router_script.py
+- scripts/stage_two/cli.py
+- scripts/stage_two/parsers/base.py
+- scripts/stage_two/parsers/dns.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/packet.py
+- scripts/stage_two/parsers/bson.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- scripts/stage_two/parser_registry/resolver.py
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+- scripts/stage_two/ingestion/scanner.py
+
+Что сделать:
+1. Определить фактические имена классов BaseParser, ParserContext, ParsedEvent, ParseResult.
+2. Определить обязательные поля ParseResult и ParsedEvent.
+3. Проверить, как normalization services создают parser_runs и normalized_artifacts.
+4. Проверить, как ParserResolver выбирает parser entry.
+5. Проверить, как scanner определяет source_format.
+6. Проверить, есть ли SORT_PATH_HOST_FILE и SORT_PATH_DNS_FILE в config.py.
+7. Составить короткий internal report в stdout или временном markdown/txt отчете.
+
+Ограничения:
+- Не менять бизнес-логику.
+- Не начинать parser implementation.
+
+Критерии приемки:
+- Codex знает точные текущие class/function names.
+- Зафиксированы точки изменения для последующих задач.
+- compileall и git diff --check проходят.
+
+Связь со следующей задачей:
+Task 02 использует результаты inspection, чтобы безопасно добавить config aliases и CLI compatibility handling.
+
+--------------------------------------------------------------------------------
+Task 02. Добавить безопасные config aliases и технические constants
+--------------------------------------------------------------------------------
+
+Цель:
+Подготовить config.py к новым parser utilities без поломки Stage One/Stage Two путей.
+
+Файлы:
+- config.py
+
+Что сделать:
+1. Если SORT_PATH_HOST_FILE отсутствует, добавить backward-compatible alias:
+   SORT_PATH_HOST_FILE = PATH_TEMP_DATA / "sort-path-host-file.json"
+2. Если SORT_PATH_DNS_FILE отсутствует, добавить backward-compatible alias:
+   SORT_PATH_DNS_FILE = PATH_TEMP_DATA / "sort-path-dns-file.json"
+3. Добавить безопасные constants для reader/parser layer, если их нет:
+   - STAGE_TWO_MAX_BASE64_DECODE_BYTES
+   - STAGE_TWO_MAX_ERROR_SAMPLES
+   - STAGE_TWO_MAX_RAW_PREVIEW_BYTES
+   - STAGE_TWO_TEXT_ENCODINGS
+4. Не менять существующие PATH_TEMP_DATA/sort-path-*.json paths.
+5. Не удалять существующие config variables.
+
+Критерии приемки:
+- Existing imports не сломаны.
+- Stage One save_sort still writes/read same files.
+- Stage Two catalog-ingest remains primary production input.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 03 проверит CLI/router behavior до добавления новых команд.
+
+--------------------------------------------------------------------------------
+Task 03. Проверить и подготовить backward-compatible CLI routing
+--------------------------------------------------------------------------------
+
+Цель:
+Подготовить CLI для новых команд parser-coverage, mark-ready, normalize-format, normalize-all без поломки существующих commands.
+
+Файлы:
+- manage.py
+- scripts/router_script.py
+- scripts/stage_two/cli.py
+
+Что сделать:
+1. Проверить, как manage.py сейчас обрабатывает module/service/action и extra args.
+2. Если используется parse_known_args() и extra args теряются, добавить безопасный путь передачи extra args в Stage Two router.
+3. Старые команды должны остаться рабочими в прежнем формате.
+4. Unknown commands не должны silently pass для новых Stage Two команд.
+5. Добавить parsing helpers, но пока не добавлять бизнес-логику mark-ready/normalize-format.
+
+Ограничения:
+- Не менять handlers CLI semantics.
+- Не ломать module/service/action interface.
+
+Критерии приемки:
+- Старые Stage Two команды вызываются как раньше.
+- handlers commands не ломаются.
+- Можно безопасно добавить новые service handlers в следующих задачах.
+- compileall и git diff --check проходят.
+
+Связь со следующей задачей:
+Task 04 начинает foundation чтения файлов, не зависящий от CLI.
+
+--------------------------------------------------------------------------------
+Task 04. Реализовать UniversalInputReader: базовый интерфейс и streaming modes
+--------------------------------------------------------------------------------
+
+Цель:
+Создать общий безопасный слой чтения входных файлов для всех parser classes.
+
+Новые/изменяемые файлы:
+- scripts/stage_two/parsers/input_reader.py
+- scripts/stage_two/parsers/__init__.py
+- возможно scripts/stage_two/parsers/base.py
+
+Что реализовать:
+1. Класс UniversalInputReader.
+2. Режимы чтения:
+   - text
+   - binary
+   - lines
+   - records
+   - json_lines
+   - csv_rows
+   - packet_bytes
+   - bson_stream
+3. Streaming для text/lines/csv/json-lines.
+4. Binary read для PCAP/CAP/PCAPNG/BSON без text decode.
+5. Reader metadata:
+   - encoding_hint
+   - compression_hint
+   - base64_detected
+   - decode_strategy
+   - bytes_read
+   - warnings
+   - errors
+
+Ограничения:
+- Не читать большие файлы целиком, если режим допускает streaming.
+- Не выполнять eval/pickle/subprocess.
+- Не изменять raw file.
+
+Критерии приемки:
+- Reader можно создать для временного text, csv, json-lines и binary sample.
+- Reader возвращает iterator или context-managed stream.
+- Direct smoke проходит.
+- compileall и git diff --check проходят.
+
+Связь со следующей задачей:
+Task 05 расширяет UniversalInputReader безопасным encoding/BOM detection.
+
+--------------------------------------------------------------------------------
+Task 05. Добавить encoding/BOM handling для text readers
+--------------------------------------------------------------------------------
+
+Цель:
+Обеспечить безопасное чтение текстовых датасетов с utf-8, utf-8-sig, cp1252, latin-1, ascii.
+
+Файлы:
+- scripts/stage_two/parsers/input_reader.py
+- возможно scripts/stage_two/parsers/encoding.py
+
+Что сделать:
+1. Добавить detection BOM для UTF-8-SIG.
+2. Реализовать fallback chain:
+   - utf-8
+   - utf-8-sig
+   - cp1252
+   - latin-1
+   - ascii
+3. Для parsing fallback использовать errors="replace" только когда strict decode невозможен.
+4. Не менять raw byte hash.
+5. Сохранять encoding_hint и decode_error в metadata.
+
+Критерии приемки:
+- Smokes для utf-8, utf-8-sig, cp1252, latin-1 samples.
+- Bad byte не ломает весь batch, но фиксируется warning.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 06 добавляет base64/compression handling поверх reader foundation.
+
+--------------------------------------------------------------------------------
+Task 06. Добавить safe base64 и compression handling
+--------------------------------------------------------------------------------
+
+Цель:
+Поддержать whole-file, line-level и JSON field-level base64 там, где это безопасно, а также common compression.
+
+Файлы:
+- scripts/stage_two/parsers/input_reader.py
+- возможно scripts/stage_two/parsers/encoding.py
+- config.py, если нужны constants
+
+Что реализовать:
+1. Compression/magic detection:
+   - gzip
+   - bz2
+   - xz/lzma
+   - zip with safe member extraction, no path traversal
+   - plain text
+   - binary
+2. Base64 detection:
+   - whole-file base64;
+   - line-level base64;
+   - JSON field-level base64 as payload value only.
+3. Safety checks:
+   - valid base64 alphabet;
+   - base64.b64decode(..., validate=True);
+   - decoded bytes look like known magic or valid text/json/csv/log;
+   - decoded size <= STAGE_TWO_MAX_BASE64_DECODE_BYTES;
+   - no automatic assumption that every text is base64.
+4. Metadata:
+   - base64_detected;
+   - decode_strategy;
+   - compression_hint;
+   - decode_error.
+
+Ограничения:
+- Не выполнять decoded content.
+- Не распаковывать archive paths на filesystem.
+- Не хранить full decoded payload in metadata_json.
+
+Критерии приемки:
+- Smokes: base64 CSV, base64 JSON-lines, base64 raw log line.
+- Smokes: gzip text, bz2 text, xz text if standard libs available.
+- Oversized/invalid base64 gives warning, not crash.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 07 добавляет binary container stream adapters.
+
+--------------------------------------------------------------------------------
+Task 07. Добавить безопасные binary adapters для PCAP/CAP/PCAPNG/BSON
+--------------------------------------------------------------------------------
+
+Цель:
+Подготовить shared reading utilities для binary parsers.
+
+Файлы:
+- scripts/stage_two/parsers/input_reader.py
+- scripts/stage_two/parsers/packet.py
+- scripts/stage_two/parsers/bson.py
+
+Что сделать:
+1. Reader должен отдавать binary stream или chunk iterator.
+2. Добавить magic detection:
+   - classic pcap;
+   - pcapng;
+   - BSON document stream where possible.
+3. Не пытаться декодировать binary как text.
+4. Добавить metadata for binary type.
+5. Ограничить payload preview.
+
+Критерии приемки:
+- Tiny PCAP/PCAPNG/BSON samples читаются без text decode.
+- Unknown binary file дает controlled FAILED/SKIPPED result в downstream parser, а не crash reader.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 08 унифицирует parser error/status model, чтобы все parser classes одинаково реагировали на reader warnings/errors.
+
+--------------------------------------------------------------------------------
+Task 08. Унифицировать parser status, counters и error samples
+--------------------------------------------------------------------------------
+
+Цель:
+Сделать единый helper для ParserResult counters, status calculation и error samples.
+
+Файлы:
+- scripts/stage_two/parsers/base.py
+- возможно scripts/stage_two/parsers/common.py
+
+Что сделать:
+1. Добавить helper для counters:
+   - rows_read
+   - rows_parsed
+   - rows_failed
+   - bytes_read
+   - files_read
+   - warnings_count
+   - parse_errors_count
+2. Добавить status calculation:
+   - SUCCESS if parsed > 0 and failed = 0;
+   - PARTIAL_SUCCESS/PARTIALLY_PARSED if parsed > 0 and failed > 0;
+   - EMPTY_FILE if no content;
+   - FAILED if parser cannot read file;
+   - SKIPPED only for intentionally skipped helper files;
+   - UNSUPPORTED_FORMAT only if no parser available.
+3. Ограничить error samples через STAGE_TWO_MAX_ERROR_SAMPLES.
+4. Не ломать существующие ParseResult consumers.
+
+Критерии приемки:
+- Existing DNS/Host parser smoke remains green.
+- New helper can be used incrementally by parsers.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 09 использует common status model при source_format inference tests.
+
+--------------------------------------------------------------------------------
+Task 09. Исправить source_format inference для всех compound/special formats
+--------------------------------------------------------------------------------
+
+Цель:
+Сделать catalog ingestion/source_format inference format-aware и bucket-aware.
+
+Файлы:
+- scripts/stage_two/ingestion/scanner.py
+
+Что сделать:
+1. Если файл находится в sorted tree role/format bucket, использовать bucket name как source_format.
+2. Не сводить все *.log к log, если bucket более точный.
+3. Сохранять compound/special names:
+   - auth.log
+   - cpu.log
+   - diskio.log
+   - filesystem.log
+   - fsstat.log
+   - journal~
+   - json-1
+   - log-1/log-2/log-3
+   - mail-info-1/mail-warn-1
+   - mainlog-1/mainlog-2/mainlog-3
+   - messages-1
+   - netflow_day
+   - netflow_ids
+   - pcap.csv
+   - process.summary.log
+   - socket.summary.log
+   - syslog-1/syslog-2/syslog-3/syslog-4
+   - syslog.log
+   - wls_day
+4. Если файл из raw root без bucket, использовать extension/name heuristic with priority for known compound names.
+5. Добавить tests/smokes для всех listed source_format.
+
+Критерии приемки:
+- Каждый формат из списка определяется точно.
+- source_format for pcap.csv остается pcap.csv, а не csv.
+- source_format for process.summary.log остается process.summary.log, а не log.
+- compileall и targeted scanner smoke проходят.
+
+Связь со следующей задачей:
+Task 10 расширяет parser_registry_seed.json под точные source_format names.
+
+--------------------------------------------------------------------------------
+Task 10. Расширить parser_registry_seed.json для всех source_format
+--------------------------------------------------------------------------------
+
+Цель:
+Создать registry entries для всех форматов и branch/role combinations, где они применимы.
+
+Файлы:
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+- scripts/stage_two/parser_registry/seed.py, если seed требует обновления
+
+Что сделать:
+1. Для каждого source_format из списка добавить registry entry.
+2. Для форматов, встречающихся и в DNS, и в Host, использовать отдельные entries по branch:
+   - csv
+   - txt
+   - pcap
+   - pcap.csv, если применимо
+3. Для packet captures:
+   - DNS pcap/pcapng/cap -> DNS/network packet parser;
+   - Host cap/pcap/pcapng -> Host/network packet parser.
+4. Для netflow_day/netflow_ids/wls_day добавить active HostNetflowParser или отдельные active classes:
+   - HostNetflowDayParser;
+   - HostNetflowIdsParser;
+   - HostWlsDayParser.
+5. Пока parser class еще не реализован, не ставить is_active=true, если текущий code validation проверяет class existence. Если задачи выполняются в одном PR, можно добавить active entry только вместе с class skeleton.
+6. Seed должен быть idempotent.
+
+Критерии приемки:
+- JSON валиден.
+- seed не создает duplicate rows.
+- Нет active registry row на отсутствующий parser_class.
+- parser coverage пока может показывать gaps, но registry structure готова.
+
+Связь со следующей задачей:
+Task 11 добавляет resolver/class availability validation.
+
+--------------------------------------------------------------------------------
+Task 11. Усилить ParserResolver и class availability validation
+--------------------------------------------------------------------------------
+
+Цель:
+Исключить ситуацию, когда registry указывает на parser_class, которого нет в коде или который не импортируется.
+
+Файлы:
+- scripts/stage_two/parser_registry/resolver.py
+- scripts/stage_two/parser_registry/seed.py
+- scripts/stage_two/parsers/__init__.py
+
+Что сделать:
+1. Resolver должен возвращать active parser metadata по branch/source_format/role/priority.
+2. Добавить import/class validation helper.
+3. Не активировать/не выбирать parser_class, который не найден.
+4. Ошибка должна быть явной в parser coverage report, а не hidden exception.
+5. Сохранить backward compatibility для existing normalization services.
+
+Критерии приемки:
+- Resolver smoke показывает active existing parsers.
+- Missing class produces clear diagnostic.
+- Existing normalize-dns/normalize-host не ломаются.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 12 строит parser coverage service поверх scanner/catalog/registry/resolver.
+
+--------------------------------------------------------------------------------
+Task 12. Реализовать parser coverage matrix и reports
+--------------------------------------------------------------------------------
+
+Цель:
+Добавить диагностику покрытия parser layer до массовой нормализации.
+
+Новые/изменяемые файлы:
+- scripts/stage_two/parser_coverage.py
+- scripts/stage_two/cli.py
+- scripts/stage_two/reports/parser_reports.py, если удобно
+
+CLI:
+python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage host
+python manage.py stage-two parser-coverage dns
+
+Что сделать:
+1. Собрать matrix:
+   branch | role | source_format | files_count | parser_active | parser_class | parser_name | action
+2. Источники counts:
+   - PostgreSQL Catalog dataset_files, если доступен;
+   - optionally Stage One SORT_PATH_HOST_FILE/SORT_PATH_DNS_FILE for diagnostics only.
+3. Не заменять catalog ingestion Stage One JSON-ами.
+4. Писать reports:
+   - PATH_DATA_STORAGE/reports/en/stage-two/parser/parser_coverage_matrix.json
+   - PATH_DATA_STORAGE/reports/ru/stage-two/parser/parser_coverage_matrix.json
+   - PATH_DATA_STORAGE/reports/en/stage-two/parser/parser_coverage_matrix.md
+   - PATH_DATA_STORAGE/reports/ru/stage-two/parser/parser_coverage_matrix.md
+5. Empty buckets допустимы, но parser entry должен быть виден.
+
+Критерии приемки:
+- CLI выводит таблицу.
+- Reports создаются.
+- Unknown/missing parsers видны явно.
+- Existing commands не ломаются.
+
+Связь со следующей задачей:
+Task 13 добавляет mark-ready utility, чтобы coverage можно было превратить в controlled normalization batch.
+
+--------------------------------------------------------------------------------
+Task 13. Реализовать безопасный mark-ready workflow
+--------------------------------------------------------------------------------
+
+Цель:
+Решить текущий operational gap: catalog-ingest не переводит files в READY_FOR_PARSING.
+
+Новые/изменяемые файлы:
+- scripts/stage_two/status_tools.py
+- scripts/stage_two/cli.py
+- возможно scripts/db/repositories/dataset_file_repository.py
+
+CLI:
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+
+Fallback:
+python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
+python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
+
+Что сделать:
+1. По умолчанию dry-run.
+2. Для actual update нужен explicit --apply или apply prefix.
+3. Менять только statuses:
+   - REGISTERED
+   - CHANGED
+   - DISCOVERED
+   -> READY_FOR_PARSING
+4. Не менять без отдельного force flag:
+   - EMPTY_FILE
+   - FAILED
+   - PARSED
+   - PARTIALLY_PARSED
+   - SKIPPED
+5. Писать count report:
+   - selected
+   - updated
+   - skipped_by_status
+   - unsupported
+   - empty
+   - errors
+6. Не делать commit внутри repository; использовать service/session_scope.
+
+Критерии приемки:
+- dry-run не меняет DB.
+- apply меняет только разрешенные statuses.
+- Counts корректны.
+- compileall и DB smoke проходят.
+
+Связь со следующей задачей:
+Task 14 добавляет normalize-format, который использует READY_FOR_PARSING rows.
+
+--------------------------------------------------------------------------------
+Task 14. Реализовать normalize-format для одного branch/role/source_format
+--------------------------------------------------------------------------------
+
+Цель:
+Позволить нормализовать один выбранный формат без запуска всей ветки.
+
+Файлы:
+- scripts/stage_two/cli.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- возможно новый scripts/stage_two/normalization/runner.py
+
+CLI:
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format pcap --limit 100
+
+Fallback:
+python manage.py stage-two normalize-format host:TRAIN:auth.log:100
+
+Что сделать:
+1. Query only READY_FOR_PARSING files for selected branch/role/source_format.
+2. Resolve parser through ParserResolver.
+3. Process files independently.
+4. Ошибка одного файла не должна прерывать весь batch.
+5. Correct statuses per file:
+   - PARSED
+   - PARTIALLY_PARSED
+   - FAILED
+   - SKIPPED
+6. Register parser_runs and normalized_artifacts.
+7. Preserve existing normalize-dns/normalize-host behavior.
+
+Критерии приемки:
+- normalize-format host:TRAIN:auth.log works on temporary sample.
+- normalize-format dns:TRAIN:csv works on temporary sample.
+- Existing normalize-dns/normalize-host still work.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 15 builds normalize-all as controlled batch wrapper over the same service logic.
+
+--------------------------------------------------------------------------------
+Task 15. Реализовать normalize-all для всей ветки
+--------------------------------------------------------------------------------
+
+Цель:
+Добавить массовую обработку всех READY_FOR_PARSING files выбранной branch без смешивания ролей.
+
+Файлы:
+- scripts/stage_two/cli.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- возможно scripts/stage_two/normalization/runner.py
+
+CLI:
+python manage.py stage-two normalize-all --branch dns --limit 1000
+python manage.py stage-two normalize-all --branch host --limit 1000
+
+Fallback:
+python manage.py stage-two normalize-all dns:1000
+python manage.py stage-two normalize-all host:1000
+
+Что сделать:
+1. Process all READY files for branch.
+2. Iterate by role and source_format, not mixed uncontrolled full corpus transaction.
+3. Commit per file or controlled batch through service layer.
+4. Continue on file-level errors.
+5. Produce batch summary.
+6. Existing normalize-dns/normalize-host remain aliases or preserve current semantics.
+
+Критерии приемки:
+- Low-limit smoke works:
+  python manage.py stage-two normalize-all --branch host --limit 10
+  python manage.py stage-two normalize-all --branch dns --limit 10
+- No role mixing in output paths/catalog rows.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 16 adds parser event builder utilities, then parser groups are implemented one by one.
+
+--------------------------------------------------------------------------------
+Task 16. Создать shared normalized event builder / canonical mapping helpers
+--------------------------------------------------------------------------------
+
+Цель:
+Уменьшить дублирование между parsers и гарантировать единый normalized_event contract.
+
+Файлы:
+- scripts/stage_two/parsers/common.py
+- scripts/stage_two/parsers/base.py
+
+Что сделать:
+1. Helper для event_uid generation.
+2. Helper для базовых traceability fields:
+   - dataset_id
+   - file_id
+   - dataset_name
+   - dataset_role
+   - branch
+   - source_format
+   - source_file_path
+   - source_file_hash
+   - parser_name
+   - parser_version
+   - parser_run_id placeholder/context
+   - schema_name
+   - schema_version
+3. Helper для timestamp fields:
+   - timestamp
+   - timestamp_type
+   - event_index
+4. Helper для labels default:
+   - label_binary=None
+   - label_source="none"
+   - label_status="unlabeled"
+5. Helper для raw_fields_json and metadata_json merge.
+
+Критерии приемки:
+- Existing parsers can use helper incrementally.
+- No schema-breaking field names.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 17 starts parser implementations with DNS CSV, using event builder.
+
+--------------------------------------------------------------------------------
+Task 17. Расширить DNS CSV parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- csv для branch=dns
+
+Цель:
+Покрыть DNS TRAIN csv, DNS TEST headerless csv и mixed DNS/domain feature CSV.
+
+Файлы:
+- scripts/stage_two/parsers/dns.py
+- возможно scripts/stage_two/parsers/csv_utils.py
+
+Что поддержать:
+1. DNS TRAIN csv:
+   - domain-list;
+   - DNS/domain feature tables;
+   - PhishTank-like feed.
+2. DNS TEST csv:
+   - headerless 22-column positional schema.
+3. Broken/unescaped list/dict columns where possible.
+4. Preserve original row in raw_fields_json if row cannot be fully parsed.
+5. Labels only through LabelResolver.
+6. TEST filename heuristic disabled.
+
+Normalized fields:
+- timestamp if available;
+- timestamp_type;
+- domain/query_domain;
+- src_ip/resolver_ip if available;
+- dns lexical fields if present;
+- raw_fields_json for non-canonical columns.
+
+Критерии приемки:
+- Direct smoke: DNS TRAIN domain-list row.
+- Direct smoke: DNS TEST 22-column headerless row.
+- Bad CSV row increments rows_failed and does not kill file if other rows parse.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 18 covers DNS pcap.csv tabular packet-derived data.
+
+--------------------------------------------------------------------------------
+Task 18. Расширить DNS pcap.csv parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- pcap.csv для branch=dns
+
+Цель:
+Надежно читать packet-derived CSV с DNS/network fields.
+
+Файлы:
+- scripts/stage_two/parsers/dns.py
+- scripts/stage_two/parsers/csv_utils.py, если создан
+
+Что поддержать:
+1. Headered packet-derived CSV.
+2. DNS query/response columns where available.
+3. Packet/flow summary fields.
+4. Encoding and base64 via UniversalInputReader.
+5. Preserve unknown columns in raw_fields_json.
+
+Normalized fields:
+- timestamp;
+- src_ip/dst_ip/src_port/dst_port/protocol;
+- domain/query_domain/qtype/qclass/ttl/rcode if available;
+- event_type such as dns_query/dns_response/network_packet_summary.
+
+Критерии приемки:
+- Direct smoke on tiny pcap.csv sample.
+- Bad row handled as partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 19 handles DNS TXT domain lists.
+
+--------------------------------------------------------------------------------
+Task 19. Расширить DNS TXT domain-list parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- txt для branch=dns
+
+Цель:
+Нормализовать one-domain-per-line DNS validation/domain-list files.
+
+Файлы:
+- scripts/stage_two/parsers/dns.py
+
+Что поддержать:
+1. One-domain-per-line.
+2. Comments and blank lines.
+3. Base64 line decoding if line is valid base64 encoded domain/list item.
+4. Optional class hint only from safe mapping rules, not TEST filename heuristic.
+5. Unknown class stays unlabeled.
+
+Критерии приемки:
+- Direct smoke: plain domain line.
+- Direct smoke: base64 encoded domain line.
+- Blank/comment lines skipped with clear counters.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 20 covers packet capture containers shared by DNS and Host.
+
+--------------------------------------------------------------------------------
+Task 20. Усилить Packet Capture parsers для pcap/cap/pcapng
+--------------------------------------------------------------------------------
+
+Форматы:
+- pcap
+- pcapng
+- cap
+
+Цель:
+Поддержать summary-level packet extraction для DNS и Host branches без full payload storage.
+
+Файлы:
+- scripts/stage_two/parsers/packet.py
+- scripts/stage_two/parsers/dns.py, if class wrapper needed
+- scripts/stage_two/parsers/host.py, if class wrapper needed
+
+Что поддержать:
+1. Classic pcap magic.
+2. Basic pcapng blocks.
+3. cap as classic pcap-compatible when applicable.
+4. Summary-level extraction:
+   - packet timestamp;
+   - src/dst IP;
+   - protocol;
+   - src/dst ports;
+   - tcp flags if available;
+   - udp/tcp port 53 DNS detection;
+   - packet length/bytes;
+   - qname/qtype/rcode/ttl if lightweight DNS decode possible.
+5. For host branch, normalized modality can be network_packet or host_network_packet.
+6. For DNS branch, normalized modality can be dns_packet or network_packet.
+
+Ограничения:
+- Do not store full packet payload in PostgreSQL.
+- Do not store full packet payload in metadata_json.
+- Only keep extracted safe fields.
+
+Критерии приемки:
+- Direct smoke: tiny pcap.
+- Direct smoke: tiny pcapng if sample generator exists.
+- Direct smoke: cap recognized as pcap-compatible.
+- Catalog rollback smoke for DNS pcap and Host pcapng/cap.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 21 improves Host CSV parser.
+
+--------------------------------------------------------------------------------
+Task 21. Расширить Host CSV parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- csv для branch=host
+
+Цель:
+Покрыть Host TRAIN CSV, Host VALIDATION runs.csv-like metadata и Host TEST CSV with safe label behavior.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/csv_utils.py
+
+Что поддержать:
+1. ADFA-like 9-column schema:
+   date, time, process_id, path, sys_call, event_id, attack_cat, attack_subcat, label.
+2. Headerless CSV.
+3. Service files:
+   - feature_descr.csv;
+   - ground_truth.csv.
+   Они не должны forced into same event schema. Emit metadata/context events or SKIPPED with parser report.
+4. Host VALIDATION runs.csv-like metadata:
+   - scenario/run metadata;
+   - is_executing_exploit label if present and role-safe.
+5. Host TEST CSV with separate label files:
+   - no label join unless explicit safe mapping exists.
+6. Encoding cp1252/utf-8-sig.
+
+Критерии приемки:
+- Direct smoke: 9-column row.
+- Direct smoke: headerless row.
+- Direct smoke: runs.csv row.
+- feature_descr.csv skipped or metadata event with clear reason.
+- TEST label behavior safe.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 22 handles Host JSON/JSON-lines.
+
+--------------------------------------------------------------------------------
+Task 22. Расширить Host JSON / JSON-lines parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- json
+- json-1
+
+Цель:
+Поддержать JSON-lines, JSON array, single JSON object, ECS/Filebeat/Metricbeat-like nested objects, Windows/Sysmon-like records.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- возможно scripts/stage_two/parsers/json_utils.py
+
+Что поддержать:
+1. JSON Lines.
+2. JSON array.
+3. Single JSON object.
+4. Nested object flattening into raw_fields_json.
+5. Canonical field extraction:
+   - @timestamp;
+   - host.name;
+   - user.name;
+   - process.name/process.executable/process.pid;
+   - event.dataset;
+   - event.action;
+   - log.file.path;
+   - message;
+   - labels/rules if present.
+6. Bad JSON line increments rows_failed but does not break batch.
+7. Base64 JSON-lines via UniversalInputReader.
+
+Критерии приемки:
+- Direct smoke: JSON lines.
+- Direct smoke: JSON array.
+- Direct smoke: single object.
+- Bad line partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 23 handles raw/syslog/mail/journal line logs.
+
+--------------------------------------------------------------------------------
+Task 23. Расширить Host line log parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- auth.log
+- info
+- journal
+- journal~
+- log
+- log-1
+- log-2
+- log-3
+- mail-info-1
+- mail-warn-1
+- mainlog
+- mainlog-1
+- mainlog-2
+- mainlog-3
+- messages
+- messages-1
+- syslog
+- syslog-1
+- syslog-2
+- syslog-3
+- syslog-4
+- syslog.log
+
+Цель:
+Нормализовать mixed raw line logs и JSON-lines внутри log files.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- возможно scripts/stage_two/parsers/logs.py
+
+Что поддержать:
+1. Raw syslog prefix parsing:
+   MMM dd HH:MM:SS host process[pid]: message
+2. JSON-lines mixed inside log files.
+3. audit/auth/session patterns.
+4. postfix/mail/mainlog patterns where feasible.
+5. journal-like lines.
+6. Missing year/timezone:
+   - timestamp_type="missing" or partial timestamp metadata;
+   - do not inject current year silently unless safe context exists.
+7. event_index required for ordered streams when timestamp missing.
+8. Extract when available:
+   - process_name;
+   - process_id;
+   - user_name;
+   - host_name;
+   - raw_event_name;
+   - event_type.
+9. Store raw line preview/hash in raw_fields_json, not huge full line payload.
+
+Критерии приемки:
+- Direct smoke: syslog line.
+- Direct smoke: auth session line.
+- Direct smoke: JSON-line inside .log.
+- Direct smoke: mail/mainlog-like line.
+- Bad line partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 24 handles Metricbeat/system metrics logs.
+
+--------------------------------------------------------------------------------
+Task 24. Реализовать Host Metricbeat/system metrics parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- cpu.log
+- diskio.log
+- filesystem.log
+- fsstat.log
+- load.log
+- memory.log
+- network.log
+- process.log
+- process.summary.log
+- service.log
+- socket.summary.log
+- uptime.log
+
+Цель:
+Нормализовать JSON-lines Metricbeat-like host metrics.
+
+Файлы:
+- scripts/stage_two/parsers/metrics.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/__init__.py
+
+Что поддержать:
+1. JSON-lines metrics.
+2. Distinguish metric rows vs annotation/label rows.
+3. Canonical fields:
+   - timestamp;
+   - host_name;
+   - event.dataset;
+   - metric_name;
+   - metric_value;
+   - modality="host_metric";
+   - raw_fields_json with full nested metric values.
+4. For process/network/service logs, extract where available:
+   - process name/pid;
+   - service name/state;
+   - network interface counters;
+   - socket counts;
+   - CPU/memory/disk/filesystem/load metrics.
+5. Missing metric values as NULL.
+
+Критерии приемки:
+- Direct smoke for cpu.log sample.
+- Direct smoke for diskio.log sample.
+- Direct smoke for network.log/process.summary.log sample.
+- Annotation rows do not corrupt metric rows.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 25 handles syscall/API/trace streams.
+
+--------------------------------------------------------------------------------
+Task 25. Расширить Host syscall/API trace parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- ghc
+- sc
+- txt
+
+Цель:
+Нормализовать syscall/API/trace-like line streams with event_order.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- возможно scripts/stage_two/parsers/logs.py
+
+Что поддержать:
+1. One syscall/API event per line.
+2. Numeric syscall id or tokenized syscall name.
+3. Optional process/user/argument fragments where extractable.
+4. event_index required.
+5. timestamp_type="event_order" if no absolute timestamp.
+6. Base64 line decoding where safe.
+7. Large files streaming.
+
+Критерии приемки:
+- Direct smoke: ghc-like line.
+- Direct smoke: sc-like syscall id line.
+- Direct smoke: txt trace line.
+- Bad line partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 26 strengthens BSON sandbox parser.
+
+--------------------------------------------------------------------------------
+Task 26. Усилить BSON sandbox parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- bson
+
+Цель:
+Надежно читать BSON document streams from Dynamic Malware / sandbox-like telemetry.
+
+Файлы:
+- scripts/stage_two/parsers/bson.py
+- scripts/stage_two/parsers/host.py, if wrapper mapping needed
+
+Что поддержать:
+1. BSON document stream.
+2. Descriptor documents and event documents.
+3. Map descriptor ID to event name/category/argument names.
+4. Preserve document order.
+5. Extract where available:
+   - descriptor id;
+   - event id;
+   - event name;
+   - category;
+   - process/thread context;
+   - relative time/counters;
+   - args;
+   - command line;
+   - module path;
+   - file/path artifacts.
+6. Unknown/exotic BSON types:
+   - do not crash full batch;
+   - fail current file or current document depending severity;
+   - save details in parser report.
+7. base64-wrapped BSON decoded to bytes if valid and under size limit.
+
+Критерии приемки:
+- Direct smoke: descriptor + event BSON stream.
+- Direct smoke: relative timestamp/event_index preserved.
+- Unknown type controlled failure/report.
+- Catalog rollback smoke host:TEST:bson.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 27 closes the main remaining gap: netflow_day/netflow_ids/wls_day.
+
+--------------------------------------------------------------------------------
+Task 27. Реализовать Host NetFlow/WLS parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- netflow_day
+- netflow_ids
+- wls_day
+
+Цель:
+Закрыть главный parser coverage gap: эти форматы больше не должны быть planned/inactive.
+
+Файлы:
+- scripts/stage_two/parsers/netflow.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/__init__.py
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+
+Варианты классов:
+- один robust HostNetflowParser;
+- или отдельные классы:
+  - HostNetflowDayParser;
+  - HostNetflowIdsParser;
+  - HostWlsDayParser.
+
+Что поддержать:
+1. Delimited text.
+2. Headered CSV-like records.
+3. Whitespace-separated records.
+4. JSON-lines if encountered.
+5. compressed/base64 wrapped text.
+6. Extract when available:
+   - timestamp/window date;
+   - src_ip;
+   - dst_ip;
+   - src_port;
+   - dst_port;
+   - protocol;
+   - bytes/packets;
+   - duration;
+   - flow direction;
+   - ids alert/category for netflow_ids if present;
+   - source/loghost/event id fields for wls_day if present;
+   - host/scenario/file context from catalog metadata.
+7. Normalized modality:
+   - network_flow;
+   - host_network_flow;
+   - host_eventlog for wls_day if row is clearly eventlog-like.
+
+Критерии приемки:
+- parser_registry entries active.
+- ParserResolver resolves netflow_day, netflow_ids, wls_day.
+- Direct smoke for all three formats.
+- normalize-format smoke:
+  python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 10
+- Host coverage report no longer shows netflow/wls as inactive gap.
+- compileall и DB smoke проходят.
+
+Связь со следующей задачей:
+Task 28 adds XML parser to complete structured text coverage.
+
+--------------------------------------------------------------------------------
+Task 28. Реализовать Host XML parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- xml
+
+Цель:
+Безопасно парсить event-like XML без XXE/DTD/network fetch.
+
+Файлы:
+- scripts/stage_two/parsers/xml.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/__init__.py
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+
+Что поддержать:
+1. Safe XML parsing.
+2. No external entity resolution.
+3. No DTD/network fetch.
+4. Flatten event-like nodes into normalized events.
+5. Store unknown nested fields in raw_fields_json.
+6. Extract if present:
+   - timestamp;
+   - host;
+   - process;
+   - event id;
+   - user;
+   - message.
+
+Критерии приемки:
+- Direct smoke: simple event XML.
+- Direct smoke: XML with nested fields.
+- XXE-like content is rejected/ignored safely.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 29 adds generic fallback behavior and helper-file handling so batch processing is robust.
+
+--------------------------------------------------------------------------------
+Task 29. Добавить controlled fallback и helper-file handling
+--------------------------------------------------------------------------------
+
+Цель:
+Обеспечить, что служебные/не-событийные файлы не ломают batch и получают корректный SKIPPED/PARTIAL status.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/dns.py
+- scripts/stage_two/parsers/common.py
+- scripts/stage_two/reports/parser_reports.py
+
+Что сделать:
+1. Определить helper/context files:
+   - feature_descr.csv;
+   - ground_truth.csv;
+   - README-like txt, если попадает в bucket;
+   - empty files.
+2. Для helper files:
+   - emit metadata event only if useful and safe;
+   - otherwise SKIPPED with clear parser report.
+3. Empty file -> EMPTY_FILE status.
+4. Unknown rows -> rows_failed, not silent drop.
+5. No unsupported format for listed formats after full implementation.
+
+Критерии приемки:
+- Helper files produce clear report.
+- Empty files do not crash.
+- listed source_format no longer returns UNSUPPORTED_FORMAT due to missing parser.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 30 connects all implemented classes into normalization services through resolver.
+
+--------------------------------------------------------------------------------
+Task 30. Обновить DNS/Host normalization services и class mappings
+--------------------------------------------------------------------------------
+
+Цель:
+Подключить все parser classes к services без hardcoded missing mappings.
+
+Файлы:
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- scripts/stage_two/parsers/__init__.py
+- scripts/stage_two/parser_registry/resolver.py
+
+Что сделать:
+1. Resolve parser through ParserResolver only.
+2. No hardcoded missing parser class mappings.
+3. HOST_PARSER_CLASSES или equivalent должен включать все implemented Host parser classes.
+4. DNS parser mapping должен включать DNS packet/text/csv classes.
+5. schema_version_id must be resolved from schema_versions if seed exists.
+6. Avoid normalized_artifacts.schema_version_id=None unless schema truly unavailable.
+7. parser_runs include:
+   - parser_id;
+   - schema_version_id;
+   - status;
+   - counters;
+   - error_message.
+8. normalized_artifacts include:
+   - row_count;
+   - relative path;
+   - content hash;
+   - schema_version;
+   - parser_run_id.
+
+Критерии приемки:
+- All active registry classes import successfully.
+- normalize-format direct smoke works for representative DNS/Host formats.
+- schema_version_id populated where seed exists.
+- compileall and DB smoke pass.
+
+Связь со следующей задачей:
+Task 31 standardizes parser/normalization reports.
+
+--------------------------------------------------------------------------------
+Task 31. Реализовать parser/normalization report writer
+--------------------------------------------------------------------------------
+
+Цель:
+Для каждого parser run сохранять diagnostic report в RU/EN parser и normalization folders.
+
+Файлы:
+- scripts/stage_two/reports/parser_reports.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- scripts/stage_two/storage/bootstrap.py, если нужно добавить dirs
+
+Reports path:
+- PATH_DATA_STORAGE/reports/en/stage-two/parser/
+- PATH_DATA_STORAGE/reports/ru/stage-two/parser/
+- PATH_DATA_STORAGE/reports/en/stage-two/normalization/
+- PATH_DATA_STORAGE/reports/ru/stage-two/normalization/
+
+Report fields:
+- parser_name
+- parser_version
+- branch
+- role
+- source_format
+- dataset_id
+- file_id
+- source_file_path
+- source_file_hash
+- rows_read
+- rows_parsed
+- rows_failed
+- output_artifact_path
+- status
+- warnings
+- errors sample
+- encoding/compression/base64 hints
+- schema mismatch counters
+- started_at/finished_at
+
+Критерии приемки:
+- Reports are created for success, partial success and failure.
+- parser_run.report_path populated where applicable.
+- No huge raw payload in report.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 32 validates LabelResolver/leakage integration.
+
+--------------------------------------------------------------------------------
+Task 32. Проверить LabelResolver integration и leakage guards
+--------------------------------------------------------------------------------
+
+Цель:
+Гарантировать безопасную label behavior across parser groups.
+
+Файлы:
+- scripts/stage_two/labels/resolver.py
+- parser classes touched in previous tasks
+- scripts/stage_two/quality/checkers.py, only if needed
+
+Что проверить/исправить:
+1. Embedded labels allowed when real fields and role-safe.
+2. label_mapping_rules allowed.
+3. Filename/directory/scenario hints conservative and record source/status.
+4. TEST filename heuristic disabled.
+5. Absence of label is not benign.
+6. label_binary=None for unlabeled.
+7. label columns never treated as model input features.
+8. source_file, dataset_role, scenario_name, parser metadata remain context/traceability only.
+
+Критерии приемки:
+- TEST filename heuristic smoke returns unlabeled unless explicit safe source exists.
+- TRAIN embedded label smoke works where applicable.
+- Leakage checks still pass.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 33 starts systematic test/smoke suite for parser groups.
+
+--------------------------------------------------------------------------------
+Task 33. Добавить direct parser smokes для каждого parser group
+--------------------------------------------------------------------------------
+
+Цель:
+Создать reproducible smokes для всех parser groups без full DB dependency.
+
+Файлы:
+- возможно scripts/stage_two/parser_smoke.py
+- или tests/smoke scripts if project structure exists
+
+Parser groups:
+1. DNS CSV.
+2. DNS pcap.csv.
+3. DNS TXT.
+4. Packet capture pcap/cap/pcapng.
+5. Host CSV.
+6. Host JSON/JSON-lines.
+7. Host line logs.
+8. Host metrics logs.
+9. Host syscall/API traces.
+10. BSON.
+11. NetFlow/WLS.
+12. XML.
+
+Что проверить:
+- ParserResult counters.
+- Required normalized event fields.
+- event_index for ordered streams.
+- timestamp_type handling.
+- raw_fields_json preservation.
+- status calculation.
+
+Критерии приемки:
+- At least one direct smoke per parser group.
+- Smokes can run without modifying real raw datasets.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 34 adds targeted encoding/base64/compression smokes.
+
+--------------------------------------------------------------------------------
+Task 34. Добавить base64/encoding/compression smokes
+--------------------------------------------------------------------------------
+
+Цель:
+Проверить UniversalInputReader и parsers на закодированных/сжатых/разных encoding inputs.
+
+Что проверить:
+1. base64 CSV.
+2. base64 JSON-lines.
+3. base64 raw log line.
+4. base64 BSON bytes if feasible.
+5. base64 pcap bytes if feasible.
+6. utf-8.
+7. utf-8-sig.
+8. cp1252.
+9. latin-1.
+10. gzip text.
+11. invalid base64.
+12. oversized base64.
+
+Критерии приемки:
+- Valid encoded samples parse.
+- Invalid encoded samples produce controlled warning/failure.
+- No raw hash mutation.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 35 validates catalog integration and rollback behavior.
+
+--------------------------------------------------------------------------------
+Task 35. Добавить full catalog rollback smokes
+--------------------------------------------------------------------------------
+
+Цель:
+Проверить полный chain: parser_registry -> catalog ingestion -> mark-ready -> normalization -> Parquet -> PostgreSQL artifacts.
+
+Файлы:
+- scripts/stage_two/e2e_dry_run.py, if extended
+- new scripts/stage_two/parser_catalog_smoke.py, if better
+
+Что проверить:
+1. Create temporary raw files for representative formats.
+2. catalog ingest.
+3. mark READY_FOR_PARSING.
+4. normalize selected format.
+5. Assert parser_runs created.
+6. Assert normalized_artifacts registered.
+7. Assert Parquet output exists.
+8. Rollback synthetic DB rows where smoke supports rollback.
+
+Required smoke cases:
+- host:TRAIN:auth.log
+- host:VALIDATION:netflow_day
+- host:TEST:bson
+- dns:TRAIN:csv
+- dns:VALIDATION:pcap
+
+Критерии приемки:
+- All required cases pass.
+- Synthetic artifacts do not pollute production state, or are isolated in temp/dry-run storage.
+- compileall and DB smoke pass.
+
+Связь со следующей задачей:
+Task 36 validates CLI and coverage behavior after all parsers are connected.
+
+--------------------------------------------------------------------------------
+Task 36. Проверить CLI parser-coverage, mark-ready, normalize-format, normalize-all
+--------------------------------------------------------------------------------
+
+Цель:
+Проверить новые operational commands как пользовательский workflow.
+
+Команды:
+python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage host
+python manage.py stage-two parser-coverage dns
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 10
+python manage.py stage-two normalize-all --branch host --limit 10
+python manage.py stage-two normalize-all --branch dns --limit 10
+
+Что проверить:
+1. parser-coverage shows all listed source_format covered or empty bucket with active parser available.
+2. mark-ready dry-run does not write.
+3. mark-ready apply writes only allowed statuses.
+4. normalize-format handles exactly selected branch/role/source_format.
+5. normalize-all does not mix branch/roles.
+6. Existing normalize-dns/normalize-host still work.
+
+Критерии приемки:
+- CLI smokes pass.
+- Coverage reports created in RU/EN.
+- No old command regression.
+
+Связь со следующей задачей:
+Task 37 runs quality/leakage/readiness checks after parser outputs exist.
+
+--------------------------------------------------------------------------------
+Task 37. Запустить DuckDB, leakage и readiness checks
+--------------------------------------------------------------------------------
+
+Цель:
+Убедиться, что parser expansion не ломает downstream Stage Two checks.
+
+Команды:
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+Что проверить:
+1. DuckDB views can read new Parquet schemas with union_by_name.
+2. Required normalized columns exist.
+3. Split contamination checks pass.
+4. Leakage checker finds no forbidden X columns due to parser metadata.
+5. readiness_check updated only if needed; do not weaken checks.
+
+Критерии приемки:
+- DuckDB check report SUCCESS or expected non-critical warning on empty buckets.
+- Leakage CRITICAL count = 0.
+- Readiness checker does not fail due to parser coverage if implementation complete.
+
+Связь со следующей задачей:
+Task 38 updates documentation and reports.
+
+--------------------------------------------------------------------------------
+Task 38. Обновить RU/EN документацию parser strategy и README
+--------------------------------------------------------------------------------
+
+Цель:
+Задокументировать новое покрытие parsers и operational commands.
+
+Файлы:
+- docs/ru/normalization/parser_strategy.md
+- docs/en/normalization/parser_strategy.md
+- docs/ru/normalization/README.md
+- docs/en/normalization/README.md
+- reports/ru/stage-two/parser/parser_coverage_matrix.md
+- reports/en/stage-two/parser/parser_coverage_matrix.md
+
+Что включить:
+1. Parser class per source_format.
+2. Branch/role coverage.
+3. Base64/encoding/compression behavior.
+4. Error status behavior.
+5. Single-format normalization examples.
+6. Batch normalization examples.
+7. mark-ready workflow.
+8. Known limitations if any remain.
+
+Критерии приемки:
+- RU/EN docs updated.
+- Commands in docs match implemented CLI.
+- compileall and git diff --check pass.
+
+Связь со следующей задачей:
+Task 39 prepares final validation script/command list for user.
+
+--------------------------------------------------------------------------------
+Task 39. Подготовить финальный Codex summary template и validation commands
+--------------------------------------------------------------------------------
+
+Цель:
+Сделать единый формат финального отчета Codex после реализации всей цепочки.
+
+Финальный ответ Codex должен включать:
+1. Files changed.
+2. New parser classes.
+3. Parser coverage table.
+4. Commands executed.
+5. Test/smoke results.
+6. Remaining unsupported edge cases, only if truly unavoidable.
+7. Exact commands to run full staged validation.
+
+Staged validation commands:
+python manage.py stage-two bootstrap-storage
+python -m alembic -c scripts/db/migrations/alembic.ini upgrade head
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two catalog-ingest
+python manage.py stage-two parser-coverage
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 10
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 10
+python manage.py stage-two normalize-all --branch dns --limit 100
+python manage.py stage-two normalize-all --branch host --limit 100
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+Критерии приемки:
+- Summary template exists in docs/report or final response.
+- Validation commands reflect actual CLI.
+- No unverified claim of full-corpus success unless full-corpus was actually run.
+
+Связь со следующей задачей:
+Task 40 is final acceptance gate.
+
+--------------------------------------------------------------------------------
+Task 40. Финальный acceptance gate для всей цепочки
+--------------------------------------------------------------------------------
+
+Цель:
+Подтвердить, что большая задача закрыта не только по коду, но и по operational readiness.
+
+Финальные acceptance criteria:
+[ ] All source formats in requested list are recognized by scanner/source_format inference.
+[ ] Every listed source_format has parser registry entry.
+[ ] Every listed source_format has active parser class for relevant branch/role where files exist.
+[ ] ParserResolver resolves every listed format to concrete class or reports empty bucket with active parser available.
+[ ] Host netflow_day, netflow_ids, wls_day are no longer planned/inactive gaps.
+[ ] normalize-format processes exactly one branch/role/source_format.
+[ ] normalize-all processes all READY files for branch.
+[ ] Existing normalize-dns and normalize-host commands still work.
+[ ] Parser reads raw, encoded, base64 and common compressed inputs where applicable.
+[ ] Parser handles UTF-8, UTF-8-SIG, cp1252, latin-1 and binary formats safely.
+[ ] Bad rows/files produce FAILED/PARTIAL statuses and reports, not silent data loss.
+[ ] Raw files are never modified.
+[ ] Normalized events are written to Parquet, not PostgreSQL payload tables.
+[ ] parser_runs and normalized_artifacts are registered in PostgreSQL Catalog.
+[ ] schema_version_id is populated where normalized schema seed exists.
+[ ] Traceability raw -> parser_run -> normalized_artifact is preserved.
+[ ] TRAIN/VALIDATION/TEST remain physically and logically separated.
+[ ] TEST filename heuristic remains disabled.
+[ ] Missing values are NULL/None.
+[ ] Unknown fields are preserved in raw_fields_json/features_json/metadata_json.
+[ ] Parser coverage report is generated in RU/EN reports.
+[ ] compileall passes.
+[ ] git diff --check passes.
+[ ] scripts.db.smoke_check passes.
+[ ] At least one direct smoke exists per parser group.
+[ ] At least one catalog rollback smoke validates parser_registry -> normalization -> Parquet -> catalog artifact registration.
+
+Final commands:
+python -m compileall manage.py config.py scripts
+git diff --check
+python -m scripts.db.smoke_check
+python -m alembic -c scripts/db/migrations/alembic.ini current
+python manage.py stage-two parser-coverage
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+Итоговый статус, который можно писать только после успешного прохождения Task 40:
+"Stage Two parser layer расширен non-breaking способом: все заявленные source_format buckets распознаются, имеют active parser coverage, могут нормализоваться через single-format или batch workflow, пишут normalized Parquet artifacts и сохраняют PostgreSQL Catalog traceability."
+
+================================================================================
+4. РЕКОМЕНДУЕМОЕ РАЗДЕЛЕНИЕ НА CODEx-ПРОМПТЫ
+================================================================================
+
+Ниже - удобные группы, если задачи нужно давать Codex частями, а не все сразу.
+
+Prompt Pack 1: Baseline + CLI/config safety
+- Task 01
+- Task 02
+- Task 03
+
+Prompt Pack 2: UniversalInputReader foundation
+- Task 04
+- Task 05
+- Task 06
+- Task 07
+- Task 08
+
+Prompt Pack 3: Scanner + registry + coverage
+- Task 09
+- Task 10
+- Task 11
+- Task 12
+
+Prompt Pack 4: Operational commands
+- Task 13
+- Task 14
+- Task 15
+
+Prompt Pack 5: DNS parsers and packet captures
+- Task 16
+- Task 17
+- Task 18
+- Task 19
+- Task 20
+
+Prompt Pack 6: Host structured/log/metrics parsers
+- Task 21
+- Task 22
+- Task 23
+- Task 24
+- Task 25
+
+Prompt Pack 7: Host binary/netflow/xml/fallback parsers
+- Task 26
+- Task 27
+- Task 28
+- Task 29
+
+Prompt Pack 8: Integration with services/reports/labels
+- Task 30
+- Task 31
+- Task 32
+
+Prompt Pack 9: Smokes, docs, final readiness
+- Task 33
+- Task 34
+- Task 35
+- Task 36
+- Task 37
+- Task 38
+- Task 39
+- Task 40
+
+================================================================================
+5. КРАТКИЙ ВАРИАНТ ДЛЯ ВСТАВКИ В CODEX ПЕРЕД КАЖДОЙ ЗАДАЧЕЙ
+================================================================================
+
+Работай строго внутри текущей Stage Two architecture. Не ломай existing commands. Не меняй raw datasets. PostgreSQL используй только как catalog/control plane. Большие normalized outputs пиши только в Parquet через существующий writer. Сохраняй traceability raw -> parser_run -> normalized_artifact. Не смешивай TRAIN/VALIDATION/TEST. TEST не используй для filename label heuristic, training, preprocessing fit или threshold tuning. Missing values сохраняй как NULL/None. Unknown fields сохраняй в raw_fields_json/features_json/metadata_json. После изменений запускай compileall и git diff --check; для DB/catalog изменений запускай scripts.db.smoke_check. В конце дай список changed files, commands executed, smoke results и next task.
+
+================================================================================
+6. ФИНАЛЬНЫЙ ВЫВОД ПО ДЕКОМПОЗИЦИИ
+================================================================================
+
+Большую задачу нельзя реализовывать как один огромный patch. Безопасный порядок такой:
+1. Сначала стабилизировать config/CLI и source_format inference.
+2. Затем сделать UniversalInputReader.
+3. Затем привести parser registry/resolver к проверяемому состоянию.
+4. Затем добавить parser coverage и mark-ready workflow.
+5. Затем реализовать parser groups от DNS к Host, от простых text/csv к binary/netflow/xml.
+6. Затем подключить все classes в normalization services через ParserResolver.
+7. Затем закрыть reports, smokes, docs и final readiness.
+
+Такой порядок сохраняет логику Stage Two, не ломает текущую архитектуру и позволяет на каждом шаге получать проверяемый результат.

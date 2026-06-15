@@ -1,0 +1,31 @@
+--------------------------------------------------------------------------------
+Task 03. Проверить и подготовить backward-compatible CLI routing
+--------------------------------------------------------------------------------
+
+Цель:
+Подготовить CLI для новых команд parser-coverage, mark-ready, normalize-format, normalize-all без поломки существующих commands.
+
+Файлы:
+- manage.py
+- scripts/router_script.py
+- scripts/stage_two/cli.py
+
+Что сделать:
+1. Проверить, как manage.py сейчас обрабатывает module/service/action и extra args.
+2. Если используется parse_known_args() и extra args теряются, добавить безопасный путь передачи extra args в Stage Two router.
+3. Старые команды должны остаться рабочими в прежнем формате.
+4. Unknown commands не должны silently pass для новых Stage Two команд.
+5. Добавить parsing helpers, но пока не добавлять бизнес-логику mark-ready/normalize-format.
+
+Ограничения:
+- Не менять handlers CLI semantics.
+- Не ломать module/service/action interface.
+
+Критерии приемки:
+- Старые Stage Two команды вызываются как раньше.
+- handlers commands не ломаются.
+- Можно безопасно добавить новые service handlers в следующих задачах.
+- compileall и git diff --check проходят.
+
+Связь со следующей задачей:
+Task 04 начинает foundation чтения файлов, не зависящий от CLI.

@@ -54,6 +54,11 @@ PATH_TEMP_DATA: str = _storage_path("temp_data")
 PATH_LOGS: str = _storage_path("logs")
 PATH_FILTER_LOG: str = _storage_path("logs", "filter_log")
 
+
+# -------------------------- DB CONNECTION ---------------------------  #
+
+DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+
 # ------------------------ PATH CONFIG -------------------------------- #
 
 CONFIG_PATH: str = _storage_path("config")

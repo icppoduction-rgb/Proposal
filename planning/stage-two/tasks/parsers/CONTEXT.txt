@@ -1,0 +1,160 @@
+================================================================================
+0. КОНТЕКСТ, КОТОРЫЙ НЕЛЬЗЯ ТЕРЯТЬ
+================================================================================
+
+0.1. Текущий статус проекта
+
+В проекте уже реализован Stage Two Data Normalization foundation:
+- PostgreSQL Catalog;
+- SQLAlchemy repositories;
+- Alembic migration;
+- DB smoke checks;
+- storage bootstrap;
+- catalog ingestion;
+- parser registry seed/resolver;
+- normalized schema contracts;
+- Parquet writer;
+- LabelResolver;
+- DuckDB checks;
+- quality/leakage checks;
+- traceability services;
+- MVP DNS/Host parser classes.
+
+Уже существующие MVP parser classes:
+- DNS:
+  - DnsCsvParser;
+  - DnsPcapCsvParser;
+  - DnsTxtDomainListParser;
+  - DnsPacketCaptureParser.
+- Host:
+  - HostCsvParser;
+  - HostJsonLinesParser;
+  - HostLineLogParser;
+  - HostSyscallTraceParser;
+  - HostPacketCaptureParser;
+  - HostBsonSandboxParser.
+
+Главные известные ограничения:
+- full-corpus processing всех датасетов еще не выполнен;
+- parser coverage неполный;
+- Host netflow_day, netflow_ids, wls_day сейчас являются главным gap;
+- catalog-ingest не переводит файлы автоматически в READY_FOR_PARSING;
+- normalization services обрабатывают только dataset_files.status = READY_FOR_PARSING;
+- feature/model-ready production CLI не входит в текущую parser-задачу.
+
+0.2. Главная цель большой задачи
+
+Реализовать non-breaking расширение Stage Two parser layer так, чтобы Stage Two мог читать, парсить и нормализовать все source_format buckets из списка ниже через существующую архитектуру:
+
+- auth.log
+- bson
+- cap
+- cpu.log
+- csv
+- diskio.log
+- filesystem.log
+- fsstat.log
+- ghc
+- info
+- journal
+- journal~
+- json
+- json-1
+- load.log
+- log
+- log-1
+- log-2
+- log-3
+- mail-info-1
+- mail-warn-1
+- mainlog
+- mainlog-1
+- mainlog-2
+- mainlog-3
+- memory.log
+- messages
+- messages-1
+- netflow_day
+- netflow_ids
+- network.log
+- pcap
+- pcap.csv
+- pcapng
+- process.log
+- process.summary.log
+- sc
+- service.log
+- socket.summary.log
+- syslog
+- syslog-1
+- syslog-2
+- syslog-3
+- syslog-4
+- syslog.log
+- txt
+- uptime.log
+- wls_day
+- xml
+
+0.3. Архитектурная цепочка, которую нельзя ломать
+
+RAW DATASETS
+  -> CATALOG INGESTION
+  -> POSTGRESQL CATALOG
+  -> PARSER REGISTRY / RESOLVER
+  -> PARSER RUN
+  -> NORMALIZED EVENTS
+  -> PARQUET NORMALIZED LAYER
+  -> NORMALIZED_ARTIFACTS REGISTRATION
+  -> DUCKDB QUALITY / LEAKAGE CHECKS
+  -> TRACEABILITY
+
+0.4. Жесткие инварианты
+
+- Raw datasets не изменять, не исправлять, не перемещать, не перезаписывать.
+- PostgreSQL не использовать как storage для больших normalized events, feature matrix, packet payload, BSON streams или raw logs.
+- Большие outputs писать в Parquet через существующий Parquet writer.
+- Сохранять traceability raw file -> parser_run -> normalized_artifact.
+- TRAIN, VALIDATION и TEST не смешивать.
+- TEST не использовать для filename-based label heuristic, preprocessing fit, model training или threshold tuning.
+- Labels не должны попадать в X/features как input columns.
+- Missing/unknown значения писать как None/NULL, а не synthetic placeholders.
+- Нестандартные поля сохранять в raw_fields_json, features_json или metadata_json.
+- Существующие команды normalize-dns и normalize-host должны продолжить работать.
+- Новый функционал должен быть backward-compatible.
+
+0.5. Существующие команды, которые должны продолжить работать
+
+python manage.py stage-two bootstrap-storage
+python manage.py stage-two catalog-ingest
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two normalize-dns [limit]
+python manage.py stage-two normalize-host [limit]
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python manage.py stage-two trace-artifact <id-or-path>
+
+0.6. Новые команды, которые должны появиться по итогам задач
+
+Предпочтительный CLI-вариант:
+
+python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage host
+python manage.py stage-two parser-coverage dns
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format pcap --limit 100
+
+python manage.py stage-two normalize-all --branch host --limit 1000
+python manage.py stage-two normalize-all --branch dns --limit 1000
+
+Fallback-вариант, если текущий module/service/action router нельзя безопасно расширить:
+
+python manage.py stage-two parser-coverage host
+python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
+python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
+python manage.py stage-two normalize-format host:TRAIN:auth.log:100
+python manage.py stage-two normalize-all host:1000
