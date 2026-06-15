@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any
 
@@ -23,32 +24,62 @@ from scripts.stage_two.traceability import TraceabilityError, TraceabilityServic
 
 console = Console()
 
+PLANNED_STAGE_TWO_COMMANDS: frozenset[str] = frozenset(
+    {
+        "parser-coverage",
+        "mark-ready",
+        "normalize-format",
+        "normalize-all",
+    }
+)
 
-def router_stage_two(service: str | None, action: str | None = None) -> None:
+
+def router_stage_two(
+    service: str | None,
+    action: str | None = None,
+    *,
+    extra_args: Sequence[str] | None = None,
+) -> None:
     """Route Stage Two CLI service names to implementation functions."""
+    command_args = _command_args(action, extra_args)
     routes = {
-        "bootstrap-storage": _bootstrap_storage,
-        "catalog-ingest": _catalog_ingest,
-        "seed-parser-registry": _seed_parser_registry,
-        "normalize-dns": lambda: _normalize_branch("dns", action),
-        "normalize-host": lambda: _normalize_branch("host", action),
-        "run-duckdb-checks": _run_duckdb_checks,
-        "run-leakage-checks": _run_leakage_checks,
-        "trace-artifact": lambda: _trace_artifact(action),
+        "bootstrap-storage": lambda args: _run_no_arg("bootstrap-storage", args, _bootstrap_storage),
+        "catalog-ingest": lambda args: _run_no_arg("catalog-ingest", args, _catalog_ingest),
+        "seed-parser-registry": lambda args: _run_no_arg(
+            "seed-parser-registry",
+            args,
+            _seed_parser_registry,
+        ),
+        "normalize-dns": lambda args: _normalize_branch("dns", args),
+        "normalize-host": lambda args: _normalize_branch("host", args),
+        "run-duckdb-checks": lambda args: _run_no_arg(
+            "run-duckdb-checks",
+            args,
+            _run_duckdb_checks,
+        ),
+        "run-leakage-checks": lambda args: _run_no_arg(
+            "run-leakage-checks",
+            args,
+            _run_leakage_checks,
+        ),
+        "trace-artifact": _trace_artifact,
     }
     handler = routes.get(service or "")
     if handler is None:
-        console.print(manage_commands)
+        if service in PLANNED_STAGE_TWO_COMMANDS:
+            _print_planned_command(service, command_args)
+        else:
+            _print_unknown_stage_two_command(service)
         return
     try:
-        handler()
+        handler(command_args)
     except ValueError as exc:
         console.print(
             {
                 "service": f"stage-two {service}",
                 "status": "ERROR",
                 "error": str(exc),
-            }
+            },
         )
 
 
@@ -89,8 +120,8 @@ def _seed_parser_registry() -> None:
     )
 
 
-def _normalize_branch(branch: str, action: str | None) -> None:
-    limit = _parse_optional_limit(action)
+def _normalize_branch(branch: str, args: Sequence[str]) -> None:
+    limit = _parse_optional_limit(args)
     service_class = DnsNormalizationService if branch == "dns" else HostNormalizationService
 
     with session_scope() as session:
@@ -151,8 +182,13 @@ def _run_leakage_checks() -> None:
     )
 
 
-def _trace_artifact(action: str | None) -> None:
-    if not action:
+def _trace_artifact(args: Sequence[str]) -> None:
+    artifact_ref = _parse_required_single_arg(
+        args,
+        service="trace-artifact",
+        usage="python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>",
+    )
+    if not artifact_ref:
         console.print(
             {
                 "service": "stage-two trace-artifact",
@@ -166,9 +202,9 @@ def _trace_artifact(action: str | None) -> None:
         with session_scope() as session:
             service = TraceabilityService(session)
             chain = (
-                service.get_by_model_ready_id(int(action))
-                if action.isdecimal()
-                else service.get_by_model_ready_path(action)
+                service.get_by_model_ready_id(int(artifact_ref))
+                if artifact_ref.isdecimal()
+                else service.get_by_model_ready_path(artifact_ref)
             )
         console.print(json.dumps(asdict(chain), indent=2, sort_keys=True, default=_json_default))
     except TraceabilityError as exc:
@@ -181,12 +217,63 @@ def _trace_artifact(action: str | None) -> None:
         )
 
 
-def _parse_optional_limit(action: str | None) -> int | None:
-    if action is None:
+def _command_args(action: str | None, extra_args: Sequence[str] | None) -> list[str]:
+    args: list[str] = []
+    if action is not None:
+        args.append(action)
+    args.extend(extra_args or [])
+    return args
+
+
+def _run_no_arg(service: str, args: Sequence[str], handler: Callable[[], None]) -> None:
+    _require_no_args(service, args)
+    handler()
+
+
+def _require_no_args(service: str, args: Sequence[str]) -> None:
+    if args:
+        raise ValueError(f"{service} does not accept extra arguments: {' '.join(args)}")
+
+
+def _parse_optional_limit(args: Sequence[str]) -> int | None:
+    if not args:
         return None
-    if action.isdecimal():
-        return int(action)
+    if len(args) > 1:
+        raise ValueError(f"normalize accepts at most one limit argument, got: {' '.join(args)}")
+    limit = args[0]
+    if limit.isdecimal():
+        return int(limit)
     raise ValueError("normalize action argument must be a non-negative integer limit when provided.")
+
+
+def _parse_required_single_arg(args: Sequence[str], *, service: str, usage: str) -> str | None:
+    if not args:
+        return None
+    if len(args) > 1:
+        raise ValueError(f"{service} accepts exactly one argument. Usage: {usage}")
+    return args[0]
+
+
+def _print_planned_command(service: str, args: Sequence[str]) -> None:
+    console.print(
+        {
+            "service": f"stage-two {service}",
+            "status": "NOT_IMPLEMENTED",
+            "args": list(args),
+            "message": "CLI route is reserved for a later task; business logic is not implemented yet.",
+        }
+    )
+
+
+def _print_unknown_stage_two_command(service: str | None) -> None:
+    console.print(
+        {
+            "service": f"stage-two {service or ''}".strip(),
+            "status": "ERROR",
+            "error": "unknown Stage Two command",
+        }
+    )
+    console.print(manage_commands)
 
 
 def _json_default(value: Any) -> str:

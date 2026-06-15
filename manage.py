@@ -7,6 +7,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("module", nargs="?")
 parser.add_argument("service", nargs="?")
 parser.add_argument("action", nargs="?")
+parser.add_argument("extra_args", nargs=argparse.REMAINDER)
 
 
 # Функция управления
@@ -17,9 +18,9 @@ def manage() -> None:
 
     from scripts.router_script import router_commands
 
-    args, _unknown = parser.parse_known_args()
+    args, unknown = parser.parse_known_args()
 
-    router_commands(args.module, args.service, args.action)
+    router_commands(args.module, args.service, args.action, [*args.extra_args, *unknown])
 
 if __name__ == "__main__":
     manage()
