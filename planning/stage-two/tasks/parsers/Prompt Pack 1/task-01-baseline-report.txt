@@ -1,0 +1,257 @@
+Task 01 baseline report: Stage Two parser contracts
+====================================================
+
+Scope
+-----
+- Business logic was not changed.
+- Parser implementation was not started.
+- This report records the current Stage Two contracts for Task 02+.
+
+Planning constraints observed
+-----------------------------
+- Tasks must be executed strictly in order.
+- Do not change raw datasets.
+- PostgreSQL is used as catalog/control plane only.
+- Large normalized outputs must go to Parquet through the existing writer.
+- Preserve traceability: raw file -> parser_run -> normalized_artifact.
+- Do not mix TRAIN/VALIDATION/TEST.
+- TEST must not be used for filename label heuristic, training, preprocessing fit, or threshold tuning.
+
+Actual parser contract names
+----------------------------
+- Base parser class: BaseParser.
+- Parser context class: ParserContext.
+- Parser result class: ParserResult.
+- ParseResult is not present in the codebase.
+- ParsedEvent is not present in the codebase.
+- Parsed events are currently plain dict[str, Any] values inside ParserResult.events.
+
+ParserContext fields
+--------------------
+- dataset_id: int | None
+- file_id: int | None
+- dataset_name: str
+- dataset_role: str
+- branch: str
+- source_format: str
+- source_file_path: str
+- source_file_hash: str | None
+- parser_run_id: int | None = None
+- metadata: dict[str, Any] = default empty dict
+
+ParserResult fields
+-------------------
+Required constructor fields:
+- rows_read: int
+- rows_parsed: int
+- rows_failed: int
+- events: list[dict[str, Any]]
+
+Optional/default fields:
+- warnings: list[str] = default empty list
+
+Computed properties:
+- events_emitted: int, returns len(events)
+- has_failures: bool, returns rows_failed > 0
+
+Parsed event required fields
+----------------------------
+BaseParser.validate_result() checks that every emitted event dict contains:
+- event_uid
+- dataset_name
+- dataset_role
+- branch
+- source_format
+- source_file_path
+- parser_name
+- parser_version
+- schema_name
+- schema_version
+- timestamp_type
+- entity_type
+- event_type
+- modality
+- label_source
+- label_status
+- created_at
+
+BaseParser.base_event() also supplies common optional/default fields including:
+- dataset_id
+- file_id
+- source_file_hash
+- parser_run_id
+- label_binary
+- label_family
+- label_subtype
+- label_confidence
+- label_mapping_rule_id
+- features_json
+- raw_fields_json
+- metadata_json
+
+Implemented parser classes
+--------------------------
+DNS:
+- DnsCsvParser
+- DnsPcapCsvParser
+- DnsTxtDomainListParser
+
+Packet capture:
+- PacketCaptureParser
+- DnsPacketCaptureParser
+- HostPacketCaptureParser
+- PacketRecord
+- PacketSummary
+
+Host:
+- HostCsvParser
+- HostJsonLinesParser
+- HostLineLogParser
+- HostSyscallTraceParser
+
+BSON:
+- HostBsonSandboxParser
+
+Known missing/planned parser class:
+- HostNetflowParser is referenced by parser_registry_seed.json but is not implemented.
+- The host_netflow_parser registry entry is inactive.
+
+Normalization service behavior
+------------------------------
+DnsNormalizationService:
+- Resolves parser metadata through ParserResolver.resolve_or_mark_unsupported().
+- Uses DNS_PARSER_CLASSES hardcoded map:
+  - DnsCsvParser
+  - DnsPacketCaptureParser
+  - DnsPcapCsvParser
+  - DnsTxtDomainListParser
+- If resolver returns None, file is marked UNSUPPORTED_FORMAT and no artifact is created.
+- If parser_class is not in the map, file is marked SKIPPED and no artifact is created.
+- Creates parser_run before parsing with status RUNNING.
+- Builds ParserContext from DatasetFile and parser_run.id.
+- Calls parser.parse(Path(dataset_file.file_path), context).
+- Sets parser_run status SUCCESS or PARTIAL_SUCCESS based on ParserResult.has_failures.
+- Writes normalized events through ParquetArtifactWriter.write_normalized().
+- Registers normalized_artifact through writer.register_normalized_artifact().
+- Current schema_version_id passed to normalized_artifact is None.
+- Marks file PARSED or PARTIALLY_PARSED.
+- On exception: fail_parser_run(), mark file FAILED, return None.
+
+HostNormalizationService:
+- Same lifecycle as DNS service.
+- Uses HOST_PARSER_CLASSES hardcoded map:
+  - HostBsonSandboxParser
+  - HostCsvParser
+  - HostJsonLinesParser
+  - HostLineLogParser
+  - HostPacketCaptureParser
+  - HostSyscallTraceParser
+- Does not include HostNetflowParser.
+- Uses result.events[0]["modality"] when events exist; otherwise modality defaults to host.
+
+ParserResolver behavior
+-----------------------
+- ParserResolver.resolve() delegates to ParserRepository.resolve_parser().
+- ParserResolver.resolve_for_file() uses DatasetFile.branch, role, and source_format.
+- ParserResolver.resolve_or_mark_unsupported() marks DatasetFile as UNSUPPORTED_FORMAT when no parser is found.
+- ParserRepository.resolve_parser() selects ParserRegistry rows where:
+  - branch matches
+  - source_format matches
+  - is_active is true
+  - supported_role equals requested role or is null
+- Result ordering is priority ascending, then id ascending, with limit 1.
+
+Scanner behavior
+----------------
+- DatasetFileScanner.scan() recursively scans files under a root path.
+- Branch inference checks root path and relative path parts against BRANCH_VALUES; fallback is hybrid.
+- Role inference checks relative path parts against ROLE_VALUES; fallback is EXPERIMENTS.
+- source_format inference:
+  - lowercases file name
+  - checks each KNOWN_SOURCE_FORMATS value in order
+  - returns source_format on exact file name match
+  - returns source_format when file name ends with "." + source_format
+  - falls back to file suffix without dot
+  - falls back to unknown when there is no suffix
+- KNOWN_SOURCE_FORMATS already includes compound/special formats such as:
+  - process.summary.log
+  - socket.summary.log
+  - mail-info-1
+  - mail-warn-1
+  - netflow_day
+  - netflow_ids
+  - wls_day
+  - pcap.csv
+  - pcapng
+  - journal~
+  - json-1
+  - log-1/log-2/log-3
+  - mainlog-1/mainlog-2/mainlog-3
+  - messages-1
+  - syslog-1/syslog-2/syslog-3/syslog-4
+
+CLI behavior
+------------
+- manage.py parses module/service/action and delegates to scripts.router_script.router_commands().
+- scripts.router_script.router_commands() delegates module "stage-two" to router_stage_two().
+- Existing Stage Two routes:
+  - bootstrap-storage
+  - catalog-ingest
+  - seed-parser-registry
+  - normalize-dns [optional non-negative integer limit]
+  - normalize-host [optional non-negative integer limit]
+  - run-duckdb-checks
+  - run-leakage-checks
+  - trace-artifact <model_ready_id_or_artifact_path>
+- Not present yet:
+  - parser-coverage
+  - mark-ready
+  - normalize-format
+  - normalize-all
+
+Config baseline
+---------------
+- SORT_PATH_DNS_FILE exists in config.py.
+- SORT_PATH_HOST_FILE exists in config.py.
+- PARSER_REGISTRY_SEED_PATH points to scripts/stage_two/parser_registry/parser_registry_seed.json.
+- Stage Two storage/report/parquet/schema paths are centralized in config.py.
+
+DB/catalog status constraints relevant to parser work
+-----------------------------------------------------
+DatasetFile statuses:
+- DISCOVERED
+- REGISTERED
+- CHANGED
+- EMPTY_FILE
+- UNSUPPORTED_FORMAT
+- READY_FOR_PARSING
+- PARSED
+- PARTIALLY_PARSED
+- FAILED
+- SKIPPED
+
+ParserRun statuses:
+- RUNNING
+- SUCCESS
+- PARTIAL_SUCCESS
+- FAILED
+- SKIPPED
+
+NormalizedArtifact statuses use RUN_STATUS_VALUES:
+- PENDING
+- RUNNING
+- SUCCESS
+- PARTIAL_SUCCESS
+- FAILED
+- SKIPPED
+- BLOCKED
+
+Change points for later tasks
+-----------------------------
+- Task 02 can safely add config aliases if needed, but SORT_PATH_DNS_FILE and SORT_PATH_HOST_FILE already exist.
+- CLI extensions should preserve existing router_stage_two() routes and manage_commands output.
+- If a future task introduces ParseResult, keep ParserResult backward compatibility or add an alias only after reviewing imports.
+- If a future task introduces ParsedEvent, keep dict event compatibility because parsers, validators, and Parquet writer currently expect dict events.
+- Parser class loading is currently hardcoded in DNS_PARSER_CLASSES and HOST_PARSER_CLASSES; registry-driven loading should be introduced with fallback compatibility.
+- Scanner already has broad source_format coverage; Task 09 should start with tests/verification before changing inference logic.
+- HostNetflowParser is the main known registry/class gap and should not be activated before implementation and smokes.
