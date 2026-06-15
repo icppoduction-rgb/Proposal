@@ -25,6 +25,20 @@ from scripts.stage_two.parsers.input_reader import (
 )
 from scripts.stage_two.parsers.packet import DnsPacketCaptureParser, HostPacketCaptureParser, PacketCaptureParser
 
+PARSER_CLASS_EXPORTS = {
+    "DnsCsvParser": DnsCsvParser,
+    "DnsPacketCaptureParser": DnsPacketCaptureParser,
+    "DnsPcapCsvParser": DnsPcapCsvParser,
+    "DnsTxtDomainListParser": DnsTxtDomainListParser,
+    "HostBsonSandboxParser": HostBsonSandboxParser,
+    "HostCsvParser": HostCsvParser,
+    "HostJsonLinesParser": HostJsonLinesParser,
+    "HostLineLogParser": HostLineLogParser,
+    "HostPacketCaptureParser": HostPacketCaptureParser,
+    "HostSyscallTraceParser": HostSyscallTraceParser,
+    "PacketCaptureParser": PacketCaptureParser,
+}
+
 __all__ = [
     "BaseParser",
     "DnsCsvParser",
@@ -38,6 +52,7 @@ __all__ = [
     "HostPacketCaptureParser",
     "HostSyscallTraceParser",
     "InputReaderError",
+    "PARSER_CLASS_EXPORTS",
     "PacketCaptureParser",
     "ParserContext",
     "ParserCounters",
