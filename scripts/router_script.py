@@ -1,9 +1,15 @@
 from collections.abc import Sequence
 
-from rich.console import Console
+try:
+    from rich.console import Console
+except ModuleNotFoundError:
+    class Console:  # type: ignore[no-redef]
+        """Minimal console fallback when rich is not installed."""
+
+        def print(self, value: object) -> None:
+            print(value)
 
 from config import manage_commands
-from scripts.handlers.router_handler import router_commands_handlers
 
 console = Console()
 
@@ -15,6 +21,8 @@ def router_commands(
 ) -> None:
 
     if module == "handlers":
+        from scripts.handlers.router_handler import router_commands_handlers
+
         router_commands_handlers(service, action)
 
     elif module == "stage-two":

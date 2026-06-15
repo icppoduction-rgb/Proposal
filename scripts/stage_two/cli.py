@@ -7,26 +7,29 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any
 
-from rich.console import Console
+try:
+    from rich.console import Console
+    from rich.table import Table
+except ModuleNotFoundError:
+    Table = None  # type: ignore[assignment]
+
+    class Console:  # type: ignore[no-redef]
+        """Minimal console fallback when rich is not installed."""
+
+        def print(self, value: object) -> None:
+            print(value)
 
 from config import manage_commands
 from scripts.db import session_scope
 from scripts.db.repositories import DataQualityRepository, DatasetFileRepository
-from scripts.stage_two.duckdb import DuckDBAnalyticsService
-from scripts.stage_two.ingestion.catalog_ingestion_service import ingest_configured_catalog_roots
-from scripts.stage_two.normalization.dns_service import DnsNormalizationService
-from scripts.stage_two.normalization.host_service import HostNormalizationService
-from scripts.stage_two.parser_registry.seed import seed_stage_two_metadata
-from scripts.stage_two.quality import LeakageChecker
-from scripts.stage_two.storage.bootstrap import bootstrap_stage_two_storage
-from scripts.stage_two.traceability import TraceabilityError, TraceabilityService
+from scripts.db.models.constants import BRANCH_VALUES
+from scripts.stage_two.parser_coverage import ParserCoverageResult, run_parser_coverage
 
 
 console = Console()
 
 PLANNED_STAGE_TWO_COMMANDS: frozenset[str] = frozenset(
     {
-        "parser-coverage",
         "mark-ready",
         "normalize-format",
         "normalize-all",
@@ -50,6 +53,7 @@ def router_stage_two(
             args,
             _seed_parser_registry,
         ),
+        "parser-coverage": _parser_coverage,
         "normalize-dns": lambda args: _normalize_branch("dns", args),
         "normalize-host": lambda args: _normalize_branch("host", args),
         "run-duckdb-checks": lambda args: _run_no_arg(
@@ -84,6 +88,8 @@ def router_stage_two(
 
 
 def _bootstrap_storage() -> None:
+    from scripts.stage_two.storage.bootstrap import bootstrap_stage_two_storage
+
     result = bootstrap_stage_two_storage()
     console.print(
         {
@@ -96,6 +102,8 @@ def _bootstrap_storage() -> None:
 
 
 def _catalog_ingest() -> None:
+    from scripts.stage_two.ingestion.catalog_ingestion_service import ingest_configured_catalog_roots
+
     results = ingest_configured_catalog_roots()
     console.print(
         {
@@ -107,6 +115,8 @@ def _catalog_ingest() -> None:
 
 
 def _seed_parser_registry() -> None:
+    from scripts.stage_two.parser_registry.seed import seed_stage_two_metadata
+
     result = seed_stage_two_metadata()
     console.print(
         {
@@ -120,7 +130,26 @@ def _seed_parser_registry() -> None:
     )
 
 
+def _parser_coverage(args: Sequence[str]) -> None:
+    branch = _parse_optional_branch(args, service="parser-coverage")
+    result = run_parser_coverage(branch=branch)
+    _print_parser_coverage_table(result)
+    console.print(
+        {
+            "service": "stage-two parser-coverage",
+            "status": result.status,
+            "branch": branch,
+            "rows": len(result.matrix),
+            "catalog_gap_rows": result.summary["catalog_gap_rows"],
+            "report_paths": result.report_paths,
+        }
+    )
+
+
 def _normalize_branch(branch: str, args: Sequence[str]) -> None:
+    from scripts.stage_two.normalization.dns_service import DnsNormalizationService
+    from scripts.stage_two.normalization.host_service import HostNormalizationService
+
     limit = _parse_optional_limit(args)
     service_class = DnsNormalizationService if branch == "dns" else HostNormalizationService
 
@@ -150,6 +179,8 @@ def _normalize_branch(branch: str, args: Sequence[str]) -> None:
 
 
 def _run_duckdb_checks() -> None:
+    from scripts.stage_two.duckdb import DuckDBAnalyticsService
+
     analytics = DuckDBAnalyticsService()
     report = analytics.run_checks()
     with session_scope() as session:
@@ -167,6 +198,9 @@ def _run_duckdb_checks() -> None:
 
 
 def _run_leakage_checks() -> None:
+    from scripts.stage_two.duckdb import DuckDBAnalyticsService
+    from scripts.stage_two.quality import LeakageChecker
+
     analytics = DuckDBAnalyticsService()
     with session_scope() as session:
         repository = DataQualityRepository(session)
@@ -183,6 +217,8 @@ def _run_leakage_checks() -> None:
 
 
 def _trace_artifact(args: Sequence[str]) -> None:
+    from scripts.stage_two.traceability import TraceabilityError, TraceabilityService
+
     artifact_ref = _parse_required_single_arg(
         args,
         service="trace-artifact",
@@ -246,6 +282,18 @@ def _parse_optional_limit(args: Sequence[str]) -> int | None:
     raise ValueError("normalize action argument must be a non-negative integer limit when provided.")
 
 
+def _parse_optional_branch(args: Sequence[str], *, service: str) -> str | None:
+    if not args:
+        return None
+    if len(args) > 1:
+        raise ValueError(f"{service} accepts at most one branch argument, got: {' '.join(args)}")
+    branch = args[0].strip().lower()
+    if branch not in BRANCH_VALUES:
+        allowed = ", ".join(BRANCH_VALUES)
+        raise ValueError(f"{service} branch must be one of: {allowed}")
+    return branch
+
+
 def _parse_required_single_arg(args: Sequence[str], *, service: str, usage: str) -> str | None:
     if not args:
         return None
@@ -274,6 +322,54 @@ def _print_unknown_stage_two_command(service: str | None) -> None:
         }
     )
     console.print(manage_commands)
+
+
+def _print_parser_coverage_table(result: ParserCoverageResult) -> None:
+    columns = (
+        "branch",
+        "role",
+        "source_format",
+        "files_count",
+        "parser_active",
+        "parser_class",
+        "parser_name",
+        "action",
+    )
+    if Table is None:
+        lines = ["\t".join(columns)]
+        for row in result.matrix:
+            lines.append(
+                "\t".join(
+                    (
+                        row.branch,
+                        row.role,
+                        row.source_format,
+                        str(row.files_count),
+                        "yes" if row.parser_active else "no",
+                        row.parser_class or "",
+                        row.parser_name or "",
+                        row.action,
+                    )
+                )
+            )
+        console.print("\n".join(lines))
+        return
+
+    table = Table(title="Stage Two parser coverage")
+    for column in columns:
+        table.add_column(column)
+    for row in result.matrix:
+        table.add_row(
+            row.branch,
+            row.role,
+            row.source_format,
+            str(row.files_count),
+            "yes" if row.parser_active else "no",
+            row.parser_class or "",
+            row.parser_name or "",
+            row.action,
+        )
+    console.print(table)
 
 
 def _json_default(value: Any) -> str:
