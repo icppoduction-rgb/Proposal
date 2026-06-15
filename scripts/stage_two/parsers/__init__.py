@@ -9,6 +9,11 @@ from scripts.stage_two.parsers.host import (
     HostLineLogParser,
     HostSyscallTraceParser,
 )
+from scripts.stage_two.parsers.input_reader import (
+    InputReaderError,
+    ReaderMetadata,
+    UniversalInputReader,
+)
 from scripts.stage_two.parsers.packet import DnsPacketCaptureParser, HostPacketCaptureParser, PacketCaptureParser
 
 __all__ = [
@@ -23,7 +28,10 @@ __all__ = [
     "HostLineLogParser",
     "HostPacketCaptureParser",
     "HostSyscallTraceParser",
+    "InputReaderError",
     "PacketCaptureParser",
     "ParserContext",
     "ParserResult",
+    "ReaderMetadata",
+    "UniversalInputReader",
 ]
