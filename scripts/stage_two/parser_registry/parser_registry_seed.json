@@ -47,7 +47,7 @@
       "parser_name": "dns_packet_capture_parser",
       "parser_version": "v1",
       "branch": "dns",
-      "source_formats": ["pcap"],
+      "source_formats": ["cap", "pcap", "pcapng"],
       "supported_roles": null,
       "normalized_schema_name": "normalized_event",
       "normalized_schema_version": "v1",
