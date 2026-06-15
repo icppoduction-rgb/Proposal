@@ -13,6 +13,7 @@ from typing import Any, BinaryIO, Literal, TextIO
 
 from config import (
     STAGE_TWO_MAX_ERROR_SAMPLES,
+    STAGE_TWO_MAX_RAW_PREVIEW_BYTES,
     STAGE_TWO_TEXT_ENCODINGS,
 )
 
@@ -29,6 +30,14 @@ InputReadMode = Literal[
 ]
 
 DEFAULT_BINARY_CHUNK_SIZE = 64 * 1024
+UTF8_BOM = b"\xef\xbb\xbf"
+TEXT_ENCODING_FALLBACKS: tuple[str, ...] = (
+    "utf-8",
+    "utf-8-sig",
+    "cp1252",
+    "latin-1",
+    "ascii",
+)
 
 
 @dataclass
@@ -36,6 +45,7 @@ class ReaderMetadata:
     """Runtime metadata collected while a raw input file is read."""
 
     encoding_hint: str | None = None
+    decode_error: str | None = None
     compression_hint: str | None = None
     base64_detected: bool = False
     decode_strategy: str = "plain"
@@ -46,6 +56,17 @@ class ReaderMetadata:
 
 class InputReaderError(ValueError):
     """Raised when an input reader mode cannot read the requested file safely."""
+
+
+@dataclass(frozen=True)
+class _TextDecodePlan:
+    """Selected text decoding plan for one read operation."""
+
+    encoding: str
+    errors: str
+    strategy: str
+    decode_error: str | None = None
+    warning: str | None = None
 
 
 class _TrackedBinaryStream:
@@ -98,7 +119,7 @@ class UniversalInputReader:
     ) -> None:
         self.path = Path(path)
         self.metadata = ReaderMetadata(
-            encoding_hint=encoding_hint or _default_encoding(),
+            encoding_hint=encoding_hint,
             compression_hint=compression_hint,
             base64_detected=base64_detected,
             decode_strategy=decode_strategy,
@@ -147,13 +168,17 @@ class UniversalInputReader:
         self,
         *,
         encoding: str | None = None,
-        errors: str = "replace",
+        errors: str | None = None,
         newline: str | None = "",
     ) -> Iterator[TextIO]:
         """Open a text stream without loading the whole file into memory."""
-        selected_encoding = encoding or self.metadata.encoding_hint or _default_encoding()
-        self.metadata.encoding_hint = selected_encoding
-        with self.path.open("r", encoding=selected_encoding, errors=errors, newline=newline) as stream:
+        decode_plan = self._build_text_decode_plan(encoding=encoding, errors=errors)
+        with self.path.open(
+            "r",
+            encoding=decode_plan.encoding,
+            errors=decode_plan.errors,
+            newline=newline,
+        ) as stream:
             yield stream
             self._update_bytes_from_text_stream(stream)
 
@@ -168,19 +193,22 @@ class UniversalInputReader:
         self,
         *,
         encoding: str | None = None,
-        errors: str = "replace",
+        errors: str | None = None,
         keepends: bool = True,
         skip_empty: bool = False,
     ) -> Iterator[Iterator[str]]:
         """Stream text lines from the file."""
-        selected_encoding = encoding or self.metadata.encoding_hint or _default_encoding()
-        self.metadata.encoding_hint = selected_encoding
-
-        with self.path.open("r", encoding=selected_encoding, errors=errors, newline="") as stream:
+        decode_plan = self._build_text_decode_plan(encoding=encoding, errors=errors)
+        with self.path.open(
+            "r",
+            encoding=decode_plan.encoding,
+            errors=decode_plan.errors,
+            newline="",
+        ) as stream:
 
             def line_iterator() -> Iterator[str]:
                 for line in stream:
-                    self._track_text_bytes(line, selected_encoding)
+                    self._track_text_bytes(line, decode_plan.encoding)
                     value = line if keepends else line.rstrip("\r\n")
                     if skip_empty and not value.strip():
                         continue
@@ -193,7 +221,7 @@ class UniversalInputReader:
         self,
         *,
         encoding: str | None = None,
-        errors: str = "replace",
+        errors: str | None = None,
         skip_empty: bool = True,
     ) -> Iterator[Iterator[dict[str, Any]]]:
         """Stream generic line records while preserving record order."""
@@ -215,7 +243,7 @@ class UniversalInputReader:
         self,
         *,
         encoding: str | None = None,
-        errors: str = "replace",
+        errors: str | None = None,
         skip_empty: bool = True,
         strict: bool = True,
     ) -> Iterator[Iterator[Any]]:
@@ -244,15 +272,19 @@ class UniversalInputReader:
         self,
         *,
         encoding: str | None = None,
-        errors: str = "replace",
+        errors: str | None = None,
         fieldnames: list[str] | tuple[str, ...] | None = None,
         dialect: str = "excel",
         **csv_options: Any,
     ) -> Iterator[Iterator[dict[str, Any]]]:
         """Stream CSV rows as dictionaries."""
-        selected_encoding = encoding or self.metadata.encoding_hint or _default_encoding()
-        self.metadata.encoding_hint = selected_encoding
-        with self.path.open("r", encoding=selected_encoding, errors=errors, newline="") as stream:
+        decode_plan = self._build_text_decode_plan(encoding=encoding, errors=errors)
+        with self.path.open(
+            "r",
+            encoding=decode_plan.encoding,
+            errors=decode_plan.errors,
+            newline="",
+        ) as stream:
             reader = csv.DictReader(
                 stream,
                 fieldnames=fieldnames,
@@ -262,7 +294,7 @@ class UniversalInputReader:
 
             def row_iterator() -> Iterator[dict[str, Any]]:
                 for row in reader:
-                    self._track_text_bytes(_csv_row_size_hint(row), selected_encoding)
+                    self._track_text_bytes(_csv_row_size_hint(row), decode_plan.encoding)
                     yield dict(row)
 
             yield row_iterator()
@@ -325,6 +357,7 @@ class UniversalInputReader:
         """Return a copy of current reader metadata."""
         return ReaderMetadata(
             encoding_hint=self.metadata.encoding_hint,
+            decode_error=self.metadata.decode_error,
             compression_hint=self.metadata.compression_hint,
             base64_detected=self.metadata.base64_detected,
             decode_strategy=self.metadata.decode_strategy,
@@ -332,6 +365,33 @@ class UniversalInputReader:
             warnings=list(self.metadata.warnings),
             errors=list(self.metadata.errors),
         )
+
+    def _build_text_decode_plan(
+        self,
+        *,
+        encoding: str | None,
+        errors: str | None,
+    ) -> _TextDecodePlan:
+        explicit_encoding = encoding or self.metadata.encoding_hint
+        preview = self._read_preview_bytes()
+        if explicit_encoding:
+            plan = _plan_explicit_encoding(
+                preview,
+                encoding=explicit_encoding,
+                errors=errors,
+            )
+        else:
+            plan = _detect_text_encoding(preview, errors=errors)
+        self.metadata.encoding_hint = plan.encoding
+        self.metadata.decode_strategy = plan.strategy
+        self.metadata.decode_error = plan.decode_error
+        if plan.warning:
+            self._record_warning(plan.warning)
+        return plan
+
+    def _read_preview_bytes(self) -> bytes:
+        with self.path.open("rb") as stream:
+            return stream.read(STAGE_TWO_MAX_RAW_PREVIEW_BYTES)
 
     def _record_warning(self, message: str) -> None:
         self.metadata.warnings.append(message)
@@ -353,6 +413,102 @@ class UniversalInputReader:
 
 def _default_encoding() -> str:
     return STAGE_TWO_TEXT_ENCODINGS[0] if STAGE_TWO_TEXT_ENCODINGS else "utf-8"
+
+
+def _encoding_candidates() -> tuple[str, ...]:
+    candidates: list[str] = []
+    for encoding in (*TEXT_ENCODING_FALLBACKS, *STAGE_TWO_TEXT_ENCODINGS):
+        normalized = encoding.lower()
+        if normalized not in candidates:
+            candidates.append(normalized)
+    return tuple(candidates)
+
+
+def _detect_text_encoding(preview: bytes, *, errors: str | None) -> _TextDecodePlan:
+    if preview.startswith(UTF8_BOM):
+        strict_error = _strict_decode_error(preview, "utf-8-sig")
+        if strict_error is None:
+            return _TextDecodePlan(
+                encoding="utf-8-sig",
+                errors=errors or "strict",
+                strategy="bom:utf-8-sig",
+            )
+        warning = f"UTF-8 BOM detected but strict decode failed; using replacement: {strict_error}"
+        return _TextDecodePlan(
+            encoding="utf-8-sig",
+            errors=errors or "replace",
+            strategy="bom:utf-8-sig:replace",
+            decode_error=strict_error,
+            warning=warning,
+        )
+
+    first_error: str | None = None
+    failed_candidates: list[str] = []
+    for candidate in _encoding_candidates():
+        decode_error = _strict_decode_error(preview, candidate)
+        if decode_error is None:
+            if failed_candidates:
+                warning = (
+                    f"text decode fallback selected {candidate}; "
+                    f"failed strict candidates: {', '.join(failed_candidates)}"
+                )
+                return _TextDecodePlan(
+                    encoding=candidate,
+                    errors=errors or "strict",
+                    strategy="fallback:strict",
+                    decode_error=first_error,
+                    warning=warning,
+                )
+            return _TextDecodePlan(
+                encoding=candidate,
+                errors=errors or "strict",
+                strategy="strict",
+            )
+        first_error = first_error or decode_error
+        failed_candidates.append(candidate)
+
+    decode_error = first_error or "no configured encoding could decode preview"
+    return _TextDecodePlan(
+        encoding=_default_encoding(),
+        errors=errors or "replace",
+        strategy="fallback:replace",
+        decode_error=decode_error,
+        warning=f"text decode fallback exhausted; using replacement: {decode_error}",
+    )
+
+
+def _plan_explicit_encoding(preview: bytes, *, encoding: str, errors: str | None) -> _TextDecodePlan:
+    selected_errors = errors or "strict"
+    if errors is not None:
+        return _TextDecodePlan(
+            encoding=encoding,
+            errors=selected_errors,
+            strategy=f"explicit:{selected_errors}",
+        )
+    decode_error = _strict_decode_error(preview, encoding)
+    if decode_error is None:
+        return _TextDecodePlan(
+            encoding=encoding,
+            errors="strict",
+            strategy="explicit:strict",
+        )
+    return _TextDecodePlan(
+        encoding=encoding,
+        errors="replace",
+        strategy="explicit:replace",
+        decode_error=decode_error,
+        warning=f"explicit encoding {encoding} failed strict preview decode; using replacement",
+    )
+
+
+def _strict_decode_error(data: bytes, encoding: str) -> str | None:
+    try:
+        data.decode(encoding, errors="strict")
+    except UnicodeDecodeError as exc:
+        return f"{encoding}: byte {exc.start}: {exc.reason}"
+    except LookupError as exc:
+        return f"{encoding}: {exc}"
+    return None
 
 
 def _csv_row_size_hint(row: dict[str, Any]) -> str:

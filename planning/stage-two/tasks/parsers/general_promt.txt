@@ -1,5 +1,6 @@
 Задача (реализация парсера данных):
 - проанализируй следующие файлы для контекста:
+  - "planning/stage-two/CONTEXT.txt"
   - "planning/stage-two/GENERAL DEPENDENCY MAP.txt"
   - "planning/stage-two/HOW TO USE THIS DECOMPOSITION.txt"
   - "planning/stage-two/A SHORT VERSION TO INSERT INTO CODEX BEFORE EACH TASK.txt"
