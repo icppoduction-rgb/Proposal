@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import bz2
 import csv
+import gzip
+import io
 import json
+import lzma
+import re
 import struct
+import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -12,6 +20,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Literal, TextIO
 
 from config import (
+    STAGE_TWO_MAX_BASE64_DECODE_BYTES,
     STAGE_TWO_MAX_ERROR_SAMPLES,
     STAGE_TWO_MAX_RAW_PREVIEW_BYTES,
     STAGE_TWO_TEXT_ENCODINGS,
@@ -31,6 +40,19 @@ InputReadMode = Literal[
 
 DEFAULT_BINARY_CHUNK_SIZE = 64 * 1024
 UTF8_BOM = b"\xef\xbb\xbf"
+GZIP_MAGIC = b"\x1f\x8b"
+BZ2_MAGIC = b"BZh"
+XZ_MAGIC = b"\xfd7zXZ\x00"
+ZIP_MAGIC_PREFIXES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+PCAP_MAGIC_PREFIXES = (
+    b"\xd4\xc3\xb2\xa1",
+    b"\xa1\xb2\xc3\xd4",
+    b"\x4d\x3c\xb2\xa1",
+    b"\xa1\xb2\x3c\x4d",
+)
+PCAPNG_MAGIC = b"\x0a\x0d\x0d\x0a"
+BASE64_ALPHABET_PATTERN = re.compile(rb"^[A-Za-z0-9+/=\s]+$")
+BASE64_PAYLOAD_KEYS: frozenset[str] = frozenset({"payload"})
 TEXT_ENCODING_FALLBACKS: tuple[str, ...] = (
     "utf-8",
     "utf-8-sig",
@@ -118,6 +140,8 @@ class UniversalInputReader:
         decode_strategy: str = "plain",
     ) -> None:
         self.path = Path(path)
+        self._base64_candidate_checked = False
+        self._whole_file_base64_payload: bytes | None = None
         self.metadata = ReaderMetadata(
             encoding_hint=encoding_hint,
             compression_hint=compression_hint,
@@ -173,19 +197,22 @@ class UniversalInputReader:
     ) -> Iterator[TextIO]:
         """Open a text stream without loading the whole file into memory."""
         decode_plan = self._build_text_decode_plan(encoding=encoding, errors=errors)
-        with self.path.open(
-            "r",
-            encoding=decode_plan.encoding,
-            errors=decode_plan.errors,
-            newline=newline,
-        ) as stream:
-            yield stream
-            self._update_bytes_from_text_stream(stream)
+        with self._open_binary_source() as binary_stream:
+            stream = io.TextIOWrapper(
+                binary_stream,
+                encoding=decode_plan.encoding,
+                errors=decode_plan.errors,
+                newline=newline,
+            )
+            try:
+                yield stream
+            finally:
+                stream.detach()
 
     @contextmanager
     def open_binary(self) -> Iterator[_TrackedBinaryStream]:
         """Open a tracked binary stream without text decoding."""
-        with self.path.open("rb") as stream:
+        with self._open_binary_source() as stream:
             yield _TrackedBinaryStream(stream, self.metadata)
 
     @contextmanager
@@ -199,22 +226,27 @@ class UniversalInputReader:
     ) -> Iterator[Iterator[str]]:
         """Stream text lines from the file."""
         decode_plan = self._build_text_decode_plan(encoding=encoding, errors=errors)
-        with self.path.open(
-            "r",
-            encoding=decode_plan.encoding,
-            errors=decode_plan.errors,
-            newline="",
-        ) as stream:
+        with self._open_binary_source() as binary_stream:
+            stream = io.TextIOWrapper(
+                binary_stream,
+                encoding=decode_plan.encoding,
+                errors=decode_plan.errors,
+                newline="",
+            )
 
             def line_iterator() -> Iterator[str]:
                 for line in stream:
                     self._track_text_bytes(line, decode_plan.encoding)
+                    line = self._maybe_decode_base64_line(line)
                     value = line if keepends else line.rstrip("\r\n")
                     if skip_empty and not value.strip():
                         continue
                     yield value
 
-            yield line_iterator()
+            try:
+                yield line_iterator()
+            finally:
+                stream.detach()
 
     @contextmanager
     def iter_records(
@@ -258,12 +290,14 @@ class UniversalInputReader:
             def json_iterator() -> Iterator[Any]:
                 for line_number, line in enumerate(lines, start=1):
                     try:
-                        yield json.loads(line)
+                        record = json.loads(line)
                     except json.JSONDecodeError as exc:
                         message = f"json line {line_number}: {exc.msg}"
                         self._record_error(message)
                         if strict:
                             raise InputReaderError(message) from exc
+                        continue
+                    yield self._decode_json_payload(record, line_number=line_number)
 
             yield json_iterator()
 
@@ -278,15 +312,14 @@ class UniversalInputReader:
         **csv_options: Any,
     ) -> Iterator[Iterator[dict[str, Any]]]:
         """Stream CSV rows as dictionaries."""
-        decode_plan = self._build_text_decode_plan(encoding=encoding, errors=errors)
-        with self.path.open(
-            "r",
-            encoding=decode_plan.encoding,
-            errors=decode_plan.errors,
-            newline="",
-        ) as stream:
+        with self.iter_lines(
+            encoding=encoding,
+            errors=errors,
+            keepends=True,
+            skip_empty=False,
+        ) as lines:
             reader = csv.DictReader(
-                stream,
+                lines,
                 fieldnames=fieldnames,
                 dialect=dialect,
                 **csv_options,
@@ -294,11 +327,9 @@ class UniversalInputReader:
 
             def row_iterator() -> Iterator[dict[str, Any]]:
                 for row in reader:
-                    self._track_text_bytes(_csv_row_size_hint(row), decode_plan.encoding)
                     yield dict(row)
 
             yield row_iterator()
-            self._update_bytes_from_text_stream(stream)
 
     @contextmanager
     def iter_packet_bytes(
@@ -309,7 +340,7 @@ class UniversalInputReader:
         """Stream packet container bytes without decoding or parsing them."""
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
-        with self.path.open("rb") as stream:
+        with self._open_binary_source() as stream:
 
             def chunk_iterator() -> Iterator[bytes]:
                 while True:
@@ -324,7 +355,7 @@ class UniversalInputReader:
     @contextmanager
     def iter_bson_stream(self) -> Iterator[Iterator[bytes]]:
         """Stream raw BSON document bytes using BSON length prefixes."""
-        with self.path.open("rb") as stream:
+        with self._open_binary_source() as stream:
 
             def document_iterator() -> Iterator[bytes]:
                 document_index = 0
@@ -352,6 +383,56 @@ class UniversalInputReader:
                     yield prefix + payload
 
             yield document_iterator()
+
+    @contextmanager
+    def _open_binary_source(self) -> Iterator[BinaryIO]:
+        base64_payload = self._get_whole_file_base64_payload()
+        if base64_payload is not None:
+            with io.BytesIO(base64_payload) as stream:
+                with self._open_compressed_or_plain(stream, _read_preview(stream)) as source:
+                    yield source
+            return
+
+        with self.path.open("rb") as stream:
+            with self._open_compressed_or_plain(stream, _read_preview(stream)) as source:
+                yield source
+
+    @contextmanager
+    def _open_compressed_or_plain(self, stream: BinaryIO, preview: bytes) -> Iterator[BinaryIO]:
+        compression = _detect_compression(preview)
+        self.metadata.compression_hint = compression
+        if compression != "plain":
+            self._append_decode_strategy(f"compression:{compression}")
+
+        if compression == "gzip":
+            with gzip.GzipFile(fileobj=stream, mode="rb") as gzip_stream:
+                yield gzip_stream
+            return
+        if compression == "bz2":
+            with bz2.BZ2File(stream, mode="rb") as bz2_stream:
+                yield bz2_stream
+            return
+        if compression == "xz":
+            with lzma.LZMAFile(stream, mode="rb") as lzma_stream:
+                yield lzma_stream
+            return
+        if compression == "zip":
+            with zipfile.ZipFile(stream) as archive:
+                member = _select_safe_zip_member(archive)
+                if member is None:
+                    message = "zip archive has no safe regular file members"
+                    self._record_error(message)
+                    raise InputReaderError(message)
+                safe_count = len([item for item in archive.infolist() if _is_safe_zip_member(item)])
+                if safe_count > 1:
+                    self._record_warning(
+                        f"zip archive has {safe_count} safe members; reading first: {member.filename}"
+                    )
+                with archive.open(member, "r") as member_stream:
+                    yield member_stream
+            return
+
+        yield stream
 
     def metadata_snapshot(self) -> ReaderMetadata:
         """Return a copy of current reader metadata."""
@@ -383,18 +464,121 @@ class UniversalInputReader:
         else:
             plan = _detect_text_encoding(preview, errors=errors)
         self.metadata.encoding_hint = plan.encoding
-        self.metadata.decode_strategy = plan.strategy
+        self._append_decode_strategy(f"text:{plan.strategy}")
         self.metadata.decode_error = plan.decode_error
         if plan.warning:
             self._record_warning(plan.warning)
         return plan
 
     def _read_preview_bytes(self) -> bytes:
+        with self._open_binary_source() as stream:
+            return stream.read(STAGE_TWO_MAX_RAW_PREVIEW_BYTES)
+
+    def _get_whole_file_base64_payload(self) -> bytes | None:
+        if self._base64_candidate_checked:
+            return self._whole_file_base64_payload
+        self._base64_candidate_checked = True
+        try:
+            file_size = self.path.stat().st_size
+        except OSError as exc:
+            self._record_error(f"failed to stat input file for base64 detection: {exc}")
+            return None
+        preview = self._read_raw_preview_bytes()
+        if not _looks_like_base64_signal(preview):
+            return None
+        if not _looks_like_base64_candidate(preview):
+            self._record_warning("whole-file base64 candidate failed strict validation")
+            return None
+        if file_size > _max_base64_encoded_bytes():
+            self._record_warning(
+                "whole-file base64 candidate skipped because encoded size exceeds safety limit"
+            )
+            return None
+        raw = self.path.read_bytes()
+        decoded = _decode_base64_bytes(raw)
+        if decoded is None:
+            self._record_warning("whole-file base64 candidate failed strict validation")
+            return None
+        if len(decoded) > STAGE_TWO_MAX_BASE64_DECODE_BYTES:
+            self._record_warning("whole-file base64 candidate skipped because decoded size exceeds limit")
+            return None
+        if not _decoded_payload_looks_supported(decoded):
+            self._record_warning("whole-file base64 candidate skipped because decoded payload type is unknown")
+            return None
+        self.metadata.base64_detected = True
+        self._append_decode_strategy("base64:whole-file")
+        self._whole_file_base64_payload = decoded
+        return decoded
+
+    def _read_raw_preview_bytes(self) -> bytes:
         with self.path.open("rb") as stream:
             return stream.read(STAGE_TWO_MAX_RAW_PREVIEW_BYTES)
 
+    def _maybe_decode_base64_line(self, line: str) -> str:
+        content, line_ending = _split_line_ending(line)
+        if not content.strip():
+            return line
+        decoded = self._decode_base64_text_value(content, source="line")
+        if decoded is None:
+            return line
+        if line_ending and not decoded.endswith(("\n", "\r")):
+            return f"{decoded}{line_ending}"
+        return decoded
+
+    def _decode_json_payload(self, record: Any, *, line_number: int) -> Any:
+        if not isinstance(record, dict):
+            return record
+        updated: dict[str, Any] | None = None
+        for key in BASE64_PAYLOAD_KEYS:
+            payload = record.get(key)
+            if not isinstance(payload, str):
+                continue
+            decoded = self._decode_base64_text_value(payload, source=f"json {key} line {line_number}")
+            if decoded is None:
+                continue
+            updated = dict(record) if updated is None else updated
+            updated[key] = decoded
+        return record if updated is None else updated
+
+    def _decode_base64_text_value(self, value: str, *, source: str) -> str | None:
+        try:
+            encoded = value.strip().encode("ascii")
+        except UnicodeEncodeError:
+            return None
+        if not _looks_like_base64_signal(encoded):
+            return None
+        if not _looks_like_base64_candidate(encoded):
+            self._record_warning(f"{source} base64 candidate failed strict validation")
+            return None
+        if _estimated_base64_decoded_size(encoded) > STAGE_TWO_MAX_BASE64_DECODE_BYTES:
+            self._record_warning(f"{source} base64 candidate skipped because decoded size exceeds limit")
+            return None
+        decoded = _decode_base64_bytes(encoded)
+        if decoded is None:
+            self._record_warning(f"{source} base64 candidate failed strict validation")
+            return None
+        if len(decoded) > STAGE_TWO_MAX_BASE64_DECODE_BYTES:
+            self._record_warning(f"{source} base64 candidate skipped because decoded size exceeds limit")
+            return None
+        if not _decoded_payload_looks_supported(decoded):
+            return None
+        text = _decode_supported_text(decoded)
+        if text is None:
+            self._record_warning(f"{source} base64 candidate decoded to non-text payload")
+            return None
+        self.metadata.base64_detected = True
+        self._append_decode_strategy(f"base64:{source}")
+        return text
+
+    def _append_decode_strategy(self, strategy: str) -> None:
+        existing = [] if self.metadata.decode_strategy == "plain" else self.metadata.decode_strategy.split("|")
+        if strategy not in existing:
+            existing.append(strategy)
+        self.metadata.decode_strategy = "|".join(existing) if existing else "plain"
+
     def _record_warning(self, message: str) -> None:
-        self.metadata.warnings.append(message)
+        if message not in self.metadata.warnings:
+            self.metadata.warnings.append(message)
 
     def _record_error(self, message: str) -> None:
         if len(self.metadata.errors) < STAGE_TWO_MAX_ERROR_SAMPLES:
@@ -413,6 +597,128 @@ class UniversalInputReader:
 
 def _default_encoding() -> str:
     return STAGE_TWO_TEXT_ENCODINGS[0] if STAGE_TWO_TEXT_ENCODINGS else "utf-8"
+
+
+def _read_preview(stream: BinaryIO) -> bytes:
+    position = stream.tell() if stream.seekable() else None
+    preview = stream.read(STAGE_TWO_MAX_RAW_PREVIEW_BYTES)
+    if position is not None:
+        stream.seek(position)
+    return preview
+
+
+def _detect_compression(preview: bytes) -> str:
+    if preview.startswith(GZIP_MAGIC):
+        return "gzip"
+    if preview.startswith(BZ2_MAGIC):
+        return "bz2"
+    if preview.startswith(XZ_MAGIC):
+        return "xz"
+    if preview.startswith(ZIP_MAGIC_PREFIXES):
+        return "zip"
+    return "plain"
+
+
+def _select_safe_zip_member(archive: zipfile.ZipFile) -> zipfile.ZipInfo | None:
+    for member in archive.infolist():
+        if _is_safe_zip_member(member):
+            return member
+    return None
+
+
+def _is_safe_zip_member(member: zipfile.ZipInfo) -> bool:
+    if member.is_dir():
+        return False
+    name = member.filename.replace("\\", "/")
+    if not name or name.startswith("/") or ":" in name:
+        return False
+    parts = [part for part in name.split("/") if part]
+    return bool(parts) and all(part != ".." for part in parts)
+
+
+def _looks_like_base64_candidate(data: bytes) -> bool:
+    stripped = b"".join(data.split())
+    return _looks_like_base64_signal(stripped) and len(stripped) % 4 == 0
+
+
+def _looks_like_base64_signal(data: bytes) -> bool:
+    stripped = b"".join(data.split())
+    return len(stripped) >= 8 and BASE64_ALPHABET_PATTERN.fullmatch(stripped) is not None
+
+
+def _max_base64_encoded_bytes() -> int:
+    return ((STAGE_TWO_MAX_BASE64_DECODE_BYTES + 2) // 3) * 4 + 4096
+
+
+def _estimated_base64_decoded_size(data: bytes) -> int:
+    stripped = b"".join(data.split())
+    padding = stripped.count(b"=")
+    return (len(stripped) * 3 // 4) - padding
+
+
+def _decode_base64_bytes(data: bytes) -> bytes | None:
+    stripped = b"".join(data.split())
+    if not _looks_like_base64_candidate(stripped):
+        return None
+    try:
+        return base64.b64decode(stripped, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _decoded_payload_looks_supported(data: bytes) -> bool:
+    if not data:
+        return False
+    if _detect_compression(data) != "plain":
+        return True
+    if data.startswith((*PCAP_MAGIC_PREFIXES, PCAPNG_MAGIC)):
+        return True
+    if _looks_like_bson_document(data):
+        return True
+    return _decode_supported_text(data) is not None
+
+
+def _looks_like_bson_document(data: bytes) -> bool:
+    if len(data) < 5:
+        return False
+    length = struct.unpack("<i", data[:4])[0]
+    return length == len(data) and data[-1:] == b"\x00"
+
+
+def _decode_supported_text(data: bytes) -> str | None:
+    for encoding in ("utf-8", "utf-8-sig", "cp1252", "latin-1", "ascii"):
+        try:
+            text = data.decode(encoding, errors="strict")
+        except UnicodeDecodeError:
+            continue
+        if _looks_like_text_payload(text):
+            return text
+    return None
+
+
+def _looks_like_text_payload(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    allowed_controls = {"\n", "\r", "\t"}
+    printable_count = sum(1 for char in text if char.isprintable() or char in allowed_controls)
+    if printable_count / max(len(text), 1) < 0.85:
+        return False
+    if stripped[0] in "{[":
+        try:
+            json.loads(stripped)
+            return True
+        except json.JSONDecodeError:
+            pass
+    return True
+
+
+def _split_line_ending(line: str) -> tuple[str, str]:
+    if line.endswith("\r\n"):
+        return line[:-2], "\r\n"
+    if line.endswith("\n") or line.endswith("\r"):
+        return line[:-1], line[-1]
+    return line, ""
 
 
 def _encoding_candidates() -> tuple[str, ...]:
