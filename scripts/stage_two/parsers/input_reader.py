@@ -68,6 +68,8 @@ class ReaderMetadata:
 
     encoding_hint: str | None = None
     decode_error: str | None = None
+    binary_type: str | None = None
+    payload_preview_bytes: int = 0
     compression_hint: str | None = None
     base64_detected: bool = False
     decode_strategy: str = "plain"
@@ -212,6 +214,7 @@ class UniversalInputReader:
     @contextmanager
     def open_binary(self) -> Iterator[_TrackedBinaryStream]:
         """Open a tracked binary stream without text decoding."""
+        self.detect_binary_type()
         with self._open_binary_source() as stream:
             yield _TrackedBinaryStream(stream, self.metadata)
 
@@ -340,6 +343,7 @@ class UniversalInputReader:
         """Stream packet container bytes without decoding or parsing them."""
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
+        self.detect_binary_type()
         with self._open_binary_source() as stream:
 
             def chunk_iterator() -> Iterator[bytes]:
@@ -355,6 +359,11 @@ class UniversalInputReader:
     @contextmanager
     def iter_bson_stream(self) -> Iterator[Iterator[bytes]]:
         """Stream raw BSON document bytes using BSON length prefixes."""
+        binary_type = self.detect_binary_type()
+        if binary_type != "bson_stream":
+            self._record_warning(f"bson_stream requested for binary type {binary_type}")
+            yield iter(())
+            return
         with self._open_binary_source() as stream:
 
             def document_iterator() -> Iterator[bytes]:
@@ -383,6 +392,26 @@ class UniversalInputReader:
                     yield prefix + payload
 
             yield document_iterator()
+
+    def detect_binary_type(self) -> str:
+        """Detect the binary container type from a limited payload preview."""
+        if self.metadata.binary_type is not None:
+            return self.metadata.binary_type
+        try:
+            with self._open_binary_source() as stream:
+                preview = stream.read(STAGE_TWO_MAX_RAW_PREVIEW_BYTES)
+        except InputReaderError:
+            raise
+        except Exception as exc:
+            message = f"failed to read binary preview: {exc}"
+            self._record_error(message)
+            self.metadata.binary_type = "unknown"
+            return self.metadata.binary_type
+        self.metadata.payload_preview_bytes = len(preview)
+        self.metadata.binary_type = _detect_binary_type(preview)
+        if self.metadata.binary_type == "unknown" and preview:
+            self._record_warning("unknown binary payload type")
+        return self.metadata.binary_type
 
     @contextmanager
     def _open_binary_source(self) -> Iterator[BinaryIO]:
@@ -439,6 +468,8 @@ class UniversalInputReader:
         return ReaderMetadata(
             encoding_hint=self.metadata.encoding_hint,
             decode_error=self.metadata.decode_error,
+            binary_type=self.metadata.binary_type,
+            payload_preview_bytes=self.metadata.payload_preview_bytes,
             compression_hint=self.metadata.compression_hint,
             base64_detected=self.metadata.base64_detected,
             decode_strategy=self.metadata.decode_strategy,
@@ -617,6 +648,37 @@ def _detect_compression(preview: bytes) -> str:
     if preview.startswith(ZIP_MAGIC_PREFIXES):
         return "zip"
     return "plain"
+
+
+def _detect_binary_type(preview: bytes) -> str:
+    if len(preview) >= 4 and preview[:4] in PCAP_MAGIC_PREFIXES:
+        return "pcap"
+    if preview.startswith(PCAPNG_MAGIC):
+        return "pcapng"
+    if _looks_like_bson_stream_preview(preview):
+        return "bson_stream"
+    return "unknown"
+
+
+def _looks_like_bson_stream_preview(preview: bytes) -> bool:
+    if len(preview) < 5:
+        return False
+    offset = 0
+    documents_seen = 0
+    while offset + 4 <= len(preview):
+        length = struct.unpack("<i", preview[offset : offset + 4])[0]
+        if length < 5:
+            return False
+        if length > STAGE_TWO_MAX_BASE64_DECODE_BYTES:
+            return False
+        end = offset + length
+        if end > len(preview):
+            return documents_seen > 0
+        if preview[end - 1 : end] != b"\x00":
+            return False
+        documents_seen += 1
+        offset = end
+    return documents_seen > 0
 
 
 def _select_safe_zip_member(archive: zipfile.ZipFile) -> zipfile.ZipInfo | None:

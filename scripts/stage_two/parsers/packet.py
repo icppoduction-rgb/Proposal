@@ -12,6 +12,7 @@ from typing import Any, Iterator
 
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.input_reader import InputReaderError, UniversalInputReader
 
 
 PCAP_MAGIC_ENDIAN: dict[bytes, tuple[str, float]] = {
@@ -74,9 +75,11 @@ class PacketCaptureParser(BaseParser):
         events: list[dict[str, Any]] = []
         rows_failed = 0
         warnings: list[str] = []
+        reader = UniversalInputReader(path)
         try:
-            records = list(_iter_capture_records(Path(path)))
-        except ValueError as exc:
+            records = list(_iter_capture_records(Path(path), reader=reader))
+            warnings.extend(reader.metadata.warnings)
+        except (InputReaderError, ValueError) as exc:
             raise ValueError(f"failed to read packet capture: {exc}") from exc
 
         for index, record in enumerate(records):
@@ -159,17 +162,22 @@ class HostPacketCaptureParser(PacketCaptureParser):
     default_modality = "packet"
 
 
-def _iter_capture_records(path: Path) -> Iterator[PacketRecord]:
-    with path.open("rb") as file:
-        magic = file.read(4)
-        file.seek(0)
-        if magic in PCAP_MAGIC_ENDIAN:
-            yield from _iter_pcap_records(file.read())
-            return
-        if len(magic) == 4 and struct.unpack("<I", magic)[0] == PCAPNG_SECTION_HEADER:
-            yield from _iter_pcapng_records(file.read())
-            return
-    raise ValueError(f"unsupported packet capture header for {path}")
+def _iter_capture_records(
+    path: Path,
+    *,
+    reader: UniversalInputReader | None = None,
+) -> Iterator[PacketRecord]:
+    input_reader = reader or UniversalInputReader(path)
+    binary_type = input_reader.detect_binary_type()
+    with input_reader.open("packet_bytes") as chunks:
+        data = b"".join(chunks)
+    if binary_type == "pcap":
+        yield from _iter_pcap_records(data)
+        return
+    if binary_type == "pcapng":
+        yield from _iter_pcapng_records(data)
+        return
+    raise ValueError(f"unsupported packet capture binary type: {binary_type}")
 
 
 def _iter_pcap_records(data: bytes) -> Iterator[PacketRecord]:

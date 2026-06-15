@@ -10,6 +10,7 @@ from typing import Any, Iterator
 
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.input_reader import InputReaderError, UniversalInputReader
 
 
 EVENT_LIST_KEYS: tuple[str, ...] = ("calls", "events", "event_documents")
@@ -27,10 +28,21 @@ class HostBsonSandboxParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse BSON documents into normalized sandbox behaviour events."""
-        documents = list(_iter_bson_documents(Path(path).read_bytes()))
+        reader = UniversalInputReader(path)
+        try:
+            binary_type = reader.detect_binary_type()
+            if binary_type != "bson_stream":
+                raise ValueError(f"unsupported BSON binary type: {binary_type}")
+            documents = []
+            with reader.open("bson_stream") as bson_documents:
+                for document_bytes in bson_documents:
+                    document, _offset = _decode_document(document_bytes, 0)
+                    documents.append(document)
+        except (InputReaderError, ValueError) as exc:
+            raise ValueError(f"failed to read BSON stream: {exc}") from exc
         events: list[dict[str, Any]] = []
         rows_failed = 0
-        warnings: list[str] = []
+        warnings: list[str] = list(reader.metadata.warnings)
         event_index = 0
         for document_index, document in enumerate(documents):
             try:
