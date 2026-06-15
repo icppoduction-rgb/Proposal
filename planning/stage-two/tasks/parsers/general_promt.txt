@@ -1,0 +1,10 @@
+Задача (реализация парсера данных):
+- проанализируй следующие файлы для контекста:
+  - "planning/stage-two/GENERAL DEPENDENCY MAP.txt"
+  - "planning/stage-two/HOW TO USE THIS DECOMPOSITION.txt"
+  - "planning/stage-two/A SHORT VERSION TO INSERT INTO CODEX BEFORE EACH TASK.txt"
+- конфигурационный файл для проекта config.py
+- после реализации задачи писать название для commit
+- выполни:
+```
+```
