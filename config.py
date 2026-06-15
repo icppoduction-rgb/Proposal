@@ -67,6 +67,21 @@ PARSER_REGISTRY_SEED_PATH: str = _project_path(
     "scripts", "stage_two", "parser_registry", "parser_registry_seed.json"
 )
 
+# --------------------- STAGE TWO PARSER LIMITS ---------------------- #
+
+STAGE_TWO_MAX_BASE64_DECODE_BYTES: int = 64 * 1024 * 1024
+STAGE_TWO_MAX_ERROR_SAMPLES: int = 20
+STAGE_TWO_MAX_RAW_PREVIEW_BYTES: int = 4096
+STAGE_TWO_TEXT_ENCODINGS: tuple[str, ...] = (
+    "utf-8-sig",
+    "utf-8",
+    "utf-16",
+    "utf-16-le",
+    "utf-16-be",
+    "cp1251",
+    "latin-1",
+)
+
 # --------------------------- PATH DUCKDB ----------------------------- #
 
 POSTGRES_RELATIVE: str = "postgres"
