@@ -61,6 +61,12 @@ KNOWN_SOURCE_FORMATS: tuple[str, ...] = (
     "xml",
 )
 SUPPORTED_SOURCE_FORMATS: frozenset[str] = frozenset(KNOWN_SOURCE_FORMATS)
+SOURCE_FORMAT_MATCH_PRIORITY: tuple[str, ...] = tuple(
+    sorted(KNOWN_SOURCE_FORMATS, key=lambda value: (-len(value), value))
+)
+SOURCE_FORMAT_BY_LOWER: dict[str, str] = {
+    source_format.lower(): source_format for source_format in KNOWN_SOURCE_FORMATS
+}
 
 
 @dataclass(frozen=True)
@@ -95,7 +101,7 @@ class DatasetFileScanner:
             relative = path.relative_to(root)
             branch = self.infer_branch(relative, root)
             role = self.infer_role(relative)
-            source_format = self.infer_source_format(path)
+            source_format = self.infer_source_format(path, relative_path=relative)
             dataset_name = self.infer_dataset_name(relative, branch, role, source_format)
             candidates.append(
                 DatasetFileCandidate(
@@ -127,10 +133,41 @@ class DatasetFileScanner:
                 return role
         return "EXPERIMENTS"
 
-    def infer_source_format(self, path: Path) -> str:
-        """Infer the Stage Two source_format value from a file name."""
+    def infer_source_format(self, path: Path, relative_path: Path | None = None) -> str:
+        """Infer the Stage Two source_format value from bucket context or file name."""
+        bucket_source_format = self.infer_bucket_source_format(relative_path)
+        if bucket_source_format:
+            return bucket_source_format
+
+        return self.infer_file_source_format(path)
+
+    def infer_bucket_source_format(self, relative_path: Path | None) -> str | None:
+        """Infer source_format from a sorted tree role/format bucket."""
+        if relative_path is None:
+            return None
+
+        parts = list(relative_path.parts)
+        if len(parts) < 3:
+            return None
+
+        upper_parts = [part.upper() for part in parts]
+        role_index = next(
+            (index for index, part in enumerate(upper_parts[:-1]) if part in ROLE_VALUES),
+            None,
+        )
+        if role_index is None:
+            return None
+
+        for part in parts[role_index + 1 : -1]:
+            source_format = SOURCE_FORMAT_BY_LOWER.get(part.lower())
+            if source_format:
+                return source_format
+        return None
+
+    def infer_file_source_format(self, path: Path) -> str:
+        """Infer source_format from a raw file name using compound-name priority."""
         name = path.name.lower()
-        for source_format in KNOWN_SOURCE_FORMATS:
+        for source_format in SOURCE_FORMAT_MATCH_PRIORITY:
             if name == source_format or name.endswith(f".{source_format}"):
                 return source_format
         suffix = path.suffix.lower().lstrip(".")
