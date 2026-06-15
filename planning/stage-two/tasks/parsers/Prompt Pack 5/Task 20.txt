@@ -1,0 +1,47 @@
+--------------------------------------------------------------------------------
+Task 20. Усилить Packet Capture parsers для pcap/cap/pcapng
+--------------------------------------------------------------------------------
+
+Форматы:
+- pcap
+- pcapng
+- cap
+
+Цель:
+Поддержать summary-level packet extraction для DNS и Host branches без full payload storage.
+
+Файлы:
+- scripts/stage_two/parsers/packet.py
+- scripts/stage_two/parsers/dns.py, if class wrapper needed
+- scripts/stage_two/parsers/host.py, if class wrapper needed
+
+Что поддержать:
+1. Classic pcap magic.
+2. Basic pcapng blocks.
+3. cap as classic pcap-compatible when applicable.
+4. Summary-level extraction:
+   - packet timestamp;
+   - src/dst IP;
+   - protocol;
+   - src/dst ports;
+   - tcp flags if available;
+   - udp/tcp port 53 DNS detection;
+   - packet length/bytes;
+   - qname/qtype/rcode/ttl if lightweight DNS decode possible.
+5. For host branch, normalized modality can be network_packet or host_network_packet.
+6. For DNS branch, normalized modality can be dns_packet or network_packet.
+
+Ограничения:
+- Do not store full packet payload in PostgreSQL.
+- Do not store full packet payload in metadata_json.
+- Only keep extracted safe fields.
+
+Критерии приемки:
+- Direct smoke: tiny pcap.
+- Direct smoke: tiny pcapng if sample generator exists.
+- Direct smoke: cap recognized as pcap-compatible.
+- Catalog rollback smoke for DNS pcap and Host pcapng/cap.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 21 improves Host CSV parser.

@@ -1,0 +1,29 @@
+--------------------------------------------------------------------------------
+Task 34. Добавить base64/encoding/compression smokes
+--------------------------------------------------------------------------------
+
+Цель:
+Проверить UniversalInputReader и parsers на закодированных/сжатых/разных encoding inputs.
+
+Что проверить:
+1. base64 CSV.
+2. base64 JSON-lines.
+3. base64 raw log line.
+4. base64 BSON bytes if feasible.
+5. base64 pcap bytes if feasible.
+6. utf-8.
+7. utf-8-sig.
+8. cp1252.
+9. latin-1.
+10. gzip text.
+11. invalid base64.
+12. oversized base64.
+
+Критерии приемки:
+- Valid encoded samples parse.
+- Invalid encoded samples produce controlled warning/failure.
+- No raw hash mutation.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 35 validates catalog integration and rollback behavior.

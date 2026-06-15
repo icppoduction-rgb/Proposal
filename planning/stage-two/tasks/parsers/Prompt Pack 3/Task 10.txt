@@ -1,0 +1,36 @@
+--------------------------------------------------------------------------------
+Task 10. Расширить parser_registry_seed.json для всех source_format
+--------------------------------------------------------------------------------
+
+Цель:
+Создать registry entries для всех форматов и branch/role combinations, где они применимы.
+
+Файлы:
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+- scripts/stage_two/parser_registry/seed.py, если seed требует обновления
+
+Что сделать:
+1. Для каждого source_format из списка добавить registry entry.
+2. Для форматов, встречающихся и в DNS, и в Host, использовать отдельные entries по branch:
+   - csv
+   - txt
+   - pcap
+   - pcap.csv, если применимо
+3. Для packet captures:
+   - DNS pcap/pcapng/cap -> DNS/network packet parser;
+   - Host cap/pcap/pcapng -> Host/network packet parser.
+4. Для netflow_day/netflow_ids/wls_day добавить active HostNetflowParser или отдельные active classes:
+   - HostNetflowDayParser;
+   - HostNetflowIdsParser;
+   - HostWlsDayParser.
+5. Пока parser class еще не реализован, не ставить is_active=true, если текущий code validation проверяет class existence. Если задачи выполняются в одном PR, можно добавить active entry только вместе с class skeleton.
+6. Seed должен быть idempotent.
+
+Критерии приемки:
+- JSON валиден.
+- seed не создает duplicate rows.
+- Нет active registry row на отсутствующий parser_class.
+- parser coverage пока может показывать gaps, но registry structure готова.
+
+Связь со следующей задачей:
+Task 11 добавляет resolver/class availability validation.

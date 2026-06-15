@@ -1,0 +1,27 @@
+--------------------------------------------------------------------------------
+Task 11. Усилить ParserResolver и class availability validation
+--------------------------------------------------------------------------------
+
+Цель:
+Исключить ситуацию, когда registry указывает на parser_class, которого нет в коде или который не импортируется.
+
+Файлы:
+- scripts/stage_two/parser_registry/resolver.py
+- scripts/stage_two/parser_registry/seed.py
+- scripts/stage_two/parsers/__init__.py
+
+Что сделать:
+1. Resolver должен возвращать active parser metadata по branch/source_format/role/priority.
+2. Добавить import/class validation helper.
+3. Не активировать/не выбирать parser_class, который не найден.
+4. Ошибка должна быть явной в parser coverage report, а не hidden exception.
+5. Сохранить backward compatibility для existing normalization services.
+
+Критерии приемки:
+- Resolver smoke показывает active existing parsers.
+- Missing class produces clear diagnostic.
+- Existing normalize-dns/normalize-host не ломаются.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 12 строит parser coverage service поверх scanner/catalog/registry/resolver.

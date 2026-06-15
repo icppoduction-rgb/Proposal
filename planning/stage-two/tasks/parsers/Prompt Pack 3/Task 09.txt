@@ -1,0 +1,44 @@
+--------------------------------------------------------------------------------
+Task 09. Исправить source_format inference для всех compound/special formats
+--------------------------------------------------------------------------------
+
+Цель:
+Сделать catalog ingestion/source_format inference format-aware и bucket-aware.
+
+Файлы:
+- scripts/stage_two/ingestion/scanner.py
+
+Что сделать:
+1. Если файл находится в sorted tree role/format bucket, использовать bucket name как source_format.
+2. Не сводить все *.log к log, если bucket более точный.
+3. Сохранять compound/special names:
+   - auth.log
+   - cpu.log
+   - diskio.log
+   - filesystem.log
+   - fsstat.log
+   - journal~
+   - json-1
+   - log-1/log-2/log-3
+   - mail-info-1/mail-warn-1
+   - mainlog-1/mainlog-2/mainlog-3
+   - messages-1
+   - netflow_day
+   - netflow_ids
+   - pcap.csv
+   - process.summary.log
+   - socket.summary.log
+   - syslog-1/syslog-2/syslog-3/syslog-4
+   - syslog.log
+   - wls_day
+4. Если файл из raw root без bucket, использовать extension/name heuristic with priority for known compound names.
+5. Добавить tests/smokes для всех listed source_format.
+
+Критерии приемки:
+- Каждый формат из списка определяется точно.
+- source_format for pcap.csv остается pcap.csv, а не csv.
+- source_format for process.summary.log остается process.summary.log, а не log.
+- compileall и targeted scanner smoke проходят.
+
+Связь со следующей задачей:
+Task 10 расширяет parser_registry_seed.json под точные source_format names.

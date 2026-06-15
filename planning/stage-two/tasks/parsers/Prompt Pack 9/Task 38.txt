@@ -1,0 +1,32 @@
+--------------------------------------------------------------------------------
+Task 38. Обновить RU/EN документацию parser strategy и README
+--------------------------------------------------------------------------------
+
+Цель:
+Задокументировать новое покрытие parsers и operational commands.
+
+Файлы:
+- docs/ru/normalization/parser_strategy.md
+- docs/en/normalization/parser_strategy.md
+- docs/ru/normalization/README.md
+- docs/en/normalization/README.md
+- reports/ru/stage-two/parser/parser_coverage_matrix.md
+- reports/en/stage-two/parser/parser_coverage_matrix.md
+
+Что включить:
+1. Parser class per source_format.
+2. Branch/role coverage.
+3. Base64/encoding/compression behavior.
+4. Error status behavior.
+5. Single-format normalization examples.
+6. Batch normalization examples.
+7. mark-ready workflow.
+8. Known limitations if any remain.
+
+Критерии приемки:
+- RU/EN docs updated.
+- Commands in docs match implemented CLI.
+- compileall and git diff --check pass.
+
+Связь со следующей задачей:
+Task 39 prepares final validation script/command list for user.

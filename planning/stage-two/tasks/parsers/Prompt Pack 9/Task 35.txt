@@ -1,0 +1,35 @@
+--------------------------------------------------------------------------------
+Task 35. Добавить full catalog rollback smokes
+--------------------------------------------------------------------------------
+
+Цель:
+Проверить полный chain: parser_registry -> catalog ingestion -> mark-ready -> normalization -> Parquet -> PostgreSQL artifacts.
+
+Файлы:
+- scripts/stage_two/e2e_dry_run.py, if extended
+- new scripts/stage_two/parser_catalog_smoke.py, if better
+
+Что проверить:
+1. Create temporary raw files for representative formats.
+2. catalog ingest.
+3. mark READY_FOR_PARSING.
+4. normalize selected format.
+5. Assert parser_runs created.
+6. Assert normalized_artifacts registered.
+7. Assert Parquet output exists.
+8. Rollback synthetic DB rows where smoke supports rollback.
+
+Required smoke cases:
+- host:TRAIN:auth.log
+- host:VALIDATION:netflow_day
+- host:TEST:bson
+- dns:TRAIN:csv
+- dns:VALIDATION:pcap
+
+Критерии приемки:
+- All required cases pass.
+- Synthetic artifacts do not pollute production state, or are isolated in temp/dry-run storage.
+- compileall and DB smoke pass.
+
+Связь со следующей задачей:
+Task 36 validates CLI and coverage behavior after all parsers are connected.

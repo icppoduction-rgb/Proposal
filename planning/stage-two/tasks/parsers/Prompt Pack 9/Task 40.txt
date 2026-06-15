@@ -1,0 +1,47 @@
+--------------------------------------------------------------------------------
+Task 40. Финальный acceptance gate для всей цепочки
+--------------------------------------------------------------------------------
+
+Цель:
+Подтвердить, что большая задача закрыта не только по коду, но и по operational readiness.
+
+Финальные acceptance criteria:
+[ ] All source formats in requested list are recognized by scanner/source_format inference.
+[ ] Every listed source_format has parser registry entry.
+[ ] Every listed source_format has active parser class for relevant branch/role where files exist.
+[ ] ParserResolver resolves every listed format to concrete class or reports empty bucket with active parser available.
+[ ] Host netflow_day, netflow_ids, wls_day are no longer planned/inactive gaps.
+[ ] normalize-format processes exactly one branch/role/source_format.
+[ ] normalize-all processes all READY files for branch.
+[ ] Existing normalize-dns and normalize-host commands still work.
+[ ] Parser reads raw, encoded, base64 and common compressed inputs where applicable.
+[ ] Parser handles UTF-8, UTF-8-SIG, cp1252, latin-1 and binary formats safely.
+[ ] Bad rows/files produce FAILED/PARTIAL statuses and reports, not silent data loss.
+[ ] Raw files are never modified.
+[ ] Normalized events are written to Parquet, not PostgreSQL payload tables.
+[ ] parser_runs and normalized_artifacts are registered in PostgreSQL Catalog.
+[ ] schema_version_id is populated where normalized schema seed exists.
+[ ] Traceability raw -> parser_run -> normalized_artifact is preserved.
+[ ] TRAIN/VALIDATION/TEST remain physically and logically separated.
+[ ] TEST filename heuristic remains disabled.
+[ ] Missing values are NULL/None.
+[ ] Unknown fields are preserved in raw_fields_json/features_json/metadata_json.
+[ ] Parser coverage report is generated in RU/EN reports.
+[ ] compileall passes.
+[ ] git diff --check passes.
+[ ] scripts.db.smoke_check passes.
+[ ] At least one direct smoke exists per parser group.
+[ ] At least one catalog rollback smoke validates parser_registry -> normalization -> Parquet -> catalog artifact registration.
+
+Final commands:
+python -m compileall manage.py config.py scripts
+git diff --check
+python -m scripts.db.smoke_check
+python -m alembic -c scripts/db/migrations/alembic.ini current
+python manage.py stage-two parser-coverage
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+Итоговый статус, который можно писать только после успешного прохождения Task 40:
+"Stage Two parser layer расширен non-breaking способом: все заявленные source_format buckets распознаются, имеют active parser coverage, могут нормализоваться через single-format или batch workflow, пишут normalized Parquet artifacts и сохраняют PostgreSQL Catalog traceability."

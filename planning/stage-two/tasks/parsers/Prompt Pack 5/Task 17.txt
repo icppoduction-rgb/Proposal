@@ -1,0 +1,42 @@
+--------------------------------------------------------------------------------
+Task 17. Расширить DNS CSV parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- csv для branch=dns
+
+Цель:
+Покрыть DNS TRAIN csv, DNS TEST headerless csv и mixed DNS/domain feature CSV.
+
+Файлы:
+- scripts/stage_two/parsers/dns.py
+- возможно scripts/stage_two/parsers/csv_utils.py
+
+Что поддержать:
+1. DNS TRAIN csv:
+   - domain-list;
+   - DNS/domain feature tables;
+   - PhishTank-like feed.
+2. DNS TEST csv:
+   - headerless 22-column positional schema.
+3. Broken/unescaped list/dict columns where possible.
+4. Preserve original row in raw_fields_json if row cannot be fully parsed.
+5. Labels only through LabelResolver.
+6. TEST filename heuristic disabled.
+
+Normalized fields:
+- timestamp if available;
+- timestamp_type;
+- domain/query_domain;
+- src_ip/resolver_ip if available;
+- dns lexical fields if present;
+- raw_fields_json for non-canonical columns.
+
+Критерии приемки:
+- Direct smoke: DNS TRAIN domain-list row.
+- Direct smoke: DNS TEST 22-column headerless row.
+- Bad CSV row increments rows_failed and does not kill file if other rows parse.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 18 covers DNS pcap.csv tabular packet-derived data.

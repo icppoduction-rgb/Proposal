@@ -1,0 +1,34 @@
+--------------------------------------------------------------------------------
+Task 29. Добавить controlled fallback и helper-file handling
+--------------------------------------------------------------------------------
+
+Цель:
+Обеспечить, что служебные/не-событийные файлы не ломают batch и получают корректный SKIPPED/PARTIAL status.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/dns.py
+- scripts/stage_two/parsers/common.py
+- scripts/stage_two/reports/parser_reports.py
+
+Что сделать:
+1. Определить helper/context files:
+   - feature_descr.csv;
+   - ground_truth.csv;
+   - README-like txt, если попадает в bucket;
+   - empty files.
+2. Для helper files:
+   - emit metadata event only if useful and safe;
+   - otherwise SKIPPED with clear parser report.
+3. Empty file -> EMPTY_FILE status.
+4. Unknown rows -> rows_failed, not silent drop.
+5. No unsupported format for listed formats after full implementation.
+
+Критерии приемки:
+- Helper files produce clear report.
+- Empty files do not crash.
+- listed source_format no longer returns UNSUPPORTED_FORMAT due to missing parser.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 30 connects all implemented classes into normalization services through resolver.

@@ -1,0 +1,44 @@
+--------------------------------------------------------------------------------
+Task 16. Создать shared normalized event builder / canonical mapping helpers
+--------------------------------------------------------------------------------
+
+Цель:
+Уменьшить дублирование между parsers и гарантировать единый normalized_event contract.
+
+Файлы:
+- scripts/stage_two/parsers/common.py
+- scripts/stage_two/parsers/base.py
+
+Что сделать:
+1. Helper для event_uid generation.
+2. Helper для базовых traceability fields:
+   - dataset_id
+   - file_id
+   - dataset_name
+   - dataset_role
+   - branch
+   - source_format
+   - source_file_path
+   - source_file_hash
+   - parser_name
+   - parser_version
+   - parser_run_id placeholder/context
+   - schema_name
+   - schema_version
+3. Helper для timestamp fields:
+   - timestamp
+   - timestamp_type
+   - event_index
+4. Helper для labels default:
+   - label_binary=None
+   - label_source="none"
+   - label_status="unlabeled"
+5. Helper для raw_fields_json and metadata_json merge.
+
+Критерии приемки:
+- Existing parsers can use helper incrementally.
+- No schema-breaking field names.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 17 starts parser implementations with DNS CSV, using event builder.

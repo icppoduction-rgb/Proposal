@@ -1,0 +1,39 @@
+--------------------------------------------------------------------------------
+Task 39. Подготовить финальный Codex summary template и validation commands
+--------------------------------------------------------------------------------
+
+Цель:
+Сделать единый формат финального отчета Codex после реализации всей цепочки.
+
+Финальный ответ Codex должен включать:
+1. Files changed.
+2. New parser classes.
+3. Parser coverage table.
+4. Commands executed.
+5. Test/smoke results.
+6. Remaining unsupported edge cases, only if truly unavoidable.
+7. Exact commands to run full staged validation.
+
+Staged validation commands:
+python manage.py stage-two bootstrap-storage
+python -m alembic -c scripts/db/migrations/alembic.ini upgrade head
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two catalog-ingest
+python manage.py stage-two parser-coverage
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 10
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 10
+python manage.py stage-two normalize-all --branch dns --limit 100
+python manage.py stage-two normalize-all --branch host --limit 100
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+Критерии приемки:
+- Summary template exists in docs/report or final response.
+- Validation commands reflect actual CLI.
+- No unverified claim of full-corpus success unless full-corpus was actually run.
+
+Связь со следующей задачей:
+Task 40 is final acceptance gate.

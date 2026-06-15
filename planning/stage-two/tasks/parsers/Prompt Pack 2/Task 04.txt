@@ -1,0 +1,47 @@
+--------------------------------------------------------------------------------
+Task 04. Реализовать UniversalInputReader: базовый интерфейс и streaming modes
+--------------------------------------------------------------------------------
+
+Цель:
+Создать общий безопасный слой чтения входных файлов для всех parser classes.
+
+Новые/изменяемые файлы:
+- scripts/stage_two/parsers/input_reader.py
+- scripts/stage_two/parsers/__init__.py
+- возможно scripts/stage_two/parsers/base.py
+
+Что реализовать:
+1. Класс UniversalInputReader.
+2. Режимы чтения:
+   - text
+   - binary
+   - lines
+   - records
+   - json_lines
+   - csv_rows
+   - packet_bytes
+   - bson_stream
+3. Streaming для text/lines/csv/json-lines.
+4. Binary read для PCAP/CAP/PCAPNG/BSON без text decode.
+5. Reader metadata:
+   - encoding_hint
+   - compression_hint
+   - base64_detected
+   - decode_strategy
+   - bytes_read
+   - warnings
+   - errors
+
+Ограничения:
+- Не читать большие файлы целиком, если режим допускает streaming.
+- Не выполнять eval/pickle/subprocess.
+- Не изменять raw file.
+
+Критерии приемки:
+- Reader можно создать для временного text, csv, json-lines и binary sample.
+- Reader возвращает iterator или context-managed stream.
+- Direct smoke проходит.
+- compileall и git diff --check проходят.
+
+Связь со следующей задачей:
+Task 05 расширяет UniversalInputReader безопасным encoding/BOM detection.

@@ -1,0 +1,38 @@
+--------------------------------------------------------------------------------
+Task 28. Реализовать Host XML parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- xml
+
+Цель:
+Безопасно парсить event-like XML без XXE/DTD/network fetch.
+
+Файлы:
+- scripts/stage_two/parsers/xml.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/__init__.py
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+
+Что поддержать:
+1. Safe XML parsing.
+2. No external entity resolution.
+3. No DTD/network fetch.
+4. Flatten event-like nodes into normalized events.
+5. Store unknown nested fields in raw_fields_json.
+6. Extract if present:
+   - timestamp;
+   - host;
+   - process;
+   - event id;
+   - user;
+   - message.
+
+Критерии приемки:
+- Direct smoke: simple event XML.
+- Direct smoke: XML with nested fields.
+- XXE-like content is rejected/ignored safely.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 29 adds generic fallback behavior and helper-file handling so batch processing is robust.

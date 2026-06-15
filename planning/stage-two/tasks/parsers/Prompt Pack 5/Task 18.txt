@@ -1,0 +1,34 @@
+--------------------------------------------------------------------------------
+Task 18. Расширить DNS pcap.csv parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- pcap.csv для branch=dns
+
+Цель:
+Надежно читать packet-derived CSV с DNS/network fields.
+
+Файлы:
+- scripts/stage_two/parsers/dns.py
+- scripts/stage_two/parsers/csv_utils.py, если создан
+
+Что поддержать:
+1. Headered packet-derived CSV.
+2. DNS query/response columns where available.
+3. Packet/flow summary fields.
+4. Encoding and base64 via UniversalInputReader.
+5. Preserve unknown columns in raw_fields_json.
+
+Normalized fields:
+- timestamp;
+- src_ip/dst_ip/src_port/dst_port/protocol;
+- domain/query_domain/qtype/qclass/ttl/rcode if available;
+- event_type such as dns_query/dns_response/network_packet_summary.
+
+Критерии приемки:
+- Direct smoke on tiny pcap.csv sample.
+- Bad row handled as partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 19 handles DNS TXT domain lists.

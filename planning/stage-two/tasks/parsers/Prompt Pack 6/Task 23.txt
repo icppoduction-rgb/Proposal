@@ -1,0 +1,65 @@
+--------------------------------------------------------------------------------
+Task 23. Расширить Host line log parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- auth.log
+- info
+- journal
+- journal~
+- log
+- log-1
+- log-2
+- log-3
+- mail-info-1
+- mail-warn-1
+- mainlog
+- mainlog-1
+- mainlog-2
+- mainlog-3
+- messages
+- messages-1
+- syslog
+- syslog-1
+- syslog-2
+- syslog-3
+- syslog-4
+- syslog.log
+
+Цель:
+Нормализовать mixed raw line logs и JSON-lines внутри log files.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- возможно scripts/stage_two/parsers/logs.py
+
+Что поддержать:
+1. Raw syslog prefix parsing:
+   MMM dd HH:MM:SS host process[pid]: message
+2. JSON-lines mixed inside log files.
+3. audit/auth/session patterns.
+4. postfix/mail/mainlog patterns where feasible.
+5. journal-like lines.
+6. Missing year/timezone:
+   - timestamp_type="missing" or partial timestamp metadata;
+   - do not inject current year silently unless safe context exists.
+7. event_index required for ordered streams when timestamp missing.
+8. Extract when available:
+   - process_name;
+   - process_id;
+   - user_name;
+   - host_name;
+   - raw_event_name;
+   - event_type.
+9. Store raw line preview/hash in raw_fields_json, not huge full line payload.
+
+Критерии приемки:
+- Direct smoke: syslog line.
+- Direct smoke: auth session line.
+- Direct smoke: JSON-line inside .log.
+- Direct smoke: mail/mainlog-like line.
+- Bad line partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 24 handles Metricbeat/system metrics logs.

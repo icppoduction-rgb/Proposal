@@ -1,0 +1,48 @@
+--------------------------------------------------------------------------------
+Task 31. Реализовать parser/normalization report writer
+--------------------------------------------------------------------------------
+
+Цель:
+Для каждого parser run сохранять diagnostic report в RU/EN parser и normalization folders.
+
+Файлы:
+- scripts/stage_two/reports/parser_reports.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- scripts/stage_two/storage/bootstrap.py, если нужно добавить dirs
+
+Reports path:
+- PATH_DATA_STORAGE/reports/en/stage-two/parser/
+- PATH_DATA_STORAGE/reports/ru/stage-two/parser/
+- PATH_DATA_STORAGE/reports/en/stage-two/normalization/
+- PATH_DATA_STORAGE/reports/ru/stage-two/normalization/
+
+Report fields:
+- parser_name
+- parser_version
+- branch
+- role
+- source_format
+- dataset_id
+- file_id
+- source_file_path
+- source_file_hash
+- rows_read
+- rows_parsed
+- rows_failed
+- output_artifact_path
+- status
+- warnings
+- errors sample
+- encoding/compression/base64 hints
+- schema mismatch counters
+- started_at/finished_at
+
+Критерии приемки:
+- Reports are created for success, partial success and failure.
+- parser_run.report_path populated where applicable.
+- No huge raw payload in report.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 32 validates LabelResolver/leakage integration.

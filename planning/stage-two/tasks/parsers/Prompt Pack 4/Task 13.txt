@@ -1,0 +1,51 @@
+--------------------------------------------------------------------------------
+Task 13. Реализовать безопасный mark-ready workflow
+--------------------------------------------------------------------------------
+
+Цель:
+Решить текущий operational gap: catalog-ingest не переводит files в READY_FOR_PARSING.
+
+Новые/изменяемые файлы:
+- scripts/stage_two/status_tools.py
+- scripts/stage_two/cli.py
+- возможно scripts/db/repositories/dataset_file_repository.py
+
+CLI:
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+
+Fallback:
+python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
+python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
+
+Что сделать:
+1. По умолчанию dry-run.
+2. Для actual update нужен explicit --apply или apply prefix.
+3. Менять только statuses:
+   - REGISTERED
+   - CHANGED
+   - DISCOVERED
+   -> READY_FOR_PARSING
+4. Не менять без отдельного force flag:
+   - EMPTY_FILE
+   - FAILED
+   - PARSED
+   - PARTIALLY_PARSED
+   - SKIPPED
+5. Писать count report:
+   - selected
+   - updated
+   - skipped_by_status
+   - unsupported
+   - empty
+   - errors
+6. Не делать commit внутри repository; использовать service/session_scope.
+
+Критерии приемки:
+- dry-run не меняет DB.
+- apply меняет только разрешенные statuses.
+- Counts корректны.
+- compileall и DB smoke проходят.
+
+Связь со следующей задачей:
+Task 14 добавляет normalize-format, который использует READY_FOR_PARSING rows.

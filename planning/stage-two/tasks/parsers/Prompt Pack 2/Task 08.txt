@@ -1,0 +1,37 @@
+--------------------------------------------------------------------------------
+Task 08. Унифицировать parser status, counters и error samples
+--------------------------------------------------------------------------------
+
+Цель:
+Сделать единый helper для ParserResult counters, status calculation и error samples.
+
+Файлы:
+- scripts/stage_two/parsers/base.py
+- возможно scripts/stage_two/parsers/common.py
+
+Что сделать:
+1. Добавить helper для counters:
+   - rows_read
+   - rows_parsed
+   - rows_failed
+   - bytes_read
+   - files_read
+   - warnings_count
+   - parse_errors_count
+2. Добавить status calculation:
+   - SUCCESS if parsed > 0 and failed = 0;
+   - PARTIAL_SUCCESS/PARTIALLY_PARSED if parsed > 0 and failed > 0;
+   - EMPTY_FILE if no content;
+   - FAILED if parser cannot read file;
+   - SKIPPED only for intentionally skipped helper files;
+   - UNSUPPORTED_FORMAT only if no parser available.
+3. Ограничить error samples через STAGE_TWO_MAX_ERROR_SAMPLES.
+4. Не ломать существующие ParseResult consumers.
+
+Критерии приемки:
+- Existing DNS/Host parser smoke remains green.
+- New helper can be used incrementally by parsers.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 09 использует common status model при source_format inference tests.

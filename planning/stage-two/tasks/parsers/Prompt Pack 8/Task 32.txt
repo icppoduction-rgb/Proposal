@@ -1,0 +1,30 @@
+--------------------------------------------------------------------------------
+Task 32. Проверить LabelResolver integration и leakage guards
+--------------------------------------------------------------------------------
+
+Цель:
+Гарантировать безопасную label behavior across parser groups.
+
+Файлы:
+- scripts/stage_two/labels/resolver.py
+- parser classes touched in previous tasks
+- scripts/stage_two/quality/checkers.py, only if needed
+
+Что проверить/исправить:
+1. Embedded labels allowed when real fields and role-safe.
+2. label_mapping_rules allowed.
+3. Filename/directory/scenario hints conservative and record source/status.
+4. TEST filename heuristic disabled.
+5. Absence of label is not benign.
+6. label_binary=None for unlabeled.
+7. label columns never treated as model input features.
+8. source_file, dataset_role, scenario_name, parser metadata remain context/traceability only.
+
+Критерии приемки:
+- TEST filename heuristic smoke returns unlabeled unless explicit safe source exists.
+- TRAIN embedded label smoke works where applicable.
+- Leakage checks still pass.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 33 starts systematic test/smoke suite for parser groups.

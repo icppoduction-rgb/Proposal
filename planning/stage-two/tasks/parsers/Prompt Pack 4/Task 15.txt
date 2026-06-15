@@ -1,0 +1,38 @@
+--------------------------------------------------------------------------------
+Task 15. Реализовать normalize-all для всей ветки
+--------------------------------------------------------------------------------
+
+Цель:
+Добавить массовую обработку всех READY_FOR_PARSING files выбранной branch без смешивания ролей.
+
+Файлы:
+- scripts/stage_two/cli.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- возможно scripts/stage_two/normalization/runner.py
+
+CLI:
+python manage.py stage-two normalize-all --branch dns --limit 1000
+python manage.py stage-two normalize-all --branch host --limit 1000
+
+Fallback:
+python manage.py stage-two normalize-all dns:1000
+python manage.py stage-two normalize-all host:1000
+
+Что сделать:
+1. Process all READY files for branch.
+2. Iterate by role and source_format, not mixed uncontrolled full corpus transaction.
+3. Commit per file or controlled batch through service layer.
+4. Continue on file-level errors.
+5. Produce batch summary.
+6. Existing normalize-dns/normalize-host remain aliases or preserve current semantics.
+
+Критерии приемки:
+- Low-limit smoke works:
+  python manage.py stage-two normalize-all --branch host --limit 10
+  python manage.py stage-two normalize-all --branch dns --limit 10
+- No role mixing in output paths/catalog rows.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 16 adds parser event builder utilities, then parser groups are implemented one by one.

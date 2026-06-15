@@ -1,0 +1,39 @@
+--------------------------------------------------------------------------------
+Task 12. Реализовать parser coverage matrix и reports
+--------------------------------------------------------------------------------
+
+Цель:
+Добавить диагностику покрытия parser layer до массовой нормализации.
+
+Новые/изменяемые файлы:
+- scripts/stage_two/parser_coverage.py
+- scripts/stage_two/cli.py
+- scripts/stage_two/reports/parser_reports.py, если удобно
+
+CLI:
+python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage host
+python manage.py stage-two parser-coverage dns
+
+Что сделать:
+1. Собрать matrix:
+   branch | role | source_format | files_count | parser_active | parser_class | parser_name | action
+2. Источники counts:
+   - PostgreSQL Catalog dataset_files, если доступен;
+   - optionally Stage One SORT_PATH_HOST_FILE/SORT_PATH_DNS_FILE for diagnostics only.
+3. Не заменять catalog ingestion Stage One JSON-ами.
+4. Писать reports:
+   - PATH_DATA_STORAGE/reports/en/stage-two/parser/parser_coverage_matrix.json
+   - PATH_DATA_STORAGE/reports/ru/stage-two/parser/parser_coverage_matrix.json
+   - PATH_DATA_STORAGE/reports/en/stage-two/parser/parser_coverage_matrix.md
+   - PATH_DATA_STORAGE/reports/ru/stage-two/parser/parser_coverage_matrix.md
+5. Empty buckets допустимы, но parser entry должен быть виден.
+
+Критерии приемки:
+- CLI выводит таблицу.
+- Reports создаются.
+- Unknown/missing parsers видны явно.
+- Existing commands не ломаются.
+
+Связь со следующей задачей:
+Task 13 добавляет mark-ready utility, чтобы coverage можно было превратить в controlled normalization batch.

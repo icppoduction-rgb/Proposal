@@ -1,0 +1,30 @@
+--------------------------------------------------------------------------------
+Task 05. Добавить encoding/BOM handling для text readers
+--------------------------------------------------------------------------------
+
+Цель:
+Обеспечить безопасное чтение текстовых датасетов с utf-8, utf-8-sig, cp1252, latin-1, ascii.
+
+Файлы:
+- scripts/stage_two/parsers/input_reader.py
+- возможно scripts/stage_two/parsers/encoding.py
+
+Что сделать:
+1. Добавить detection BOM для UTF-8-SIG.
+2. Реализовать fallback chain:
+   - utf-8
+   - utf-8-sig
+   - cp1252
+   - latin-1
+   - ascii
+3. Для parsing fallback использовать errors="replace" только когда strict decode невозможен.
+4. Не менять raw byte hash.
+5. Сохранять encoding_hint и decode_error в metadata.
+
+Критерии приемки:
+- Smokes для utf-8, utf-8-sig, cp1252, latin-1 samples.
+- Bad byte не ломает весь batch, но фиксируется warning.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 06 добавляет base64/compression handling поверх reader foundation.

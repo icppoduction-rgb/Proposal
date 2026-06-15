@@ -1,0 +1,34 @@
+--------------------------------------------------------------------------------
+Task 25. Расширить Host syscall/API trace parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- ghc
+- sc
+- txt
+
+Цель:
+Нормализовать syscall/API/trace-like line streams with event_order.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- возможно scripts/stage_two/parsers/logs.py
+
+Что поддержать:
+1. One syscall/API event per line.
+2. Numeric syscall id or tokenized syscall name.
+3. Optional process/user/argument fragments where extractable.
+4. event_index required.
+5. timestamp_type="event_order" if no absolute timestamp.
+6. Base64 line decoding where safe.
+7. Large files streaming.
+
+Критерии приемки:
+- Direct smoke: ghc-like line.
+- Direct smoke: sc-like syscall id line.
+- Direct smoke: txt trace line.
+- Bad line partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 26 strengthens BSON sandbox parser.

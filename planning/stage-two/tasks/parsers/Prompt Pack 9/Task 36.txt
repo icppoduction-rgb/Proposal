@@ -1,0 +1,32 @@
+--------------------------------------------------------------------------------
+Task 36. Проверить CLI parser-coverage, mark-ready, normalize-format, normalize-all
+--------------------------------------------------------------------------------
+
+Цель:
+Проверить новые operational commands как пользовательский workflow.
+
+Команды:
+python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage host
+python manage.py stage-two parser-coverage dns
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 10
+python manage.py stage-two normalize-all --branch host --limit 10
+python manage.py stage-two normalize-all --branch dns --limit 10
+
+Что проверить:
+1. parser-coverage shows all listed source_format covered or empty bucket with active parser available.
+2. mark-ready dry-run does not write.
+3. mark-ready apply writes only allowed statuses.
+4. normalize-format handles exactly selected branch/role/source_format.
+5. normalize-all does not mix branch/roles.
+6. Existing normalize-dns/normalize-host still work.
+
+Критерии приемки:
+- CLI smokes pass.
+- Coverage reports created in RU/EN.
+- No old command regression.
+
+Связь со следующей задачей:
+Task 37 runs quality/leakage/readiness checks after parser outputs exist.

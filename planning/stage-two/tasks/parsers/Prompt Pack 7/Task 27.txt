@@ -1,0 +1,60 @@
+--------------------------------------------------------------------------------
+Task 27. Реализовать Host NetFlow/WLS parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- netflow_day
+- netflow_ids
+- wls_day
+
+Цель:
+Закрыть главный parser coverage gap: эти форматы больше не должны быть planned/inactive.
+
+Файлы:
+- scripts/stage_two/parsers/netflow.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/__init__.py
+- scripts/stage_two/parser_registry/parser_registry_seed.json
+
+Варианты классов:
+- один robust HostNetflowParser;
+- или отдельные классы:
+  - HostNetflowDayParser;
+  - HostNetflowIdsParser;
+  - HostWlsDayParser.
+
+Что поддержать:
+1. Delimited text.
+2. Headered CSV-like records.
+3. Whitespace-separated records.
+4. JSON-lines if encountered.
+5. compressed/base64 wrapped text.
+6. Extract when available:
+   - timestamp/window date;
+   - src_ip;
+   - dst_ip;
+   - src_port;
+   - dst_port;
+   - protocol;
+   - bytes/packets;
+   - duration;
+   - flow direction;
+   - ids alert/category for netflow_ids if present;
+   - source/loghost/event id fields for wls_day if present;
+   - host/scenario/file context from catalog metadata.
+7. Normalized modality:
+   - network_flow;
+   - host_network_flow;
+   - host_eventlog for wls_day if row is clearly eventlog-like.
+
+Критерии приемки:
+- parser_registry entries active.
+- ParserResolver resolves netflow_day, netflow_ids, wls_day.
+- Direct smoke for all three formats.
+- normalize-format smoke:
+  python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 10
+- Host coverage report no longer shows netflow/wls as inactive gap.
+- compileall и DB smoke проходят.
+
+Связь со следующей задачей:
+Task 28 adds XML parser to complete structured text coverage.

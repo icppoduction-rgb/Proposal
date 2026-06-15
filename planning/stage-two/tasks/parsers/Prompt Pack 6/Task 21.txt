@@ -1,0 +1,39 @@
+--------------------------------------------------------------------------------
+Task 21. Расширить Host CSV parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- csv для branch=host
+
+Цель:
+Покрыть Host TRAIN CSV, Host VALIDATION runs.csv-like metadata и Host TEST CSV with safe label behavior.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/csv_utils.py
+
+Что поддержать:
+1. ADFA-like 9-column schema:
+   date, time, process_id, path, sys_call, event_id, attack_cat, attack_subcat, label.
+2. Headerless CSV.
+3. Service files:
+   - feature_descr.csv;
+   - ground_truth.csv.
+   Они не должны forced into same event schema. Emit metadata/context events or SKIPPED with parser report.
+4. Host VALIDATION runs.csv-like metadata:
+   - scenario/run metadata;
+   - is_executing_exploit label if present and role-safe.
+5. Host TEST CSV with separate label files:
+   - no label join unless explicit safe mapping exists.
+6. Encoding cp1252/utf-8-sig.
+
+Критерии приемки:
+- Direct smoke: 9-column row.
+- Direct smoke: headerless row.
+- Direct smoke: runs.csv row.
+- feature_descr.csv skipped or metadata event with clear reason.
+- TEST label behavior safe.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 22 handles Host JSON/JSON-lines.

@@ -1,0 +1,41 @@
+--------------------------------------------------------------------------------
+Task 30. Обновить DNS/Host normalization services и class mappings
+--------------------------------------------------------------------------------
+
+Цель:
+Подключить все parser classes к services без hardcoded missing mappings.
+
+Файлы:
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- scripts/stage_two/parsers/__init__.py
+- scripts/stage_two/parser_registry/resolver.py
+
+Что сделать:
+1. Resolve parser through ParserResolver only.
+2. No hardcoded missing parser class mappings.
+3. HOST_PARSER_CLASSES или equivalent должен включать все implemented Host parser classes.
+4. DNS parser mapping должен включать DNS packet/text/csv classes.
+5. schema_version_id must be resolved from schema_versions if seed exists.
+6. Avoid normalized_artifacts.schema_version_id=None unless schema truly unavailable.
+7. parser_runs include:
+   - parser_id;
+   - schema_version_id;
+   - status;
+   - counters;
+   - error_message.
+8. normalized_artifacts include:
+   - row_count;
+   - relative path;
+   - content hash;
+   - schema_version;
+   - parser_run_id.
+
+Критерии приемки:
+- All active registry classes import successfully.
+- normalize-format direct smoke works for representative DNS/Host formats.
+- schema_version_id populated where seed exists.
+- compileall and DB smoke pass.
+
+Связь со следующей задачей:
+Task 31 standardizes parser/normalization reports.

@@ -1,0 +1,29 @@
+--------------------------------------------------------------------------------
+Task 07. Добавить безопасные binary adapters для PCAP/CAP/PCAPNG/BSON
+--------------------------------------------------------------------------------
+
+Цель:
+Подготовить shared reading utilities для binary parsers.
+
+Файлы:
+- scripts/stage_two/parsers/input_reader.py
+- scripts/stage_two/parsers/packet.py
+- scripts/stage_two/parsers/bson.py
+
+Что сделать:
+1. Reader должен отдавать binary stream или chunk iterator.
+2. Добавить magic detection:
+   - classic pcap;
+   - pcapng;
+   - BSON document stream where possible.
+3. Не пытаться декодировать binary как text.
+4. Добавить metadata for binary type.
+5. Ограничить payload preview.
+
+Критерии приемки:
+- Tiny PCAP/PCAPNG/BSON samples читаются без text decode.
+- Unknown binary file дает controlled FAILED/SKIPPED result в downstream parser, а не crash reader.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 08 унифицирует parser error/status model, чтобы все parser classes одинаково реагировали на reader warnings/errors.

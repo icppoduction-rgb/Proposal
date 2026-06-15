@@ -1,0 +1,41 @@
+--------------------------------------------------------------------------------
+Task 14. Реализовать normalize-format для одного branch/role/source_format
+--------------------------------------------------------------------------------
+
+Цель:
+Позволить нормализовать один выбранный формат без запуска всей ветки.
+
+Файлы:
+- scripts/stage_two/cli.py
+- scripts/stage_two/normalization/dns_service.py
+- scripts/stage_two/normalization/host_service.py
+- возможно новый scripts/stage_two/normalization/runner.py
+
+CLI:
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format pcap --limit 100
+
+Fallback:
+python manage.py stage-two normalize-format host:TRAIN:auth.log:100
+
+Что сделать:
+1. Query only READY_FOR_PARSING files for selected branch/role/source_format.
+2. Resolve parser through ParserResolver.
+3. Process files independently.
+4. Ошибка одного файла не должна прерывать весь batch.
+5. Correct statuses per file:
+   - PARSED
+   - PARTIALLY_PARSED
+   - FAILED
+   - SKIPPED
+6. Register parser_runs and normalized_artifacts.
+7. Preserve existing normalize-dns/normalize-host behavior.
+
+Критерии приемки:
+- normalize-format host:TRAIN:auth.log works on temporary sample.
+- normalize-format dns:TRAIN:csv works on temporary sample.
+- Existing normalize-dns/normalize-host still work.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 15 builds normalize-all as controlled batch wrapper over the same service logic.

@@ -1,0 +1,54 @@
+--------------------------------------------------------------------------------
+Task 24. Реализовать Host Metricbeat/system metrics parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- cpu.log
+- diskio.log
+- filesystem.log
+- fsstat.log
+- load.log
+- memory.log
+- network.log
+- process.log
+- process.summary.log
+- service.log
+- socket.summary.log
+- uptime.log
+
+Цель:
+Нормализовать JSON-lines Metricbeat-like host metrics.
+
+Файлы:
+- scripts/stage_two/parsers/metrics.py
+- scripts/stage_two/parsers/host.py
+- scripts/stage_two/parsers/__init__.py
+
+Что поддержать:
+1. JSON-lines metrics.
+2. Distinguish metric rows vs annotation/label rows.
+3. Canonical fields:
+   - timestamp;
+   - host_name;
+   - event.dataset;
+   - metric_name;
+   - metric_value;
+   - modality="host_metric";
+   - raw_fields_json with full nested metric values.
+4. For process/network/service logs, extract where available:
+   - process name/pid;
+   - service name/state;
+   - network interface counters;
+   - socket counts;
+   - CPU/memory/disk/filesystem/load metrics.
+5. Missing metric values as NULL.
+
+Критерии приемки:
+- Direct smoke for cpu.log sample.
+- Direct smoke for diskio.log sample.
+- Direct smoke for network.log/process.summary.log sample.
+- Annotation rows do not corrupt metric rows.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 25 handles syscall/API/trace streams.

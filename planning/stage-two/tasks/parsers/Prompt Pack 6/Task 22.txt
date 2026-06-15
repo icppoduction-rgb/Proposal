@@ -1,0 +1,42 @@
+--------------------------------------------------------------------------------
+Task 22. Расширить Host JSON / JSON-lines parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- json
+- json-1
+
+Цель:
+Поддержать JSON-lines, JSON array, single JSON object, ECS/Filebeat/Metricbeat-like nested objects, Windows/Sysmon-like records.
+
+Файлы:
+- scripts/stage_two/parsers/host.py
+- возможно scripts/stage_two/parsers/json_utils.py
+
+Что поддержать:
+1. JSON Lines.
+2. JSON array.
+3. Single JSON object.
+4. Nested object flattening into raw_fields_json.
+5. Canonical field extraction:
+   - @timestamp;
+   - host.name;
+   - user.name;
+   - process.name/process.executable/process.pid;
+   - event.dataset;
+   - event.action;
+   - log.file.path;
+   - message;
+   - labels/rules if present.
+6. Bad JSON line increments rows_failed but does not break batch.
+7. Base64 JSON-lines via UniversalInputReader.
+
+Критерии приемки:
+- Direct smoke: JSON lines.
+- Direct smoke: JSON array.
+- Direct smoke: single object.
+- Bad line partial success.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 23 handles raw/syslog/mail/journal line logs.

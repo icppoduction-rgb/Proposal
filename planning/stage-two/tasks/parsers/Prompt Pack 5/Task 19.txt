@@ -1,0 +1,28 @@
+--------------------------------------------------------------------------------
+Task 19. Расширить DNS TXT domain-list parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- txt для branch=dns
+
+Цель:
+Нормализовать one-domain-per-line DNS validation/domain-list files.
+
+Файлы:
+- scripts/stage_two/parsers/dns.py
+
+Что поддержать:
+1. One-domain-per-line.
+2. Comments and blank lines.
+3. Base64 line decoding if line is valid base64 encoded domain/list item.
+4. Optional class hint only from safe mapping rules, not TEST filename heuristic.
+5. Unknown class stays unlabeled.
+
+Критерии приемки:
+- Direct smoke: plain domain line.
+- Direct smoke: base64 encoded domain line.
+- Blank/comment lines skipped with clear counters.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 20 covers packet capture containers shared by DNS and Host.

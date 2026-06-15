@@ -1,0 +1,26 @@
+--------------------------------------------------------------------------------
+Task 37. Запустить DuckDB, leakage и readiness checks
+--------------------------------------------------------------------------------
+
+Цель:
+Убедиться, что parser expansion не ломает downstream Stage Two checks.
+
+Команды:
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+Что проверить:
+1. DuckDB views can read new Parquet schemas with union_by_name.
+2. Required normalized columns exist.
+3. Split contamination checks pass.
+4. Leakage checker finds no forbidden X columns due to parser metadata.
+5. readiness_check updated only if needed; do not weaken checks.
+
+Критерии приемки:
+- DuckDB check report SUCCESS or expected non-critical warning on empty buckets.
+- Leakage CRITICAL count = 0.
+- Readiness checker does not fail due to parser coverage if implementation complete.
+
+Связь со следующей задачей:
+Task 38 updates documentation and reports.

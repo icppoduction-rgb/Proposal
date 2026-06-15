@@ -1,0 +1,40 @@
+--------------------------------------------------------------------------------
+Task 33. Добавить direct parser smokes для каждого parser group
+--------------------------------------------------------------------------------
+
+Цель:
+Создать reproducible smokes для всех parser groups без full DB dependency.
+
+Файлы:
+- возможно scripts/stage_two/parser_smoke.py
+- или tests/smoke scripts if project structure exists
+
+Parser groups:
+1. DNS CSV.
+2. DNS pcap.csv.
+3. DNS TXT.
+4. Packet capture pcap/cap/pcapng.
+5. Host CSV.
+6. Host JSON/JSON-lines.
+7. Host line logs.
+8. Host metrics logs.
+9. Host syscall/API traces.
+10. BSON.
+11. NetFlow/WLS.
+12. XML.
+
+Что проверить:
+- ParserResult counters.
+- Required normalized event fields.
+- event_index for ordered streams.
+- timestamp_type handling.
+- raw_fields_json preservation.
+- status calculation.
+
+Критерии приемки:
+- At least one direct smoke per parser group.
+- Smokes can run without modifying real raw datasets.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 34 adds targeted encoding/base64/compression smokes.

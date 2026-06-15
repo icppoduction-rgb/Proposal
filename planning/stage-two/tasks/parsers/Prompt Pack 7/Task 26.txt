@@ -1,0 +1,45 @@
+--------------------------------------------------------------------------------
+Task 26. Усилить BSON sandbox parser
+--------------------------------------------------------------------------------
+
+Форматы:
+- bson
+
+Цель:
+Надежно читать BSON document streams from Dynamic Malware / sandbox-like telemetry.
+
+Файлы:
+- scripts/stage_two/parsers/bson.py
+- scripts/stage_two/parsers/host.py, if wrapper mapping needed
+
+Что поддержать:
+1. BSON document stream.
+2. Descriptor documents and event documents.
+3. Map descriptor ID to event name/category/argument names.
+4. Preserve document order.
+5. Extract where available:
+   - descriptor id;
+   - event id;
+   - event name;
+   - category;
+   - process/thread context;
+   - relative time/counters;
+   - args;
+   - command line;
+   - module path;
+   - file/path artifacts.
+6. Unknown/exotic BSON types:
+   - do not crash full batch;
+   - fail current file or current document depending severity;
+   - save details in parser report.
+7. base64-wrapped BSON decoded to bytes if valid and under size limit.
+
+Критерии приемки:
+- Direct smoke: descriptor + event BSON stream.
+- Direct smoke: relative timestamp/event_index preserved.
+- Unknown type controlled failure/report.
+- Catalog rollback smoke host:TEST:bson.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 27 closes the main remaining gap: netflow_day/netflow_ids/wls_day.

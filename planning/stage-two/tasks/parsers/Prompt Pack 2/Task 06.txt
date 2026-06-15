@@ -1,0 +1,49 @@
+--------------------------------------------------------------------------------
+Task 06. Добавить safe base64 и compression handling
+--------------------------------------------------------------------------------
+
+Цель:
+Поддержать whole-file, line-level и JSON field-level base64 там, где это безопасно, а также common compression.
+
+Файлы:
+- scripts/stage_two/parsers/input_reader.py
+- возможно scripts/stage_two/parsers/encoding.py
+- config.py, если нужны constants
+
+Что реализовать:
+1. Compression/magic detection:
+   - gzip
+   - bz2
+   - xz/lzma
+   - zip with safe member extraction, no path traversal
+   - plain text
+   - binary
+2. Base64 detection:
+   - whole-file base64;
+   - line-level base64;
+   - JSON field-level base64 as payload value only.
+3. Safety checks:
+   - valid base64 alphabet;
+   - base64.b64decode(..., validate=True);
+   - decoded bytes look like known magic or valid text/json/csv/log;
+   - decoded size <= STAGE_TWO_MAX_BASE64_DECODE_BYTES;
+   - no automatic assumption that every text is base64.
+4. Metadata:
+   - base64_detected;
+   - decode_strategy;
+   - compression_hint;
+   - decode_error.
+
+Ограничения:
+- Не выполнять decoded content.
+- Не распаковывать archive paths на filesystem.
+- Не хранить full decoded payload in metadata_json.
+
+Критерии приемки:
+- Smokes: base64 CSV, base64 JSON-lines, base64 raw log line.
+- Smokes: gzip text, bz2 text, xz text if standard libs available.
+- Oversized/invalid base64 gives warning, not crash.
+- compileall проходит.
+
+Связь со следующей задачей:
+Task 07 добавляет binary container stream adapters.
