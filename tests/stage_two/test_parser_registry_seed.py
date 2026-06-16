@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from scripts.db.models import ParserRegistry
+from scripts.db.models import ParserRegistry, SchemaVersion
 from scripts.stage_two.ingestion.scanner import KNOWN_SOURCE_FORMATS
 from scripts.stage_two.parser_registry.resolver import ParserResolver
 from scripts.stage_two.parser_registry.seed import (
@@ -15,7 +15,7 @@ from scripts.stage_two.parser_registry.seed import (
     validate_parser_class,
     validate_parser_registry_row,
 )
-from scripts.stage_two.parsers import PARSER_CLASS_EXPORTS
+from scripts.stage_two.parsers import DnsCsvParser, PARSER_CLASS_EXPORTS
 
 
 SEED_PATH = Path("scripts/stage_two/parser_registry/parser_registry_seed.json")
@@ -173,6 +173,93 @@ class ParserRegistrySeedTest(unittest.TestCase):
         }
 
         self.assertEqual(expected_classes - set(PARSER_CLASS_EXPORTS), set())
+
+    def test_resolver_loads_parser_class_from_registry_metadata(self) -> None:
+        row = _registry_row(
+            parser_name="dns_csv_parser",
+            parser_class="DnsCsvParser",
+            priority=10,
+        )
+        resolver = ParserResolver(session=None)  # type: ignore[arg-type]
+
+        parser_class = resolver.load_parser_class(row)
+
+        self.assertIs(parser_class, DnsCsvParser)
+
+    def test_resolver_returns_none_for_unavailable_parser_class(self) -> None:
+        row = _registry_row(
+            parser_name="missing_dns_csv_parser",
+            parser_class="MissingParserClass",
+            priority=1,
+        )
+        resolver = ParserResolver(session=None)  # type: ignore[arg-type]
+
+        parser_class = resolver.load_parser_class(row)
+
+        self.assertIsNone(parser_class)
+
+    def test_resolver_prefers_branch_schema_then_global_schema(self) -> None:
+        row = _registry_row(
+            parser_name="dns_csv_parser",
+            parser_class="DnsCsvParser",
+            priority=10,
+        )
+        branch_schema = SchemaVersion(
+            id=7,
+            schema_name="normalized_event",
+            schema_version="v1",
+            layer="normalized",
+            branch="dns",
+            is_active=True,
+        )
+        session = _FakeSchemaSession([branch_schema])
+        resolver = ParserResolver(session=session)  # type: ignore[arg-type]
+
+        schema = resolver.resolve_schema_version(row, branch="dns")
+
+        self.assertIs(schema, branch_schema)
+        self.assertEqual(session.execute_count, 1)
+
+    def test_resolver_falls_back_to_global_schema(self) -> None:
+        row = _registry_row(
+            parser_name="dns_csv_parser",
+            parser_class="DnsCsvParser",
+            priority=10,
+        )
+        global_schema = SchemaVersion(
+            id=8,
+            schema_name="normalized_event",
+            schema_version="v1",
+            layer="normalized",
+            branch=None,
+            is_active=True,
+        )
+        session = _FakeSchemaSession([None, global_schema])
+        resolver = ParserResolver(session=session)  # type: ignore[arg-type]
+
+        schema = resolver.resolve_schema_version(row, branch="dns")
+
+        self.assertIs(schema, global_schema)
+        self.assertEqual(session.execute_count, 2)
+
+
+class _FakeSchemaResult:
+    def __init__(self, row: SchemaVersion | None) -> None:
+        self.row = row
+
+    def scalar_one_or_none(self) -> SchemaVersion | None:
+        return self.row
+
+
+class _FakeSchemaSession:
+    def __init__(self, rows: list[SchemaVersion | None]) -> None:
+        self.rows = rows
+        self.execute_count = 0
+
+    def execute(self, _statement: object) -> _FakeSchemaResult:
+        self.execute_count += 1
+        row = self.rows.pop(0) if self.rows else None
+        return _FakeSchemaResult(row)
 
 
 if __name__ == "__main__":

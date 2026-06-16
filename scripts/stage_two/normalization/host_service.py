@@ -11,29 +11,7 @@ from scripts.db.repositories import ArtifactRepository, DatasetFileRepository, P
 from scripts.stage_two.labels import LabelResolver
 from scripts.stage_two.parquet import ParquetArtifactWriter
 from scripts.stage_two.parser_registry import ParserResolver
-from scripts.stage_two.parsers import ParserContext
-from scripts.stage_two.parsers.bson import HostBsonSandboxParser
-from scripts.stage_two.parsers.host import (
-    HostCsvParser,
-    HostJsonLinesParser,
-    HostLineLogParser,
-    HostNetflowParser,
-    HostSyscallTraceParser,
-    HostXmlParser,
-)
-from scripts.stage_two.parsers.packet import HostPacketCaptureParser
-
-
-HOST_PARSER_CLASSES = {
-    "HostBsonSandboxParser": HostBsonSandboxParser,
-    "HostCsvParser": HostCsvParser,
-    "HostJsonLinesParser": HostJsonLinesParser,
-    "HostLineLogParser": HostLineLogParser,
-    "HostNetflowParser": HostNetflowParser,
-    "HostPacketCaptureParser": HostPacketCaptureParser,
-    "HostSyscallTraceParser": HostSyscallTraceParser,
-    "HostXmlParser": HostXmlParser,
-}
+from scripts.stage_two.parsers import ParserContext, ParserResult
 
 
 class HostNormalizationService:
@@ -58,31 +36,38 @@ class HostNormalizationService:
         parser_metadata = self.resolver.resolve_or_mark_unsupported(dataset_file)
         if parser_metadata is None:
             return None
-        parser_class = HOST_PARSER_CLASSES.get(parser_metadata.parser_class)
-        if parser_class is None:
-            self.file_repository.mark_file_status(dataset_file, "SKIPPED")
-            return None
+        schema_version = self.resolver.resolve_schema_version(
+            parser_metadata,
+            branch=dataset_file.branch,
+        )
 
         parser_run = self.parser_repository.create_parser_run(
             file=dataset_file,
             parser_name=parser_metadata.parser_name,
             parser_version=parser_metadata.parser_version,
             parser_registry=parser_metadata,
-        )
-        parser = parser_class(label_resolver=LabelResolver(session=self.session))
-        context = ParserContext(
-            dataset_id=dataset_file.dataset_id,
-            file_id=dataset_file.id,
-            dataset_name=dataset_file.dataset.name,
-            dataset_role=dataset_file.role,
-            branch=dataset_file.branch,
-            source_format=dataset_file.source_format,
-            source_file_path=dataset_file.relative_path or dataset_file.file_path,
-            source_file_hash=dataset_file.file_hash_sha256,
-            parser_run_id=parser_run.id,
-            metadata=dataset_file.metadata_json or {},
+            schema_version=schema_version,
         )
         try:
+            parser_class = self.resolver.load_parser_class(parser_metadata)
+            if parser_class is None:
+                raise RuntimeError(
+                    "parser class unavailable: "
+                    f"{parser_metadata.parser_module}.{parser_metadata.parser_class}"
+                )
+            parser = parser_class(label_resolver=LabelResolver(session=self.session))
+            context = ParserContext(
+                dataset_id=dataset_file.dataset_id,
+                file_id=dataset_file.id,
+                dataset_name=dataset_file.dataset.name,
+                dataset_role=dataset_file.role,
+                branch=dataset_file.branch,
+                source_format=dataset_file.source_format,
+                source_file_path=dataset_file.relative_path or dataset_file.file_path,
+                source_file_hash=dataset_file.file_hash_sha256,
+                parser_run_id=parser_run.id,
+                metadata=dataset_file.metadata_json or {},
+            )
             result = parser.parse(Path(dataset_file.file_path), context)
             status_decision = result.status_decision
             status = status_decision.parser_run_status
@@ -112,6 +97,7 @@ class HostNormalizationService:
             events_emitted=result.events_emitted,
             output_parquet_path=write_result.relative_path if write_result else None,
             warning_count=len(result.warnings),
+            error_message=_parser_result_error_message(result),
         )
         artifact = None
         if write_result is not None:
@@ -121,7 +107,7 @@ class HostNormalizationService:
                 dataset_id=dataset_file.dataset_id,
                 file_id=dataset_file.id,
                 parser_run_id=parser_run.id,
-                schema_version_id=None,
+                schema_version_id=schema_version.id if schema_version is not None else None,
                 role=dataset_file.role,
                 branch=dataset_file.branch,
                 modality=modality,
@@ -137,3 +123,13 @@ class HostNormalizationService:
             error_message=status_decision.reason if status_decision.file_status == "FAILED" else None,
         )
         return artifact
+
+
+def _parser_result_error_message(result: ParserResult) -> str | None:
+    decision = result.status_decision
+    if decision.parser_run_status not in {"FAILED", "PARTIAL_SUCCESS"}:
+        return None
+    if result.error_samples:
+        samples = "; ".join(result.error_samples[:3])
+        return f"{decision.reason}: {samples}"
+    return decision.reason

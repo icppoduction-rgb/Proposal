@@ -77,6 +77,7 @@ class ParserRepository(BaseRepository[ParserRegistry]):
         events_emitted: int | None = None,
         output_parquet_path: str | None = None,
         warning_count: int | None = None,
+        error_message: str | None = None,
         report_path: str | None = None,
     ) -> ParserRun:
         """Mark a parser run as finished without committing."""
@@ -89,6 +90,7 @@ class ParserRepository(BaseRepository[ParserRegistry]):
         run.output_parquet_path = output_parquet_path
         if warning_count is not None:
             run.warning_count = warning_count
+        run.error_message = error_message
         run.report_path = report_path
         self.session.flush()
         return run

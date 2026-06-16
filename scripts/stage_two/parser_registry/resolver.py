@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from scripts.db.models import DatasetFile, ParserRegistry
+from scripts.db.models import DatasetFile, ParserRegistry, SchemaVersion
 from scripts.db.repositories import DatasetFileRepository, ParserRepository
 from scripts.stage_two.parser_registry.seed import ParserClassValidationResult, validate_parser_registry_row
+
+if TYPE_CHECKING:
+    from scripts.stage_two.parsers.base import BaseParser
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,33 @@ class ParserResolver:
             self.file_repository.mark_file_status(dataset_file, "UNSUPPORTED_FORMAT")
         return parser
 
+    def load_parser_class(self, parser_metadata: ParserRegistry) -> type["BaseParser"] | None:
+        """Load the parser class referenced by an already resolved registry row."""
+        validation = validate_parser_registry_row(parser_metadata)
+        if not validation.available:
+            return None
+
+        from scripts.stage_two.parsers.base import BaseParser
+
+        module = importlib.import_module(parser_metadata.parser_module)
+        parser_class = getattr(module, parser_metadata.parser_class)
+        if not isinstance(parser_class, type) or not issubclass(parser_class, BaseParser):
+            return None
+        return parser_class
+
+    def resolve_schema_version(
+        self,
+        parser_metadata: ParserRegistry,
+        *,
+        branch: str | None = None,
+    ) -> SchemaVersion | None:
+        """Return the active normalized schema version used by a parser registry row."""
+        if branch is not None:
+            branch_schema = self._find_schema_version(parser_metadata, branch=branch)
+            if branch_schema is not None:
+                return branch_schema
+        return self._find_schema_version(parser_metadata, branch=None)
+
     def validate_active_registry(self) -> tuple[ParserClassValidationResult, ...]:
         """Validate all active registry rows for coverage diagnostics."""
         statement = (
@@ -112,3 +144,18 @@ class ParserResolver:
             .order_by(ParserRegistry.priority.asc(), ParserRegistry.id.asc())
         )
         return list(self.session.execute(statement).scalars().all())
+
+    def _find_schema_version(
+        self,
+        parser_metadata: ParserRegistry,
+        *,
+        branch: str | None,
+    ) -> SchemaVersion | None:
+        statement = select(SchemaVersion).where(
+            SchemaVersion.schema_name == parser_metadata.normalized_schema_name,
+            SchemaVersion.schema_version == parser_metadata.normalized_schema_version,
+            SchemaVersion.layer == "normalized",
+            SchemaVersion.branch.is_(branch) if branch is None else SchemaVersion.branch == branch,
+            SchemaVersion.is_active.is_(True),
+        )
+        return self.session.execute(statement).scalar_one_or_none()
