@@ -12,6 +12,7 @@ from scripts.stage_two.labels import LabelResolver
 from scripts.stage_two.parquet import ParquetArtifactWriter
 from scripts.stage_two.parser_registry import ParserResolver
 from scripts.stage_two.parsers import ParserContext, ParserResult
+from scripts.stage_two.reports import save_parser_run_reports
 
 
 class DnsNormalizationService:
@@ -85,6 +86,17 @@ class DnsNormalizationService:
             error_message = str(exc)
             self.parser_repository.fail_parser_run(parser_run, error_message)
             self.file_repository.mark_file_status(dataset_file, "FAILED", error_message=error_message)
+            report_paths = save_parser_run_reports(
+                parser_run=parser_run,
+                dataset_file=dataset_file,
+                parser_registry=parser_metadata,
+                error_message=error_message,
+                storage_root=self.writer.storage_root,
+            )
+            self.parser_repository.set_parser_run_report_path(
+                parser_run,
+                report_paths["en_parser_json"],
+            )
             return None
         self.parser_repository.finish_parser_run(
             parser_run,
@@ -119,6 +131,18 @@ class DnsNormalizationService:
             dataset_file,
             status_decision.file_status,
             error_message=status_decision.reason if status_decision.file_status == "FAILED" else None,
+        )
+        report_paths = save_parser_run_reports(
+            parser_run=parser_run,
+            dataset_file=dataset_file,
+            parser_result=result,
+            parser_registry=parser_metadata,
+            output_artifact_path=write_result.relative_path if write_result else None,
+            storage_root=self.writer.storage_root,
+        )
+        self.parser_repository.set_parser_run_report_path(
+            parser_run,
+            report_paths["en_parser_json"],
         )
         return artifact
 

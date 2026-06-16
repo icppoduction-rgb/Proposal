@@ -102,3 +102,9 @@ class ParserRepository(BaseRepository[ParserRegistry]):
         run.error_message = error_message
         self.session.flush()
         return run
+
+    def set_parser_run_report_path(self, run: ParserRun, report_path: str) -> ParserRun:
+        """Attach a diagnostic report path to an existing parser run."""
+        run.report_path = report_path
+        self.session.flush()
+        return run
