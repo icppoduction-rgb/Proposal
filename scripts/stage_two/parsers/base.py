@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from config import STAGE_TWO_MAX_ERROR_SAMPLES
+from scripts.stage_two.parsers.common import build_normalized_event
 
 
 REQUIRED_NORMALIZED_FIELDS: frozenset[str] = frozenset(
@@ -288,30 +289,11 @@ class BaseParser(ABC):
 
     def base_event(self, context: ParserContext, **values: Any) -> dict[str, Any]:
         """Build common normalized event fields from parser context."""
-        event = {
-            "dataset_id": context.dataset_id,
-            "file_id": context.file_id,
-            "dataset_name": context.dataset_name,
-            "dataset_role": context.dataset_role,
-            "branch": context.branch,
-            "source_format": context.source_format,
-            "source_file_path": context.source_file_path,
-            "source_file_hash": context.source_file_hash,
-            "parser_name": self.parser_name,
-            "parser_version": self.parser_version,
-            "parser_run_id": context.parser_run_id,
-            "schema_name": self.schema_name,
-            "schema_version": self.schema_version,
-            "label_binary": None,
-            "label_family": None,
-            "label_subtype": None,
-            "label_source": "none",
-            "label_status": "unlabeled",
-            "label_confidence": None,
-            "label_mapping_rule_id": None,
-            "features_json": None,
-            "raw_fields_json": None,
-            "metadata_json": None,
-        }
-        event.update(values)
-        return event
+        return build_normalized_event(
+            context,
+            parser_name=self.parser_name,
+            parser_version=self.parser_version,
+            schema_name=self.schema_name,
+            schema_version=self.schema_version,
+            **values,
+        )
