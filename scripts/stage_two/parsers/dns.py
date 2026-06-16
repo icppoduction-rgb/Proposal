@@ -7,8 +7,10 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.common import merge_json_objects
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, UnlabeledLabelResolver
 
 
@@ -37,15 +39,49 @@ HEADERLESS_DNS_TEST_COLUMNS: tuple[str, ...] = (
     "metadata",
 )
 
+HEADERLESS_PHISHTANK_COLUMNS: tuple[str, ...] = (
+    "phish_id",
+    "url",
+    "phish_detail_url",
+    "submission_time",
+    "verified",
+    "verification_time",
+    "online",
+    "target",
+)
+
 DOMAIN_FIELDS: tuple[str, ...] = (
     "query_domain",
     "qname",
     "domain",
+    "Domain",
+    "domain_name",
+    "hostname",
+    "host",
     "fqdn",
     "FQDN",
+    "rr_name",
+    "parent_domain",
+)
+URL_FIELDS: tuple[str, ...] = (
     "url",
     "URL",
-    "rr_name",
+    "phish_url",
+    "phish_detail_url",
+    "detail_url",
+    "link",
+)
+TIMESTAMP_FIELDS: tuple[str, ...] = (
+    "timestamp",
+    "time",
+    "frame.time_epoch",
+    "submission_time",
+    "verification_time",
+    "last_online",
+    "date",
+    "datetime",
+    "created_at",
+    "updated_at",
 )
 QTYPE_FIELDS: tuple[str, ...] = ("qtype", "QTYPE", "rr_type", "dns.qry.type")
 QCLASS_FIELDS: tuple[str, ...] = ("qclass", "QCLASS", "dns.qry.class")
@@ -53,8 +89,48 @@ TTL_FIELDS: tuple[str, ...] = ("ttl", "TTL", "dns.resp.ttl")
 RCODE_FIELDS: tuple[str, ...] = ("rcode", "RCODE", "dns.flags.rcode")
 SRC_IP_FIELDS: tuple[str, ...] = ("src_ip", "source_ip", "ip.src", "frame_ip_src")
 DST_IP_FIELDS: tuple[str, ...] = ("dst_ip", "destination_ip", "ip.dst", "frame_ip_dst")
+RESOLVER_IP_FIELDS: tuple[str, ...] = ("resolver_ip", "resolver", "dns.resolver", "nameserver", "server_ip")
 SRC_PORT_FIELDS: tuple[str, ...] = ("src_port", "udp.srcport", "tcp.srcport")
 DST_PORT_FIELDS: tuple[str, ...] = ("dst_port", "udp.dstport", "tcp.dstport")
+PROTOCOL_FIELDS: tuple[str, ...] = ("protocol", "_ws.col.Protocol")
+DNS_FEATURE_FIELDS: tuple[str, ...] = (
+    "answer_count",
+    "query_length",
+    "subdomain_length",
+    "label_count",
+    "entropy",
+    "parent_domain",
+    "asn",
+    "ASN",
+    "country",
+    "Country",
+    "tld",
+    "IP",
+    "ip",
+)
+KNOWN_CSV_HEADER_FIELDS: frozenset[str] = frozenset(
+    field.lower()
+    for field in (
+        *DOMAIN_FIELDS,
+        *URL_FIELDS,
+        *TIMESTAMP_FIELDS,
+        *QTYPE_FIELDS,
+        *QCLASS_FIELDS,
+        *TTL_FIELDS,
+        *RCODE_FIELDS,
+        *SRC_IP_FIELDS,
+        *DST_IP_FIELDS,
+        *RESOLVER_IP_FIELDS,
+        *SRC_PORT_FIELDS,
+        *DST_PORT_FIELDS,
+        *PROTOCOL_FIELDS,
+        *DNS_FEATURE_FIELDS,
+        "label",
+        "phish_id",
+        "verified",
+        "online",
+    )
+)
 
 
 UnlabeledResolver = UnlabeledLabelResolver
@@ -74,21 +150,22 @@ class DnsCsvParser(BaseParser):
         file_path = Path(path)
         events: list[dict[str, Any]] = []
         rows_failed = 0
+        error_samples: list[str] = []
         with file_path.open("r", encoding="utf-8", errors="replace", newline="") as file:
             sample = file.read(4096)
             file.seek(0)
-            has_header = False if _is_headerless_dns_test(context) else _has_csv_header(sample)
-            reader = csv.DictReader(file) if has_header else _headerless_reader(file)
-            for index, row in enumerate(reader):
+            for index, row in enumerate(_iter_dns_csv_rows(file, sample, context)):
                 try:
                     events.append(self._row_to_event(row, index, context, event_type="dns_query"))
-                except Exception:
+                except Exception as exc:
                     rows_failed += 1
+                    error_samples.append(_error_sample(row, exc))
         result = ParserResult(
             rows_read=len(events) + rows_failed,
             rows_parsed=len(events),
             rows_failed=rows_failed,
             events=events,
+            error_samples=error_samples,
         )
         self.validate_result(result)
         return result
@@ -101,34 +178,56 @@ class DnsCsvParser(BaseParser):
         *,
         event_type: str,
     ) -> dict[str, Any]:
-        query_domain = _first_present(row, DOMAIN_FIELDS)
+        query_domain = _extract_query_domain(row)
+        timestamp_field, timestamp_value = _first_present_with_name(row, TIMESTAMP_FIELDS)
+        timestamp = _parse_timestamp(timestamp_value)
+        src_ip = _first_present(row, SRC_IP_FIELDS)
+        dst_ip = _first_present(row, DST_IP_FIELDS)
+        resolver_ip = _first_present(row, RESOLVER_IP_FIELDS)
+        src_ip = src_ip or resolver_ip
+        qtype = _first_present(row, QTYPE_FIELDS)
+        qclass = _first_present(row, QCLASS_FIELDS)
+        ttl = _parse_int(_first_present(row, TTL_FIELDS))
+        rcode = _first_present(row, RCODE_FIELDS)
+        protocol = _first_present(row, PROTOCOL_FIELDS)
+        if not _has_dns_signal(
+            query_domain=query_domain,
+            src_ip=src_ip,
+            dst_ip=dst_ip,
+            qtype=qtype,
+            qclass=qclass,
+            ttl=ttl,
+            rcode=rcode,
+            protocol=protocol,
+        ):
+            raise ValueError("row has no usable DNS/domain fields")
+
         label_fields = self.label_resolver.resolve(row, context)
         return self.base_event(
             context,
             event_uid=_event_uid(context, index, query_domain),
-            timestamp=_parse_timestamp(_first_present(row, ("timestamp", "time", "frame.time_epoch"))),
-            timestamp_source="source_column" if _first_present(row, ("timestamp", "time", "frame.time_epoch")) else None,
-            timestamp_type="absolute"
-            if _first_present(row, ("timestamp", "time", "frame.time_epoch"))
-            else "event_order",
+            timestamp=timestamp,
+            timestamp_source=timestamp_field if timestamp is not None else None,
+            timestamp_type="absolute" if timestamp is not None else "event_order",
             event_index=index,
-            entity_type="domain",
-            entity_id=query_domain,
+            entity_type="domain" if query_domain else "dns_observation",
+            entity_id=query_domain or src_ip or dst_ip,
             event_type=event_type,
             raw_event_name=None,
             modality="dns",
-            src_ip=_first_present(row, SRC_IP_FIELDS),
-            dst_ip=_first_present(row, DST_IP_FIELDS),
+            src_ip=src_ip,
+            dst_ip=dst_ip,
             src_port=_parse_int(_first_present(row, SRC_PORT_FIELDS)),
             dst_port=_parse_int(_first_present(row, DST_PORT_FIELDS)),
-            protocol=_first_present(row, ("protocol", "_ws.col.Protocol")),
+            protocol=protocol,
             domain=query_domain,
             query_domain=query_domain,
-            qtype=_first_present(row, QTYPE_FIELDS),
-            qclass=_first_present(row, QCLASS_FIELDS),
-            ttl=_parse_int(_first_present(row, TTL_FIELDS)),
-            rcode=_first_present(row, RCODE_FIELDS),
+            qtype=qtype,
+            qclass=qclass,
+            ttl=ttl,
+            rcode=rcode,
             raw_fields_json=_compact_row(row),
+            metadata_json=_dns_metadata(row, resolver_ip=resolver_ip),
             created_at=datetime.now(timezone.utc),
             **label_fields,
         )
@@ -149,6 +248,10 @@ class DnsPcapCsvParser(DnsCsvParser):
             rows_failed=result.rows_failed,
             events=events,
             warnings=result.warnings,
+            bytes_read=result.bytes_read,
+            files_read=result.files_read,
+            error_samples=result.error_samples,
+            parse_errors_count=result.parse_errors_count,
         )
         self.validate_result(updated)
         return updated
@@ -211,8 +314,53 @@ class DnsTxtDomainListParser(BaseParser):
         return result
 
 
-def _headerless_reader(file) -> csv.DictReader:
-    return csv.DictReader(file, fieldnames=HEADERLESS_DNS_TEST_COLUMNS)
+def _iter_dns_csv_rows(file: Any, sample: str, context: ParserContext):
+    has_header = False if _is_headerless_dns_test(context) else _has_csv_header(sample)
+    if has_header:
+        reader = csv.DictReader(file)
+        for row in reader:
+            yield _normalize_dict_row(row)
+        return
+
+    reader = csv.reader(file)
+    for values in reader:
+        if _is_empty_csv_row(values):
+            continue
+        if _is_headerless_dns_test(context):
+            yield _row_from_fieldnames(values, HEADERLESS_DNS_TEST_COLUMNS)
+            continue
+        if len(values) == 1:
+            yield {"query_domain": values[0], "_csv_schema": "domain_list"}
+            continue
+        if _looks_like_domain_or_url(values[0]):
+            row = {"query_domain": values[0], "_csv_schema": "domain_list"}
+            if len(values) > 1:
+                row["_csv_extra_columns"] = values[1:]
+            yield row
+            continue
+        yield _row_from_fieldnames(values, HEADERLESS_PHISHTANK_COLUMNS)
+
+
+def _row_from_fieldnames(values: list[str], fieldnames: tuple[str, ...]) -> dict[str, Any]:
+    row = {
+        field_name: values[index] if index < len(values) else None
+        for index, field_name in enumerate(fieldnames)
+    }
+    if len(values) > len(fieldnames):
+        row["_csv_extra_columns"] = values[len(fieldnames) :]
+    return _normalize_dict_row(row)
+
+
+def _normalize_dict_row(row: dict[Any, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in row.items():
+        if key is None:
+            extras = _compact_extra_columns(value)
+            if extras:
+                normalized["_csv_extra_columns"] = extras
+            continue
+        normalized[str(key)] = value
+    return normalized
 
 
 def _is_headerless_dns_test(context: ParserContext) -> bool:
@@ -220,11 +368,88 @@ def _is_headerless_dns_test(context: ParserContext) -> bool:
 
 
 def _has_csv_header(sample: str) -> bool:
+    rows = [row for row in csv.reader(sample.splitlines()) if not _is_empty_csv_row(row)]
+    if rows:
+        first_row = rows[0]
+        lowered = {value.strip().lower() for value in first_row}
+        if lowered.intersection(KNOWN_CSV_HEADER_FIELDS):
+            return True
+        if len(first_row) == 1 and _looks_like_domain_or_url(first_row[0]):
+            return False
+        if first_row and _looks_like_domain_or_url(first_row[0]):
+            return False
     try:
         return csv.Sniffer().has_header(sample)
     except csv.Error:
         first_line = sample.splitlines()[0] if sample.splitlines() else ""
-        return any(field in first_line.lower() for field in ("domain", "qname", "timestamp"))
+        return any(
+            field in first_line.lower()
+            for field in ("domain", "qname", "timestamp", "url", "phish_id", "ttl")
+        )
+
+
+def _is_empty_csv_row(values: list[str]) -> bool:
+    return not values or all(value.strip() == "" for value in values)
+
+
+def _compact_extra_columns(value: Any) -> list[Any]:
+    if not isinstance(value, list):
+        return [] if value in ("", None) else [value]
+    return [item for item in value if item not in ("", None)]
+
+
+def _extract_query_domain(row: dict[str, Any]) -> str | None:
+    domain_value = _first_present(row, DOMAIN_FIELDS)
+    domain = _normalize_domain_or_url(domain_value)
+    if domain:
+        return domain
+    url_value = _first_present(row, URL_FIELDS)
+    return _normalize_domain_or_url(url_value)
+
+
+def _normalize_domain_or_url(value: Any) -> str | None:
+    if value in ("", None):
+        return None
+    text = str(value).strip().strip("\"'")
+    if not text:
+        return None
+    parsed_domain = _domain_from_url(text)
+    candidate = parsed_domain or text
+    candidate = candidate.strip().strip(".").lower()
+    if not candidate:
+        return None
+    if "/" in candidate or " " in candidate:
+        return None
+    return candidate
+
+
+def _domain_from_url(value: str) -> str | None:
+    text = value.strip()
+    if "://" not in text and not text.startswith("//") and "/" not in text:
+        return None
+    parsed = urlparse(text if "://" in text or text.startswith("//") else f"//{text}")
+    hostname = parsed.hostname
+    if hostname:
+        return hostname.strip(".").lower()
+    return None
+
+
+def _looks_like_domain_or_url(value: Any) -> bool:
+    domain = _normalize_domain_or_url(value)
+    if not domain:
+        return False
+    return "." in domain or domain.startswith("localhost")
+
+
+def _first_present_with_name(row: dict[str, Any], fields: tuple[str, ...]) -> tuple[str | None, Any]:
+    lowered = {key.lower(): (key, value) for key, value in row.items()}
+    for field in fields:
+        if field in row and row[field] not in ("", None):
+            return field, row[field]
+        resolved = lowered.get(field.lower())
+        if resolved and resolved[1] not in ("", None):
+            return str(resolved[0]), resolved[1]
+    return None, None
 
 
 def _first_present(row: dict[str, Any], fields: tuple[str, ...]) -> Any:
@@ -243,7 +468,16 @@ def _parse_int(value: Any) -> int | None:
         return None
     try:
         return int(float(str(value)))
-    except ValueError:
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_float(value: Any) -> float | None:
+    if value in ("", None):
+        return None
+    try:
+        return float(str(value))
+    except (TypeError, ValueError):
         return None
 
 
@@ -263,7 +497,63 @@ def _parse_timestamp(value: Any) -> datetime | None:
 
 
 def _compact_row(row: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in row.items() if value not in ("", None)}
+    compact: dict[str, Any] = {}
+    for key, value in row.items():
+        if key is None:
+            extras = _compact_extra_columns(value)
+            if extras:
+                compact["_csv_extra_columns"] = extras
+            continue
+        if value in ("", None):
+            continue
+        if isinstance(value, list):
+            extras = _compact_extra_columns(value)
+            if extras:
+                compact[str(key)] = extras
+            continue
+        compact[str(key)] = value
+    return compact
+
+
+def _dns_metadata(row: dict[str, Any], *, resolver_ip: Any) -> dict[str, Any] | None:
+    metadata: dict[str, Any] = {}
+    if resolver_ip:
+        metadata["resolver_ip"] = resolver_ip
+    for field in DNS_FEATURE_FIELDS:
+        value = _first_present(row, (field,))
+        if value not in ("", None):
+            metadata[field] = _metadata_value(field, value)
+    extras = _first_present(row, ("_csv_extra_columns",))
+    if extras:
+        metadata["csv_extra_columns_count"] = len(extras) if isinstance(extras, list) else 1
+    return merge_json_objects(metadata, empty_as_none=True)
+
+
+def _metadata_value(field: str, value: Any) -> Any:
+    if field.lower() in {"answer_count", "query_length", "subdomain_length", "label_count", "asn"}:
+        return _parse_int(value)
+    if field.lower() == "entropy":
+        return _parse_float(value)
+    return value
+
+
+def _has_dns_signal(
+    *,
+    query_domain: Any,
+    src_ip: Any,
+    dst_ip: Any,
+    qtype: Any,
+    qclass: Any,
+    ttl: Any,
+    rcode: Any,
+    protocol: Any,
+) -> bool:
+    del ttl, protocol
+    return any(value not in ("", None) for value in (query_domain, src_ip, dst_ip, qtype, qclass, rcode))
+
+
+def _error_sample(row: dict[str, Any], exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}; row={_compact_row(row)}"
 
 
 def _event_uid(context: ParserContext, index: int, entity: Any) -> str:
