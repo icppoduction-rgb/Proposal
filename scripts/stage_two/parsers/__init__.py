@@ -28,6 +28,7 @@ from scripts.stage_two.parsers.host import (
     HostMetricbeatParser,
     HostNetflowParser,
     HostSyscallTraceParser,
+    HostXmlParser,
 )
 from scripts.stage_two.parsers.input_reader import (
     InputReaderError,
@@ -49,6 +50,7 @@ PARSER_CLASS_EXPORTS = {
     "HostNetflowParser": HostNetflowParser,
     "HostPacketCaptureParser": HostPacketCaptureParser,
     "HostSyscallTraceParser": HostSyscallTraceParser,
+    "HostXmlParser": HostXmlParser,
     "PacketCaptureParser": PacketCaptureParser,
 }
 
@@ -66,6 +68,7 @@ __all__ = [
     "HostNetflowParser",
     "HostPacketCaptureParser",
     "HostSyscallTraceParser",
+    "HostXmlParser",
     "InputReaderError",
     "PARSER_CLASS_EXPORTS",
     "PacketCaptureParser",

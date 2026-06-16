@@ -19,6 +19,7 @@ from scripts.stage_two.parsers.host import (
     HostLineLogParser,
     HostNetflowParser,
     HostSyscallTraceParser,
+    HostXmlParser,
 )
 from scripts.stage_two.parsers.packet import HostPacketCaptureParser
 
@@ -31,6 +32,7 @@ HOST_PARSER_CLASSES = {
     "HostNetflowParser": HostNetflowParser,
     "HostPacketCaptureParser": HostPacketCaptureParser,
     "HostSyscallTraceParser": HostSyscallTraceParser,
+    "HostXmlParser": HostXmlParser,
 }
 
 
