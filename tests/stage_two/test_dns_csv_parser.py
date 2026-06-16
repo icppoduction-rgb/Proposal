@@ -7,7 +7,12 @@ from pathlib import Path
 
 from scripts.stage_two.labels import LabelResolver
 from scripts.stage_two.parsers.base import ParserContext
-from scripts.stage_two.parsers.dns import DnsCsvParser, DnsPcapCsvParser, UnlabeledResolver
+from scripts.stage_two.parsers.dns import (
+    DnsCsvParser,
+    DnsPcapCsvParser,
+    DnsTxtDomainListParser,
+    UnlabeledResolver,
+)
 
 
 class DnsCsvParserTest(unittest.TestCase):
@@ -184,6 +189,71 @@ class DnsCsvParserTest(unittest.TestCase):
         self.assertEqual(result.rows_parsed, 1)
         self.assertEqual(result.rows_failed, 0)
         self.assertEqual(result.events[0]["query_domain"], "encoded.example")
+
+
+class DnsTxtDomainListParserTest(unittest.TestCase):
+    def test_plain_domain_line(self) -> None:
+        path = _write_temp_csv(self, "example.org\n", file_name="domains.txt")
+
+        result = DnsTxtDomainListParser(UnlabeledResolver()).parse(
+            path,
+            _context(path, role="VALIDATION", source_format="txt"),
+        )
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "dns_domain_observation")
+        self.assertEqual(event["domain"], "example.org")
+        self.assertEqual(event["query_domain"], "example.org")
+        self.assertEqual(event["raw_fields_json"]["line_number"], 1)
+
+    def test_base64_encoded_domain_line(self) -> None:
+        encoded_domain = base64.b64encode(b"encoded.example").decode("ascii")
+        path = _write_temp_csv(self, f"{encoded_domain}\n", file_name="encoded_domains.txt")
+
+        result = DnsTxtDomainListParser(UnlabeledResolver()).parse(
+            path,
+            _context(path, role="VALIDATION", source_format="txt"),
+        )
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.events[0]["query_domain"], "encoded.example")
+        self.assertTrue(result.events[0]["metadata_json"]["base64_detected"])
+
+    def test_blank_and_comment_lines_are_skipped_with_counters(self) -> None:
+        path = _write_temp_csv(
+            self,
+            "# comment\n\n  \nvalid.example\n",
+            file_name="domains.txt",
+        )
+
+        result = DnsTxtDomainListParser(UnlabeledResolver()).parse(
+            path,
+            _context(path, role="VALIDATION", source_format="txt"),
+        )
+
+        self.assertEqual(result.rows_read, 4)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertIn("skipped_blank_lines=2", result.warnings)
+        self.assertIn("skipped_comment_lines=1", result.warnings)
+        self.assertEqual(result.events[0]["query_domain"], "valid.example")
+
+    def test_unknown_class_stays_unlabeled_without_filename_heuristic(self) -> None:
+        path = _write_temp_csv(self, "unknown.example\n", file_name="malicious_domains.txt")
+
+        result = DnsTxtDomainListParser().parse(
+            path,
+            _context(path, role="VALIDATION", source_format="txt"),
+        )
+
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.events[0]["label_source"], "none")
+        self.assertEqual(result.events[0]["label_status"], "unlabeled")
 
 
 def _write_temp_csv(test_case: unittest.TestCase, content: str, *, file_name: str = "sample.csv") -> Path:

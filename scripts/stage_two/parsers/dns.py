@@ -395,19 +395,33 @@ class DnsTxtDomainListParser(BaseParser):
 
     def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
         """Initialize the parser with an optional label resolver."""
-        self.label_resolver = label_resolver or LabelResolver()
+        self.label_resolver = label_resolver or LabelResolver(enable_filename_heuristics=False)
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse a domain-list TXT file into normalized DNS events."""
         events: list[dict[str, Any]] = []
         rows_failed = 0
-        with Path(path).open("r", encoding="utf-8", errors="replace") as file:
-            for index, line in enumerate(file):
-                domain = line.strip()
-                if not domain or domain.startswith("#"):
+        error_samples: list[str] = []
+        skipped_blank_lines = 0
+        skipped_comment_lines = 0
+        rows_read = 0
+        reader = UniversalInputReader(path)
+        with reader.iter_lines(keepends=False, skip_empty=False) as lines:
+            for index, line in enumerate(lines):
+                rows_read += 1
+                item = line.strip()
+                if not item:
+                    skipped_blank_lines += 1
+                    continue
+                if item.startswith("#"):
+                    skipped_comment_lines += 1
                     continue
                 try:
-                    row = {"query_domain": domain}
+                    domain = _normalize_domain_or_url(item)
+                    if not domain:
+                        raise ValueError("line is not a valid domain/list item")
+                    line_number = index + 1
+                    row = {"query_domain": domain, "line_number": line_number}
                     label_fields = self.label_resolver.resolve(row, context)
                     events.append(
                         self.base_event(
@@ -429,17 +443,29 @@ class DnsTxtDomainListParser(BaseParser):
                             ttl=None,
                             rcode=None,
                             raw_fields_json=row,
+                            metadata_json=_txt_metadata(reader, line_number=line_number),
                             created_at=datetime.now(timezone.utc),
                             **label_fields,
                         )
                     )
-                except Exception:
+                except Exception as exc:
                     rows_failed += 1
+                    error_samples.append(_error_sample({"line_number": index + 1, "raw_line": item}, exc))
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+            f"skipped_blank_lines={skipped_blank_lines}",
+            f"skipped_comment_lines={skipped_comment_lines}",
+        ]
         result = ParserResult(
-            rows_read=len(events) + rows_failed,
+            rows_read=rows_read,
             rows_parsed=len(events),
             rows_failed=rows_failed,
             events=events,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
         )
         self.validate_result(result)
         return result
@@ -658,6 +684,20 @@ def _dns_metadata(row: dict[str, Any], *, resolver_ip: Any) -> dict[str, Any] | 
     if extras:
         metadata["csv_extra_columns_count"] = len(extras) if isinstance(extras, list) else 1
     return merge_json_objects(metadata, empty_as_none=True)
+
+
+def _txt_metadata(reader: UniversalInputReader, *, line_number: int) -> dict[str, Any] | None:
+    metadata = reader.metadata
+    return merge_json_objects(
+        {
+            "line_number": line_number,
+            "encoding_hint": metadata.encoding_hint,
+            "compression_hint": metadata.compression_hint,
+            "base64_detected": metadata.base64_detected or None,
+            "decode_strategy": metadata.decode_strategy if metadata.decode_strategy != "plain" else None,
+        },
+        empty_as_none=True,
+    )
 
 
 def _metadata_value(field: str, value: Any) -> Any:
