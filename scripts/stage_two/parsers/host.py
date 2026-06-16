@@ -22,6 +22,7 @@ from scripts.stage_two.parsers.csv_utils import (
     row_from_header,
 )
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
+from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object
 
 
 HOST_ADFA_COLUMNS: tuple[str, ...] = (
@@ -108,11 +109,21 @@ HOST_HEADER_FIELDS: frozenset[str] = frozenset(
 )
 HOST_DATE_FIELDS: tuple[str, ...] = ("date", "Date", "event_date")
 HOST_TIME_FIELDS: tuple[str, ...] = ("time", "Time", "event_time")
-HOST_TIMESTAMP_FIELDS: tuple[str, ...] = ("@timestamp", "timestamp", "datetime", "event.timestamp")
+HOST_TIMESTAMP_FIELDS: tuple[str, ...] = (
+    "@timestamp",
+    "timestamp",
+    "datetime",
+    "event.timestamp",
+    "event.created",
+    "event.ingested",
+    "winlog.time_created",
+    "System.TimeCreated.SystemTime",
+)
 HOST_PROCESS_ID_FIELDS: tuple[str, ...] = ("process_id", "pro_id", "process.pid", "pid")
 HOST_PATH_FIELDS: tuple[str, ...] = ("path", "file.path", "process.executable", "process.path")
 HOST_SYSCALL_FIELDS: tuple[str, ...] = ("sys_call", "syscall", "syscall_name")
 HOST_EVENT_ID_FIELDS: tuple[str, ...] = ("event_id", "EventID", "event.code")
+HOST_JSON_SOURCE_TYPES: frozenset[str] = frozenset({"json_lines", "json_array", "json_object", "json_scalar"})
 
 
 class HostCsvParser(BaseParser):
@@ -165,7 +176,7 @@ class HostCsvParser(BaseParser):
 
 
 class HostJsonLinesParser(BaseParser):
-    """Parser for host JSON-lines and Metricbeat-like logs."""
+    """Parser for host JSON, JSON-lines, and Metricbeat/Filebeat-like logs."""
 
     parser_name = "host_json_lines_parser"
 
@@ -174,21 +185,96 @@ class HostJsonLinesParser(BaseParser):
         self.label_resolver = label_resolver or LabelResolver()
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
-        """Parse JSON-lines host telemetry into normalized host events."""
+        """Parse JSON-lines, JSON arrays, and single JSON host telemetry objects."""
         events: list[dict[str, Any]] = []
+        rows_read = 0
         rows_failed = 0
-        with Path(path).open("r", encoding="utf-8", errors="replace") as file:
-            for index, line in enumerate(file):
-                if not line.strip():
-                    continue
-                try:
-                    row = json.loads(line)
-                    events.append(_host_event_from_row(self, row, index, context, modality="metric"))
-                except Exception:
-                    rows_failed += 1
-        result = ParserResult(len(events) + rows_failed, len(events), rows_failed, events)
+        error_samples: list[str] = []
+        reader = UniversalInputReader(path)
+        content_parts: list[str] = []
+        with reader.iter_lines(keepends=True, skip_empty=False) as lines:
+            content_parts.extend(lines)
+        content = "".join(content_parts)
+
+        for index, record, source_type, error in _iter_host_json_records(content):
+            rows_read += 1
+            if error is not None:
+                rows_failed += 1
+                error_samples.append(error)
+                continue
+            try:
+                events.append(_host_json_record_to_event(self, record, index, context, source_type=source_type))
+            except Exception as exc:
+                row = flatten_json_object(record)
+                rows_failed += 1
+                error_samples.append(_error_sample(row, exc))
+
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+        ]
+        if reader_metadata.base64_detected:
+            warnings.append("base64_detected=True")
+        result = ParserResult(
+            rows_read=rows_read,
+            rows_parsed=len(events),
+            rows_failed=rows_failed,
+            events=events,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
+        )
         self.validate_result(result)
         return result
+
+
+def _iter_host_json_records(content: str):
+    stripped = content.strip()
+    if not stripped:
+        return
+
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                yield line_number - 1, json.loads(line), "json_lines", None
+            except json.JSONDecodeError as exc:
+                message = f"json line {line_number}: {exc.msg}"
+                yield line_number - 1, {"line_number": line_number, "raw_line": line}, "json_lines", message
+        return
+
+    if isinstance(payload, list):
+        for index, item in enumerate(payload):
+            yield index, item, "json_array", None
+        return
+    if isinstance(payload, dict):
+        yield 0, payload, "json_object", None
+        return
+    yield 0, payload, "json_scalar", None
+
+
+def _host_json_record_to_event(
+    parser: BaseParser,
+    record: Any,
+    index: int,
+    context: ParserContext,
+    *,
+    source_type: str,
+) -> dict[str, Any]:
+    row = flatten_json_object(record)
+    row["_json_source_type"] = source_type
+    row["_json_record_index"] = index
+    return _host_event_from_row(
+        parser,
+        row,
+        index,
+        context,
+        modality=_host_json_modality(row),
+    )
 
 
 class HostLineLogParser(BaseParser):
@@ -414,12 +500,51 @@ def _host_event_from_row(
 ) -> dict[str, Any]:
     label_fields = _resolve_host_labels(parser, row, context)
     timestamp_source, timestamp = _timestamp_from_host_row(row)
-    event_type = _pick(row, "event_type", "event.action", "event_id", "syscall_name") or modality
-    process_name = _pick(row, "process_name", "process.name", "process", "comm")
-    file_path = _pick(row, "file_path", "path", "file.path")
+    event_type = (
+        _pick(
+            row,
+            "event_type",
+            "event.action",
+            "event.dataset",
+            "event.code",
+            "winlog.event_id",
+            "EventID",
+            "event_id",
+            "syscall_name",
+        )
+        or modality
+    )
+    process_name = _pick(
+        row,
+        "process_name",
+        "process.name",
+        "process",
+        "comm",
+    )
+    file_path = _pick(
+        row,
+        "file_path",
+        "path",
+        "file.path",
+        "process.executable",
+        "process.path",
+        "log.file.path",
+        "winlog.event_data.Image",
+        "Image",
+    )
     process_name = process_name or _process_name_from_path(file_path)
     syscall_name = _pick(row, "syscall_name", "sys_call", "syscall")
-    host_name = _pick(row, "host.name", "host", "hostname", "agent.hostname")
+    host_name = _pick(
+        row,
+        "host.name",
+        "host.hostname",
+        "host",
+        "hostname",
+        "agent.hostname",
+        "winlog.computer_name",
+        "Computer",
+        "computer_name",
+    )
     if require_host_signal and not _has_host_csv_signal(row):
         raise ValueError("row has no usable Host CSV telemetry fields")
     return parser.base_event(
@@ -435,21 +560,45 @@ def _host_event_from_row(
         raw_event_name=str(event_type) if event_type else None,
         modality=modality,
         host_name=host_name,
-        user_name=_pick(row, "user_name", "user.name", "user", "uid"),
-        process_id=_string_or_none(_pick(row, "process_id", "pro_id", "process.pid", "pid")),
+        user_name=_pick(
+            row,
+            "user_name",
+            "user.name",
+            "user",
+            "uid",
+            "winlog.event_data.User",
+            "User",
+            "SubjectUserName",
+        ),
+        process_id=_string_or_none(
+            _pick(
+                row,
+                "process_id",
+                "pro_id",
+                "process.pid",
+                "pid",
+                "winlog.event_data.ProcessId",
+                "ProcessId",
+                "Event.System.Execution.ProcessID",
+            )
+        ),
         process_name=process_name,
-        parent_process_id=_string_or_none(_pick(row, "parent_process_id", "process.parent.pid")),
-        parent_process_name=_pick(row, "parent_process_name", "process.parent.name"),
-        src_ip=_pick(row, "src_ip", "source.ip", "SourceAddress"),
-        dst_ip=_pick(row, "dst_ip", "destination.ip", "DestinationAddress"),
+        parent_process_id=_string_or_none(
+            _pick(row, "parent_process_id", "process.parent.pid", "winlog.event_data.ParentProcessId")
+        ),
+        parent_process_name=_pick(row, "parent_process_name", "process.parent.name", "winlog.event_data.ParentImage"),
+        src_ip=_pick(row, "src_ip", "source.ip", "source.address", "SourceAddress", "SourceIp", "IpAddress"),
+        dst_ip=_pick(row, "dst_ip", "destination.ip", "destination.address", "DestinationAddress", "DestinationIp"),
         syscall_name=syscall_name,
-        event_id=_string_or_none(_pick(row, "event_id", "EventID", "event.code")),
-        command_line=_pick(row, "command_line", "process.command_line"),
+        event_id=_string_or_none(
+            _pick(row, "event_id", "EventID", "event.code", "winlog.event_id", "Event.System.EventID")
+        ),
+        command_line=_pick(row, "command_line", "process.command_line", "winlog.event_data.CommandLine", "CommandLine"),
         file_path=file_path,
         metric_name=_pick(row, "metric_name", "metricset.name"),
         metric_value=_float_or_none(_pick(row, "metric_value", "system.cpu.total.norm.pct")),
-        raw_fields_json=compact_row(row),
-        metadata_json=_host_csv_metadata(row, csv_file_role="telemetry") if "_csv_schema" in row else None,
+        raw_fields_json=_host_raw_fields(row),
+        metadata_json=_host_metadata(row, modality=modality),
         created_at=datetime.now(timezone.utc),
         **label_fields,
     )
@@ -615,6 +764,46 @@ def _host_csv_metadata(
     if extra:
         metadata.update(extra)
     return merge_json_objects(metadata, empty_as_none=True)
+
+
+def _host_raw_fields(row: dict[str, Any]) -> dict[str, Any]:
+    if "_json_source_type" in row:
+        return compact_json_row(row)
+    return compact_row(row)
+
+
+def _host_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any] | None:
+    if "_csv_schema" in row:
+        return _host_csv_metadata(row, csv_file_role="telemetry")
+    if str(row.get("_json_source_type") or "") in HOST_JSON_SOURCE_TYPES:
+        return _host_json_metadata(row, modality=modality)
+    return None
+
+
+def _host_json_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any] | None:
+    message = _pick(row, "message", "Message", "winlog.event_data.Message")
+    metadata = {
+        "json_source_type": row.get("_json_source_type"),
+        "json_record_index": row.get("_json_record_index"),
+        "modality": modality,
+        "event_dataset": _pick(row, "event.dataset"),
+        "event_module": _pick(row, "event.module"),
+        "event_provider": _pick(row, "event.provider", "winlog.provider_name", "Provider.Name"),
+        "log_file_path": _pick(row, "log.file.path"),
+        "message_length": len(str(message)) if message not in ("", None) else None,
+    }
+    return merge_json_objects(metadata, empty_as_none=True)
+
+
+def _host_json_modality(row: dict[str, Any]) -> str:
+    dataset = str(_pick(row, "event.dataset", "event.module", "metricset.module") or "").lower()
+    if any(token in dataset for token in ("system", "metric", "beat")):
+        return "metric"
+    if any(token in dataset for token in ("sysmon", "windows", "winlog")):
+        return "eventlog"
+    if _pick(row, "metricset.name", "system.cpu.total.norm.pct", "metric_name") not in ("", None):
+        return "metric"
+    return "eventlog"
 
 
 def _ground_truth_entity_id(row: dict[str, Any]) -> str | None:
