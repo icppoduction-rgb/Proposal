@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
 from scripts.stage_two.parsers.common import merge_json_objects
+from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, UnlabeledLabelResolver
 
 
@@ -61,6 +62,12 @@ DOMAIN_FIELDS: tuple[str, ...] = (
     "fqdn",
     "FQDN",
     "rr_name",
+    "rr.name",
+    "dns.qry.name",
+    "dns.question.name",
+    "dns.resp.name",
+    "query",
+    "query_name",
     "parent_domain",
 )
 URL_FIELDS: tuple[str, ...] = (
@@ -75,6 +82,11 @@ TIMESTAMP_FIELDS: tuple[str, ...] = (
     "timestamp",
     "time",
     "frame.time_epoch",
+    "frame.time",
+    "Time",
+    "time_epoch",
+    "ts",
+    "packet_time",
     "submission_time",
     "verification_time",
     "last_online",
@@ -83,22 +95,87 @@ TIMESTAMP_FIELDS: tuple[str, ...] = (
     "created_at",
     "updated_at",
 )
-QTYPE_FIELDS: tuple[str, ...] = ("qtype", "QTYPE", "rr_type", "dns.qry.type")
-QCLASS_FIELDS: tuple[str, ...] = ("qclass", "QCLASS", "dns.qry.class")
-TTL_FIELDS: tuple[str, ...] = ("ttl", "TTL", "dns.resp.ttl")
-RCODE_FIELDS: tuple[str, ...] = ("rcode", "RCODE", "dns.flags.rcode")
-SRC_IP_FIELDS: tuple[str, ...] = ("src_ip", "source_ip", "ip.src", "frame_ip_src")
-DST_IP_FIELDS: tuple[str, ...] = ("dst_ip", "destination_ip", "ip.dst", "frame_ip_dst")
+QTYPE_FIELDS: tuple[str, ...] = (
+    "qtype",
+    "QTYPE",
+    "rr_type",
+    "dns.qry.type",
+    "dns.qry.type_name",
+    "dns.qry.type.name",
+    "dns.resp.type",
+    "dns.rr.type",
+)
+QCLASS_FIELDS: tuple[str, ...] = ("qclass", "QCLASS", "dns.qry.class", "dns.qry.class_name")
+TTL_FIELDS: tuple[str, ...] = ("ttl", "TTL", "dns.resp.ttl", "dns.a.ttl", "dns.aaaa.ttl", "dns.rr.ttl")
+RCODE_FIELDS: tuple[str, ...] = ("rcode", "RCODE", "dns.flags.rcode", "dns.flags.rcode_name", "response_code")
+SRC_IP_FIELDS: tuple[str, ...] = (
+    "src_ip",
+    "source_ip",
+    "source.ip",
+    "ip.src",
+    "ip.src_host",
+    "frame_ip_src",
+    "_ws.col.Source",
+    "Source",
+)
+DST_IP_FIELDS: tuple[str, ...] = (
+    "dst_ip",
+    "destination_ip",
+    "destination.ip",
+    "ip.dst",
+    "ip.dst_host",
+    "frame_ip_dst",
+    "_ws.col.Destination",
+    "Destination",
+)
 RESOLVER_IP_FIELDS: tuple[str, ...] = ("resolver_ip", "resolver", "dns.resolver", "nameserver", "server_ip")
-SRC_PORT_FIELDS: tuple[str, ...] = ("src_port", "udp.srcport", "tcp.srcport")
-DST_PORT_FIELDS: tuple[str, ...] = ("dst_port", "udp.dstport", "tcp.dstport")
-PROTOCOL_FIELDS: tuple[str, ...] = ("protocol", "_ws.col.Protocol")
+SRC_PORT_FIELDS: tuple[str, ...] = ("src_port", "source.port", "udp.srcport", "tcp.srcport")
+DST_PORT_FIELDS: tuple[str, ...] = ("dst_port", "destination.port", "udp.dstport", "tcp.dstport")
+PROTOCOL_FIELDS: tuple[str, ...] = ("protocol", "_ws.col.Protocol", "frame.protocols", "ip.proto")
 DNS_FEATURE_FIELDS: tuple[str, ...] = (
+    "FQDN_count",
+    "upper",
+    "lower",
+    "numeric",
+    "special",
+    "labels",
+    "labels_max",
+    "labels_average",
+    "longest_word",
+    "sld",
+    "len",
+    "subdomain",
     "answer_count",
     "query_length",
     "subdomain_length",
     "label_count",
     "entropy",
+    "rr",
+    "rr_count",
+    "rr_name_entropy",
+    "rr_name_length",
+    "distinct_ns",
+    "distinct_ip",
+    "unique_country",
+    "unique_asn",
+    "distinct_domains",
+    "reverse_dns",
+    "a_records",
+    "unique_ttl",
+    "ttl_mean",
+    "ttl_variance",
+    "A_frequency",
+    "AAAA_frequency",
+    "CNAME_frequency",
+    "HINFO_frequency",
+    "MX_frequency",
+    "NS_frequency",
+    "NULL_frequency",
+    "OPT_frequency",
+    "PTR_frequency",
+    "SOA_frequency",
+    "SRV_frequency",
+    "TXT_frequency",
     "parent_domain",
     "asn",
     "ASN",
@@ -107,6 +184,33 @@ DNS_FEATURE_FIELDS: tuple[str, ...] = (
     "tld",
     "IP",
     "ip",
+)
+PACKET_SUMMARY_FIELDS: tuple[str, ...] = (
+    "frame.number",
+    "frame.len",
+    "frame.cap_len",
+    "packet_length",
+    "length",
+    "flow_id",
+    "stream",
+    "tcp.stream",
+    "udp.stream",
+    "bytes",
+    "packets",
+    "duration",
+)
+PCAP_FEATURE_SIGNAL_FIELDS: tuple[str, ...] = (
+    "FQDN_count",
+    "entropy",
+    "labels",
+    "rr",
+    "rr_count",
+    "rr_type",
+    "ttl_mean",
+    "distinct_ip",
+    "frame.len",
+    "packet_length",
+    "flow_id",
 )
 KNOWN_CSV_HEADER_FIELDS: frozenset[str] = frozenset(
     field.lower()
@@ -125,6 +229,7 @@ KNOWN_CSV_HEADER_FIELDS: frozenset[str] = frozenset(
         *DST_PORT_FIELDS,
         *PROTOCOL_FIELDS,
         *DNS_FEATURE_FIELDS,
+        *PACKET_SUMMARY_FIELDS,
         "label",
         "phish_id",
         "verified",
@@ -177,6 +282,7 @@ class DnsCsvParser(BaseParser):
         context: ParserContext,
         *,
         event_type: str,
+        allow_feature_only: bool = False,
     ) -> dict[str, Any]:
         query_domain = _extract_query_domain(row)
         timestamp_field, timestamp_value = _first_present_with_name(row, TIMESTAMP_FIELDS)
@@ -199,6 +305,8 @@ class DnsCsvParser(BaseParser):
             ttl=ttl,
             rcode=rcode,
             protocol=protocol,
+            row=row,
+            allow_feature_only=allow_feature_only,
         ):
             raise ValueError("row has no usable DNS/domain fields")
 
@@ -240,21 +348,44 @@ class DnsPcapCsvParser(DnsCsvParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse pcap.csv packet summary rows into normalized DNS events."""
-        result = super().parse(path, context)
-        events = [{**event, "event_type": "dns_packet_summary"} for event in result.events]
-        updated = ParserResult(
-            rows_read=result.rows_read,
-            rows_parsed=result.rows_parsed,
-            rows_failed=result.rows_failed,
+        events: list[dict[str, Any]] = []
+        rows_failed = 0
+        error_samples: list[str] = []
+        reader = UniversalInputReader(path)
+        with reader.iter_lines(keepends=True, skip_empty=False) as lines:
+            csv_reader = csv.DictReader(lines)
+            for index, row in enumerate(csv_reader):
+                normalized_row = _normalize_dict_row(row)
+                try:
+                    events.append(
+                        self._row_to_event(
+                            normalized_row,
+                            index,
+                            context,
+                            event_type=_infer_pcap_csv_event_type(normalized_row),
+                            allow_feature_only=True,
+                        )
+                    )
+                except Exception as exc:
+                    rows_failed += 1
+                    error_samples.append(_error_sample(normalized_row, exc))
+
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+        ]
+        result = ParserResult(
+            rows_read=len(events) + rows_failed,
+            rows_parsed=len(events),
+            rows_failed=rows_failed,
             events=events,
-            warnings=result.warnings,
-            bytes_read=result.bytes_read,
-            files_read=result.files_read,
-            error_samples=result.error_samples,
-            parse_errors_count=result.parse_errors_count,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
         )
-        self.validate_result(updated)
-        return updated
+        self.validate_result(result)
+        return result
 
 
 class DnsTxtDomainListParser(BaseParser):
@@ -519,7 +650,7 @@ def _dns_metadata(row: dict[str, Any], *, resolver_ip: Any) -> dict[str, Any] | 
     metadata: dict[str, Any] = {}
     if resolver_ip:
         metadata["resolver_ip"] = resolver_ip
-    for field in DNS_FEATURE_FIELDS:
+    for field in (*DNS_FEATURE_FIELDS, *PACKET_SUMMARY_FIELDS):
         value = _first_present(row, (field,))
         if value not in ("", None):
             metadata[field] = _metadata_value(field, value)
@@ -530,11 +661,72 @@ def _dns_metadata(row: dict[str, Any], *, resolver_ip: Any) -> dict[str, Any] | 
 
 
 def _metadata_value(field: str, value: Any) -> Any:
-    if field.lower() in {"answer_count", "query_length", "subdomain_length", "label_count", "asn"}:
-        return _parse_int(value)
-    if field.lower() == "entropy":
-        return _parse_float(value)
+    field_lower = field.lower()
+    integer_fields = {
+        "answer_count",
+        "query_length",
+        "subdomain_length",
+        "label_count",
+        "asn",
+        "fqdn_count",
+        "upper",
+        "lower",
+        "numeric",
+        "special",
+        "labels",
+        "labels_max",
+        "longest_word",
+        "len",
+        "subdomain",
+        "rr_count",
+        "rr_name_length",
+        "distinct_ns",
+        "a_records",
+        "frame.number",
+        "frame.len",
+        "frame.cap_len",
+        "packet_length",
+        "length",
+        "bytes",
+        "packets",
+    }
+    float_fields = {
+        "entropy",
+        "labels_average",
+        "rr",
+        "rr_name_entropy",
+        "ttl_mean",
+        "ttl_variance",
+        "duration",
+    }
+    if field_lower.endswith("_frequency") or field_lower in integer_fields:
+        parsed_int = _parse_int(value)
+        return value if parsed_int is None else parsed_int
+    if field_lower in float_fields:
+        parsed_float = _parse_float(value)
+        return value if parsed_float is None else parsed_float
     return value
+
+
+def _infer_pcap_csv_event_type(row: dict[str, Any]) -> str:
+    response_flag = _first_present(row, ("dns.flags.response", "is_response", "response"))
+    if response_flag is not None:
+        flag_text = str(response_flag).strip().lower()
+        if flag_text in {"1", "true", "yes", "response"}:
+            return "dns_response"
+        if flag_text in {"0", "false", "no", "query"}:
+            return "dns_query"
+    if _first_present(row, (*RCODE_FIELDS, *TTL_FIELDS, "rr_type", "rr_count", "answer_count")) is not None:
+        return "dns_response"
+    if _extract_query_domain(row) or _first_present(row, (*QTYPE_FIELDS, *QCLASS_FIELDS)) is not None:
+        return "dns_query"
+    return "network_packet_summary"
+
+
+def _has_pcap_feature_signal(row: dict[str, Any] | None) -> bool:
+    if not row:
+        return False
+    return any(_first_present(row, (field,)) not in ("", None) for field in PCAP_FEATURE_SIGNAL_FIELDS)
 
 
 def _has_dns_signal(
@@ -547,9 +739,13 @@ def _has_dns_signal(
     ttl: Any,
     rcode: Any,
     protocol: Any,
+    row: dict[str, Any] | None = None,
+    allow_feature_only: bool = False,
 ) -> bool:
     del ttl, protocol
-    return any(value not in ("", None) for value in (query_domain, src_ip, dst_ip, qtype, qclass, rcode))
+    if any(value not in ("", None) for value in (query_domain, src_ip, dst_ip, qtype, qclass, rcode)):
+        return True
+    return allow_feature_only and _has_pcap_feature_signal(row)
 
 
 def _error_sample(row: dict[str, Any], exc: Exception) -> str:
