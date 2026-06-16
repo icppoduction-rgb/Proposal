@@ -24,6 +24,7 @@ from scripts.stage_two.parsers.csv_utils import (
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object
 from scripts.stage_two.parsers.logs import ParsedLogLine, parse_host_log_line
+from scripts.stage_two.parsers.metrics import HOST_METRIC_SOURCE_FORMATS, HostMetricbeatParser
 
 
 HOST_ADFA_COLUMNS: tuple[str, ...] = (
@@ -291,6 +292,9 @@ class HostLineLogParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse raw log lines into normalized host log events."""
+        if context.source_format in HOST_METRIC_SOURCE_FORMATS:
+            return HostMetricbeatParser(label_resolver=self.label_resolver).parse(path, context)
+
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0

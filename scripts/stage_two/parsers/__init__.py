@@ -25,6 +25,7 @@ from scripts.stage_two.parsers.host import (
     HostCsvParser,
     HostJsonLinesParser,
     HostLineLogParser,
+    HostMetricbeatParser,
     HostSyscallTraceParser,
 )
 from scripts.stage_two.parsers.input_reader import (
@@ -43,6 +44,7 @@ PARSER_CLASS_EXPORTS = {
     "HostCsvParser": HostCsvParser,
     "HostJsonLinesParser": HostJsonLinesParser,
     "HostLineLogParser": HostLineLogParser,
+    "HostMetricbeatParser": HostMetricbeatParser,
     "HostPacketCaptureParser": HostPacketCaptureParser,
     "HostSyscallTraceParser": HostSyscallTraceParser,
     "PacketCaptureParser": PacketCaptureParser,
@@ -58,6 +60,7 @@ __all__ = [
     "HostCsvParser",
     "HostJsonLinesParser",
     "HostLineLogParser",
+    "HostMetricbeatParser",
     "HostPacketCaptureParser",
     "HostSyscallTraceParser",
     "InputReaderError",
