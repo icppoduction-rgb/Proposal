@@ -5,8 +5,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from scripts.db.models import DatasetFile
-from scripts.stage_two.cli import _parse_normalize_format_args
-from scripts.stage_two.normalization.runner import NormalizeFormatRequest, NormalizeFormatRunner
+from scripts.stage_two.cli import _parse_normalize_all_args, _parse_normalize_format_args
+from scripts.stage_two.normalization.runner import (
+    NormalizeAllRequest,
+    NormalizeAllRunner,
+    NormalizeFormatRequest,
+    NormalizeFormatRunner,
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +49,7 @@ class _FakeFileRepository:
     def __init__(self, files: list[DatasetFile]) -> None:
         self.files = files
         self.ready_call: dict[str, Any] | None = None
+        self.ready_calls: list[dict[str, Any]] = []
 
     def get_files_ready_for_parsing(
         self,
@@ -59,6 +65,7 @@ class _FakeFileRepository:
             "source_format": source_format,
             "limit": limit,
         }
+        self.ready_calls.append(self.ready_call)
         result = [
             file
             for file in self.files
@@ -79,6 +86,17 @@ class _FakeFileRepository:
         file.status = status
         file.error_message = error_message
         return file
+
+    def get_ready_file_groups(self, *, branch: str) -> list[dict[str, Any]]:
+        groups: dict[tuple[str, str], int] = {}
+        for file in self.files:
+            if file.status == "READY_FOR_PARSING" and file.branch == branch:
+                key = (file.role, file.source_format)
+                groups[key] = groups.get(key, 0) + 1
+        return [
+            {"role": role, "source_format": source_format, "files_count": files_count}
+            for (role, source_format), files_count in sorted(groups.items())
+        ]
 
 
 class _FakeSession:
@@ -139,6 +157,19 @@ class NormalizeFormatCliTest(unittest.TestCase):
         self.assertEqual(request.limit, 50)
 
 
+class NormalizeAllCliTest(unittest.TestCase):
+    def test_parse_normalize_all_flags(self) -> None:
+        request = _parse_normalize_all_args(["--branch", "HOST", "--limit", "10"])
+
+        self.assertEqual(request, NormalizeAllRequest(branch="host", limit=10))
+
+    def test_parse_normalize_all_fallback(self) -> None:
+        request = _parse_normalize_all_args(["dns:1000"])
+
+        self.assertEqual(request.branch, "dns")
+        self.assertEqual(request.limit, 1000)
+
+
 class NormalizeFormatRunnerTest(unittest.TestCase):
     def test_normalize_format_filters_ready_files_and_continues_after_error(self) -> None:
         files = [
@@ -189,6 +220,65 @@ class NormalizeFormatRunnerTest(unittest.TestCase):
         self.assertEqual([file.status for file in files], ["UNSUPPORTED_FORMAT", "UNSUPPORTED_FORMAT"])
 
 
+class NormalizeAllRunnerTest(unittest.TestCase):
+    def test_normalize_all_processes_groups_with_overall_limit(self) -> None:
+        files = [
+            _file(1, "train-auth.log", status="READY_FOR_PARSING", role="TRAIN"),
+            _file(2, "train-syslog.log", status="READY_FOR_PARSING", role="TRAIN", source_format="syslog"),
+            _file(3, "validation-auth.log", status="READY_FOR_PARSING", role="VALIDATION"),
+        ]
+        repository = _FakeFileRepository(files)
+        runner = _all_runner(repository, parser=_FakeParser())
+
+        result = runner.normalize_all(NormalizeAllRequest(branch="host", limit=2))
+
+        self.assertEqual(result.status, "SUCCESS")
+        self.assertEqual(result.selected, 2)
+        self.assertEqual(result.normalized, 2)
+        self.assertEqual(result.groups_count, 2)
+        self.assertEqual(
+            [(group.role, group.source_format, group.selected) for group in result.groups],
+            [("TRAIN", "auth.log", 1), ("TRAIN", "syslog", 1)],
+        )
+        self.assertEqual(
+            repository.ready_calls,
+            [
+                {
+                    "branch": "host",
+                    "role": "TRAIN",
+                    "source_format": "auth.log",
+                    "limit": 1,
+                },
+                {
+                    "branch": "host",
+                    "role": "TRAIN",
+                    "source_format": "syslog",
+                    "limit": 1,
+                },
+            ],
+        )
+        self.assertEqual(
+            [file.status for file in files],
+            ["PARSED", "PARSED", "READY_FOR_PARSING"],
+        )
+
+    def test_normalize_all_keeps_going_when_one_group_has_failed_file(self) -> None:
+        files = [
+            _file(1, "bad.log", status="READY_FOR_PARSING", role="TRAIN"),
+            _file(2, "good.log", status="READY_FOR_PARSING", role="VALIDATION"),
+        ]
+        repository = _FakeFileRepository(files)
+        runner = _all_runner(repository, parser=_FakeParser())
+
+        result = runner.normalize_all(NormalizeAllRequest(branch="host"))
+
+        self.assertEqual(result.status, "PARTIAL_SUCCESS")
+        self.assertEqual(result.selected, 2)
+        self.assertEqual(result.failed, 1)
+        self.assertEqual(result.normalized, 1)
+        self.assertEqual([file.status for file in files], ["FAILED", "PARSED"])
+
+
 def _runner(
     repository: _FakeFileRepository,
     *,
@@ -204,11 +294,28 @@ def _runner(
     return runner
 
 
+def _all_runner(
+    repository: _FakeFileRepository,
+    *,
+    parser: _FakeParser | None,
+) -> NormalizeAllRunner:
+    session = _FakeSession()
+    runner = NormalizeAllRunner(
+        session,  # type: ignore[arg-type]
+        service_factories={"host": _FakeNormalizationService},  # type: ignore[dict-item]
+    )
+    runner.file_repository = repository  # type: ignore[assignment]
+    runner.format_runner.file_repository = repository  # type: ignore[assignment]
+    runner.format_runner.resolver = _FakeResolver(parser)  # type: ignore[assignment]
+    return runner
+
+
 def _file(
     file_id: int,
     file_name: str,
     *,
     status: str,
+    role: str = "TRAIN",
     source_format: str = "auth.log",
 ) -> DatasetFile:
     return DatasetFile(
@@ -217,7 +324,7 @@ def _file(
         file_path=f"/tmp/{file_name}",
         file_name=file_name,
         source_format=source_format,
-        role="TRAIN",
+        role=role,
         branch="host",
         status=status,
     )

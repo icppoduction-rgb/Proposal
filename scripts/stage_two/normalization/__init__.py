@@ -3,6 +3,10 @@
 from scripts.stage_two.normalization.dns_service import DnsNormalizationService
 from scripts.stage_two.normalization.host_service import HostNormalizationService
 from scripts.stage_two.normalization.runner import (
+    NormalizeAllGroupResult,
+    NormalizeAllRequest,
+    NormalizeAllResult,
+    NormalizeAllRunner,
     NormalizeFileResult,
     NormalizeFormatRequest,
     NormalizeFormatResult,
@@ -17,6 +21,10 @@ from scripts.stage_two.normalization.schema_contracts import (
 __all__ = [
     "DnsNormalizationService",
     "HostNormalizationService",
+    "NormalizeAllGroupResult",
+    "NormalizeAllRequest",
+    "NormalizeAllResult",
+    "NormalizeAllRunner",
     "NormalizeFileResult",
     "NormalizeFormatRequest",
     "NormalizeFormatResult",

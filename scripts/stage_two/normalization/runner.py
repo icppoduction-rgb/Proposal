@@ -38,6 +38,14 @@ class NormalizeFormatRequest:
 
 
 @dataclass(frozen=True)
+class NormalizeAllRequest:
+    """Filters for branch-wide normalization without role/source format mixing."""
+
+    branch: str
+    limit: int | None = None
+
+
+@dataclass(frozen=True)
 class NormalizeFileResult:
     """Per-file normalization outcome."""
 
@@ -80,6 +88,47 @@ class NormalizeFormatResult:
     parser_class: str | None
     files: tuple[NormalizeFileResult, ...]
     diagnostics: tuple[NormalizeParserDiagnostic, ...] = ()
+
+
+@dataclass(frozen=True)
+class NormalizeAllGroupResult:
+    """Per role/source_format group summary for normalize-all."""
+
+    role: str
+    source_format: str
+    limit: int | None
+    selected: int
+    processed: int
+    normalized: int
+    parsed: int
+    partially_parsed: int
+    failed: int
+    skipped: int
+    unsupported: int
+    errors: int
+    status: str
+    parser_name: str | None
+    parser_class: str | None
+
+
+@dataclass(frozen=True)
+class NormalizeAllResult:
+    """Branch-wide normalization summary grouped by role/source_format."""
+
+    status: str
+    branch: str
+    limit: int | None
+    groups_count: int
+    selected: int
+    processed: int
+    normalized: int
+    parsed: int
+    partially_parsed: int
+    failed: int
+    skipped: int
+    unsupported: int
+    errors: int
+    groups: tuple[NormalizeAllGroupResult, ...]
 
 
 ServiceFactory = Callable[[Session], BranchNormalizationService]
@@ -267,4 +316,111 @@ def _parser_diagnostics(
             error=diagnostic.error,
         )
         for diagnostic in diagnostics
+    )
+
+
+class NormalizeAllRunner:
+    """Run branch-wide normalization as ordered role/source_format batches."""
+
+    def __init__(
+        self,
+        session: Session,
+        *,
+        service_factories: Mapping[str, ServiceFactory] | None = None,
+    ) -> None:
+        """Initialize the runner with an externally managed transaction."""
+        self.session = session
+        self.file_repository = DatasetFileRepository(session)
+        self.format_runner = NormalizeFormatRunner(
+            session,
+            service_factories=service_factories,
+        )
+        self.format_runner.file_repository = self.file_repository
+
+    def normalize_all(self, request: NormalizeAllRequest) -> NormalizeAllResult:
+        """Normalize READY_FOR_PARSING files for one branch by role/source_format."""
+        _validate_all_request(request)
+        if request.limit == 0:
+            return _build_all_result(request=request, groups=())
+
+        remaining = request.limit
+        group_results: list[NormalizeAllGroupResult] = []
+        for group in self.file_repository.get_ready_file_groups(branch=request.branch):
+            if remaining is not None and remaining <= 0:
+                break
+            group_limit = min(group["files_count"], remaining) if remaining is not None else None
+            format_request = NormalizeFormatRequest(
+                branch=request.branch,
+                role=group["role"],
+                source_format=group["source_format"],
+                limit=group_limit,
+            )
+            format_result = self.format_runner.normalize_format(format_request)
+            group_result = _format_to_group_result(format_result)
+            group_results.append(group_result)
+            if remaining is not None:
+                remaining -= group_result.selected
+        return _build_all_result(request=request, groups=tuple(group_results))
+
+
+def _validate_all_request(request: NormalizeAllRequest) -> None:
+    if request.branch not in BRANCH_VALUES:
+        allowed = ", ".join(BRANCH_VALUES)
+        raise ValueError(f"normalize-all branch must be one of: {allowed}")
+    if request.branch not in SUPPORTED_NORMALIZATION_BRANCHES:
+        allowed = ", ".join(SUPPORTED_NORMALIZATION_BRANCHES)
+        raise ValueError(f"normalize-all branch must be one of: {allowed}")
+    if request.limit is not None and request.limit < 0:
+        raise ValueError("normalize-all limit must be a non-negative integer")
+
+
+def _format_to_group_result(format_result: NormalizeFormatResult) -> NormalizeAllGroupResult:
+    return NormalizeAllGroupResult(
+        role=format_result.role,
+        source_format=format_result.source_format,
+        limit=format_result.limit,
+        selected=format_result.selected,
+        processed=format_result.processed,
+        normalized=format_result.normalized,
+        parsed=format_result.parsed,
+        partially_parsed=format_result.partially_parsed,
+        failed=format_result.failed,
+        skipped=format_result.skipped,
+        unsupported=format_result.unsupported,
+        errors=format_result.errors,
+        status=format_result.status,
+        parser_name=format_result.parser_name,
+        parser_class=format_result.parser_class,
+    )
+
+
+def _build_all_result(
+    *,
+    request: NormalizeAllRequest,
+    groups: tuple[NormalizeAllGroupResult, ...],
+) -> NormalizeAllResult:
+    failed = sum(group.failed for group in groups)
+    skipped = sum(group.skipped for group in groups)
+    unsupported = sum(group.unsupported for group in groups)
+    errors = sum(group.errors for group in groups)
+    status = "SUCCESS"
+    if any(group.status == "UNSUPPORTED_FORMAT" for group in groups):
+        status = "PARTIAL_SUCCESS"
+    if failed or skipped or unsupported or errors:
+        status = "PARTIAL_SUCCESS"
+    return NormalizeAllResult(
+        status=status,
+        branch=request.branch,
+        limit=request.limit,
+        groups_count=len(groups),
+        selected=sum(group.selected for group in groups),
+        processed=sum(group.processed for group in groups),
+        normalized=sum(group.normalized for group in groups),
+        parsed=sum(group.parsed for group in groups),
+        partially_parsed=sum(group.partially_parsed for group in groups),
+        failed=failed,
+        skipped=skipped,
+        unsupported=unsupported,
+        errors=errors,
+        groups=groups,
     )

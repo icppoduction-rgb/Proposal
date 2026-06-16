@@ -9,6 +9,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from scripts.db.models import DatasetFile
+from scripts.db.models.constants import ROLE_VALUES
 from scripts.db.repositories.base_repository import BaseRepository
 
 
@@ -80,6 +81,34 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         if limit is not None:
             statement = statement.limit(limit)
         return list(self.session.execute(statement).scalars())
+
+    def get_ready_file_groups(self, *, branch: str) -> list[dict[str, Any]]:
+        """Return READY_FOR_PARSING counts grouped by role and source format."""
+        role_order = case(
+            *((DatasetFile.role == role, index) for index, role in enumerate(ROLE_VALUES)),
+            else_=len(ROLE_VALUES),
+        )
+        statement = (
+            select(
+                DatasetFile.role,
+                DatasetFile.source_format,
+                func.count(DatasetFile.id).label("files_count"),
+            )
+            .where(
+                DatasetFile.status == "READY_FOR_PARSING",
+                DatasetFile.branch == branch,
+            )
+            .group_by(DatasetFile.role, DatasetFile.source_format)
+            .order_by(role_order.asc(), DatasetFile.source_format.asc())
+        )
+        return [
+            {
+                "role": role,
+                "source_format": source_format,
+                "files_count": int(files_count),
+            }
+            for role, source_format, files_count in self.session.execute(statement).all()
+        ]
 
     def mark_file_status(
         self,
