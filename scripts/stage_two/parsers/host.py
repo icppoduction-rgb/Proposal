@@ -27,6 +27,7 @@ from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object
 from scripts.stage_two.parsers.logs import ParsedLogLine, parse_host_log_line
 from scripts.stage_two.parsers.metrics import HOST_METRIC_SOURCE_FORMATS, HostMetricbeatParser
+from scripts.stage_two.parsers.netflow import HostNetflowParser
 
 
 HOST_ADFA_COLUMNS: tuple[str, ...] = (

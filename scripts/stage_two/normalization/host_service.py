@@ -17,6 +17,7 @@ from scripts.stage_two.parsers.host import (
     HostCsvParser,
     HostJsonLinesParser,
     HostLineLogParser,
+    HostNetflowParser,
     HostSyscallTraceParser,
 )
 from scripts.stage_two.parsers.packet import HostPacketCaptureParser
@@ -27,6 +28,7 @@ HOST_PARSER_CLASSES = {
     "HostCsvParser": HostCsvParser,
     "HostJsonLinesParser": HostJsonLinesParser,
     "HostLineLogParser": HostLineLogParser,
+    "HostNetflowParser": HostNetflowParser,
     "HostPacketCaptureParser": HostPacketCaptureParser,
     "HostSyscallTraceParser": HostSyscallTraceParser,
 }
@@ -76,6 +78,7 @@ class HostNormalizationService:
             source_file_path=dataset_file.relative_path or dataset_file.file_path,
             source_file_hash=dataset_file.file_hash_sha256,
             parser_run_id=parser_run.id,
+            metadata=dataset_file.metadata_json or {},
         )
         try:
             result = parser.parse(Path(dataset_file.file_path), context)
