@@ -26,6 +26,10 @@ PCAPNG_INTERFACE_DESCRIPTION = 0x00000001
 PCAPNG_ENHANCED_PACKET = 0x00000006
 LINKTYPE_ETHERNET = 1
 LINKTYPE_RAW = 101
+ETHERTYPE_IPV4 = 0x0800
+ETHERTYPE_IPV6 = 0x86DD
+ETHERTYPE_VLAN = 0x8100
+ETHERTYPE_QINQ = 0x88A8
 IP_PROTO_TCP = 6
 IP_PROTO_UDP = 17
 DNS_PORT = 53
@@ -56,6 +60,7 @@ class PacketSummary:
     domain: str | None
     qtype: str | None
     qclass: str | None
+    ttl: int | None
     rcode: str | None
     metadata: dict[str, Any]
 
@@ -73,28 +78,30 @@ class PacketCaptureParser(BaseParser):
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse packet capture records into normalized summaries."""
         events: list[dict[str, Any]] = []
+        rows_read = 0
         rows_failed = 0
         warnings: list[str] = []
         reader = UniversalInputReader(path)
         try:
-            records = list(_iter_capture_records(Path(path), reader=reader))
+            for index, record in enumerate(_iter_capture_records(Path(path), reader=reader)):
+                rows_read += 1
+                try:
+                    summary = _summarize_packet(record)
+                    events.append(self._record_to_event(record, summary, index, context))
+                except Exception as exc:
+                    rows_failed += 1
+                    warnings.append(f"packet {index}: {exc}")
             warnings.extend(reader.metadata.warnings)
         except (InputReaderError, ValueError) as exc:
             raise ValueError(f"failed to read packet capture: {exc}") from exc
 
-        for index, record in enumerate(records):
-            try:
-                summary = _summarize_packet(record)
-                events.append(self._record_to_event(record, summary, index, context))
-            except Exception as exc:
-                rows_failed += 1
-                warnings.append(f"packet {index}: {exc}")
         result = ParserResult(
-            rows_read=len(records),
+            rows_read=rows_read,
             rows_parsed=len(events),
             rows_failed=rows_failed,
             events=events,
             warnings=warnings,
+            bytes_read=reader.metadata.bytes_read,
         )
         self.validate_result(result)
         return result
@@ -108,8 +115,8 @@ class PacketCaptureParser(BaseParser):
     ) -> dict[str, Any]:
         label_fields = self.label_resolver.resolve(summary.metadata, context)
         entity_id = _packet_entity_id(summary)
-        event_type = "dns_packet_summary" if summary.domain else "packet_summary"
-        modality = "dns" if summary.domain and self.default_modality == "dns" else self.default_modality
+        event_type = _packet_event_type(summary)
+        modality = self._event_modality(summary)
         return self.base_event(
             context,
             event_uid=_event_uid(context, index, entity_id),
@@ -131,6 +138,7 @@ class PacketCaptureParser(BaseParser):
             query_domain=summary.domain,
             qtype=summary.qtype,
             qclass=summary.qclass,
+            ttl=summary.ttl,
             rcode=summary.rcode,
             raw_fields_json={
                 key: value
@@ -147,19 +155,27 @@ class PacketCaptureParser(BaseParser):
             **label_fields,
         )
 
+    def _event_modality(self, summary: PacketSummary) -> str:
+        """Return branch-specific normalized modality for a packet summary."""
+        return self.default_modality
+
 
 class DnsPacketCaptureParser(PacketCaptureParser):
     """Packet capture parser configured for DNS branch packet sources."""
 
     parser_name = "dns_packet_capture_parser"
-    default_modality = "dns"
+    default_modality = "network_packet"
+
+    def _event_modality(self, summary: PacketSummary) -> str:
+        """Use DNS modality only when the packet actually carries DNS fields."""
+        return "dns_packet" if _is_dns_summary(summary) else "network_packet"
 
 
 class HostPacketCaptureParser(PacketCaptureParser):
     """Packet capture parser configured for Host validation packet sources."""
 
     parser_name = "host_packet_capture_parser"
-    default_modality = "packet"
+    default_modality = "host_network_packet"
 
 
 def _iter_capture_records(
@@ -181,9 +197,11 @@ def _iter_capture_records(
 
 
 def _iter_pcap_records(data: bytes) -> Iterator[PacketRecord]:
-    endian, timestamp_scale = PCAP_MAGIC_ENDIAN[data[:4]]
     if len(data) < 24:
         raise ValueError("truncated PCAP global header")
+    if data[:4] not in PCAP_MAGIC_ENDIAN:
+        raise ValueError("unsupported PCAP magic")
+    endian, timestamp_scale = PCAP_MAGIC_ENDIAN[data[:4]]
     linktype = struct.unpack(f"{endian}I", data[20:24])[0]
     offset = 24
     while offset + 16 <= len(data):
@@ -202,17 +220,11 @@ def _iter_pcapng_records(data: bytes) -> Iterator[PacketRecord]:
     endian = "<"
     linktypes: dict[int, int] = {}
     while offset + 12 <= len(data):
-        block_type, block_total_length = struct.unpack(f"{endian}II", data[offset : offset + 8])
+        block_type, block_total_length, endian = _pcapng_block_header(data, offset, endian)
         if block_total_length < 12 or offset + block_total_length > len(data):
             break
         body = data[offset + 8 : offset + block_total_length - 4]
-        if block_type == PCAPNG_SECTION_HEADER and len(body) >= 4:
-            byte_order_magic = body[:4]
-            if byte_order_magic == b"\x4d\x3c\x2b\x1a":
-                endian = "<"
-            elif byte_order_magic == b"\x1a\x2b\x3c\x4d":
-                endian = ">"
-        elif block_type == PCAPNG_INTERFACE_DESCRIPTION and len(body) >= 8:
+        if block_type == PCAPNG_INTERFACE_DESCRIPTION and len(body) >= 8:
             interface_id = len(linktypes)
             linktypes[interface_id] = struct.unpack(f"{endian}H", body[:2])[0]
         elif block_type == PCAPNG_ENHANCED_PACKET and len(body) >= 20:
@@ -232,6 +244,19 @@ def _iter_pcapng_records(data: bytes) -> Iterator[PacketRecord]:
         offset += block_total_length
 
 
+def _pcapng_block_header(data: bytes, offset: int, current_endian: str) -> tuple[int, int, str]:
+    little_type, little_length = struct.unpack("<II", data[offset : offset + 8])
+    if little_type == PCAPNG_SECTION_HEADER and offset + 12 <= len(data):
+        byte_order_magic = data[offset + 8 : offset + 12]
+        if byte_order_magic == b"\x4d\x3c\x2b\x1a":
+            return little_type, little_length, "<"
+        if byte_order_magic == b"\x1a\x2b\x3c\x4d":
+            big_type, big_length = struct.unpack(">II", data[offset : offset + 8])
+            return big_type, big_length, ">"
+    block_type, block_total_length = struct.unpack(f"{current_endian}II", data[offset : offset + 8])
+    return block_type, block_total_length, current_endian
+
+
 def _summarize_packet(record: PacketRecord) -> PacketSummary:
     packet = record.payload
     metadata: dict[str, Any] = {"linktype": record.linktype}
@@ -239,8 +264,17 @@ def _summarize_packet(record: PacketRecord) -> PacketSummary:
         if len(packet) < 14:
             return _empty_summary(record, metadata)
         ethertype = struct.unpack("!H", packet[12:14])[0]
-        metadata["ethertype"] = f"0x{ethertype:04x}"
+        vlan_layers = 0
         packet = packet[14:]
+        while ethertype in {ETHERTYPE_VLAN, ETHERTYPE_QINQ} and len(packet) >= 4:
+            vlan_layers += 1
+            ethertype = struct.unpack("!H", packet[2:4])[0]
+            packet = packet[4:]
+        metadata["ethertype"] = f"0x{ethertype:04x}"
+        if vlan_layers:
+            metadata["vlan_layers"] = vlan_layers
+        if ethertype not in {ETHERTYPE_IPV4, ETHERTYPE_IPV6}:
+            return _empty_summary(record, metadata)
     version = packet[0] >> 4 if packet else None
     if record.linktype == LINKTYPE_RAW:
         version = packet[0] >> 4 if packet else None
@@ -255,9 +289,17 @@ def _summarize_ipv4(packet: bytes, record: PacketRecord, metadata: dict[str, Any
     if len(packet) < 20:
         return _empty_summary(record, metadata)
     header_len = (packet[0] & 0x0F) * 4
+    if header_len < 20 or header_len > len(packet):
+        return _empty_summary(record, metadata)
     protocol_number = packet[9]
+    flags_fragment = struct.unpack("!H", packet[6:8])[0]
+    fragment_offset = flags_fragment & 0x1FFF
+    more_fragments = bool(flags_fragment & 0x2000)
     src_ip = str(ipaddress.ip_address(packet[12:16]))
     dst_ip = str(ipaddress.ip_address(packet[16:20]))
+    if fragment_offset or more_fragments:
+        metadata["fragmented"] = True
+        metadata["fragment_offset"] = fragment_offset
     transport = packet[header_len:]
     return _summarize_transport(protocol_number, src_ip, dst_ip, transport, record, metadata)
 
@@ -290,8 +332,9 @@ def _summarize_transport(
         tcp_flags = _tcp_flags(transport[13])
         data_offset = (transport[12] >> 4) * 4
         application = transport[data_offset:]
-        if DNS_PORT in (src_port, dst_port) and len(application) > 2:
-            dns = _parse_dns(application[2:])
+        if DNS_PORT in (src_port, dst_port):
+            dns_payload = _tcp_dns_payload(application)
+            dns = _parse_dns(dns_payload) if dns_payload else {}
     elif protocol_number == IP_PROTO_UDP and len(transport) >= 8:
         src_port, dst_port = struct.unpack("!HH", transport[:4])
         application = transport[8:]
@@ -308,39 +351,97 @@ def _summarize_transport(
         domain=dns.get("query_domain"),
         qtype=dns.get("qtype"),
         qclass=dns.get("qclass"),
+        ttl=dns.get("ttl"),
         rcode=dns.get("rcode"),
         metadata={**metadata, **dns},
     )
 
 
+def _tcp_dns_payload(application: bytes) -> bytes | None:
+    if len(application) < 2:
+        return None
+    dns_length = struct.unpack("!H", application[:2])[0]
+    if 0 < dns_length <= len(application) - 2:
+        return application[2 : 2 + dns_length]
+    return application if len(application) >= 12 else None
+
+
 def _parse_dns(payload: bytes) -> dict[str, Any]:
     if len(payload) < 12:
         return {}
-    flags = struct.unpack("!H", payload[2:4])[0]
-    qdcount = struct.unpack("!H", payload[4:6])[0]
-    result: dict[str, Any] = {"dns_id": struct.unpack("!H", payload[:2])[0], "rcode": str(flags & 0x000F)}
-    if qdcount < 1:
-        return result
+    dns_id, flags, qdcount, ancount, nscount, arcount = struct.unpack("!HHHHHH", payload[:12])
+    result: dict[str, Any] = {
+        "dns_id": dns_id,
+        "dns_is_response": bool(flags & 0x8000),
+        "dns_qdcount": qdcount,
+        "dns_ancount": ancount,
+        "dns_nscount": nscount,
+        "dns_arcount": arcount,
+        "rcode": str(flags & 0x000F),
+    }
     offset = 12
-    labels: list[str] = []
-    while offset < len(payload):
-        length = payload[offset]
-        offset += 1
-        if length == 0:
-            break
-        if length & 0xC0:
-            break
-        if offset + length > len(payload):
+    for question_index in range(qdcount):
+        name, offset = _read_dns_name(payload, offset)
+        if name and question_index == 0:
+            result["query_domain"] = name
+        if offset + 4 > len(payload):
             return result
-        labels.append(payload[offset : offset + length].decode("utf-8", errors="replace"))
-        offset += length
-    if labels:
-        result["query_domain"] = ".".join(labels)
-    if offset + 4 <= len(payload):
         qtype, qclass = struct.unpack("!HH", payload[offset : offset + 4])
-        result["qtype"] = str(qtype)
-        result["qclass"] = str(qclass)
+        offset += 4
+        if question_index == 0:
+            result["qtype"] = str(qtype)
+            result["qclass"] = str(qclass)
+    for answer_index in range(ancount):
+        answer_name, offset = _read_dns_name(payload, offset)
+        if offset + 10 > len(payload):
+            return result
+        rr_type, rr_class, ttl, rdlength = struct.unpack("!HHIH", payload[offset : offset + 10])
+        offset += 10
+        if answer_index == 0:
+            result.setdefault("query_domain", answer_name)
+            result["answer_type"] = str(rr_type)
+            result["answer_class"] = str(rr_class)
+            result["ttl"] = ttl
+        offset += rdlength
+        if offset > len(payload):
+            return result
     return result
+
+
+def _read_dns_name(payload: bytes, offset: int, *, depth: int = 0) -> tuple[str | None, int]:
+    if depth > 8:
+        return None, offset
+    labels: list[str] = []
+    current_offset = offset
+    next_offset = offset
+    jumped = False
+    while current_offset < len(payload):
+        length = payload[current_offset]
+        current_offset += 1
+        if length == 0:
+            if not jumped:
+                next_offset = current_offset
+            return ".".join(labels) if labels else None, next_offset
+        if length & 0xC0 == 0xC0:
+            if current_offset >= len(payload):
+                return ".".join(labels) if labels else None, len(payload)
+            pointer = ((length & 0x3F) << 8) | payload[current_offset]
+            current_offset += 1
+            if not jumped:
+                next_offset = current_offset
+            pointed_name, _ = _read_dns_name(payload, pointer, depth=depth + 1)
+            if pointed_name:
+                labels.append(pointed_name)
+            return ".".join(labels) if labels else None, next_offset
+        if length & 0xC0:
+            return ".".join(labels) if labels else None, current_offset
+        if current_offset + length > len(payload):
+            return ".".join(labels) if labels else None, len(payload)
+        labels.append(payload[current_offset : current_offset + length].decode("utf-8", errors="replace"))
+        current_offset += length
+        if not jumped:
+            next_offset = current_offset
+    return ".".join(labels) if labels else None, next_offset
 
 
 def _empty_summary(record: PacketRecord, metadata: dict[str, Any]) -> PacketSummary:
@@ -355,6 +456,7 @@ def _empty_summary(record: PacketRecord, metadata: dict[str, Any]) -> PacketSumm
         domain=None,
         qtype=None,
         qclass=None,
+        ttl=None,
         rcode=None,
         metadata=metadata,
     )
@@ -381,6 +483,21 @@ def _packet_entity_id(summary: PacketSummary) -> str | None:
             ports = f":{summary.src_port or ''}->{summary.dst_port or ''}"
         return f"{summary.src_ip}->{summary.dst_ip}{ports}:{summary.protocol or 'unknown'}"
     return None
+
+
+def _packet_event_type(summary: PacketSummary) -> str:
+    if _is_dns_summary(summary):
+        return "dns_response" if summary.metadata.get("dns_is_response") else "dns_query"
+    return "network_packet_summary"
+
+
+def _is_dns_summary(summary: PacketSummary) -> bool:
+    return (
+        summary.domain is not None
+        or summary.qtype is not None
+        or summary.rcode is not None
+        or DNS_PORT in {summary.src_port, summary.dst_port}
+    )
 
 
 def _event_uid(context: ParserContext, index: int, entity_id: Any) -> str:
