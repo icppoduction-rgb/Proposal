@@ -23,6 +23,7 @@ from scripts.stage_two.parsers.csv_utils import (
 )
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object
+from scripts.stage_two.parsers.logs import ParsedLogLine, parse_host_log_line
 
 
 HOST_ADFA_COLUMNS: tuple[str, ...] = (
@@ -123,7 +124,9 @@ HOST_PROCESS_ID_FIELDS: tuple[str, ...] = ("process_id", "pro_id", "process.pid"
 HOST_PATH_FIELDS: tuple[str, ...] = ("path", "file.path", "process.executable", "process.path")
 HOST_SYSCALL_FIELDS: tuple[str, ...] = ("sys_call", "syscall", "syscall_name")
 HOST_EVENT_ID_FIELDS: tuple[str, ...] = ("event_id", "EventID", "event.code")
-HOST_JSON_SOURCE_TYPES: frozenset[str] = frozenset({"json_lines", "json_array", "json_object", "json_scalar"})
+HOST_JSON_SOURCE_TYPES: frozenset[str] = frozenset(
+    {"json_lines", "json_array", "json_object", "json_scalar", "log_json_line"}
+)
 
 
 class HostCsvParser(BaseParser):
@@ -289,20 +292,81 @@ class HostLineLogParser(BaseParser):
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse raw log lines into normalized host log events."""
         events: list[dict[str, Any]] = []
+        rows_read = 0
         rows_failed = 0
-        with Path(path).open("r", encoding="utf-8", errors="replace") as file:
-            for index, line in enumerate(file):
-                message = line.rstrip("\n")
-                if not message:
+        error_samples: list[str] = []
+        reader = UniversalInputReader(path)
+        with reader.iter_lines(keepends=False, skip_empty=False) as lines:
+            for index, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                rows_read += 1
+                parsed = parse_host_log_line(
+                    line,
+                    line_number=index + 1,
+                    source_format=context.source_format,
+                )
+                if parsed.error is not None:
+                    rows_failed += 1
+                    error_samples.append(parsed.error)
                     continue
                 try:
-                    row = {"message": message}
-                    events.append(_host_event_from_row(self, row, index, context, modality="auth"))
-                except Exception:
+                    events.append(_host_line_record_to_event(self, parsed, index, context))
+                except Exception as exc:
                     rows_failed += 1
-        result = ParserResult(len(events) + rows_failed, len(events), rows_failed, events)
+                    error_samples.append(_error_sample(parsed.row, exc))
+
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+        ]
+        result = ParserResult(
+            rows_read=rows_read,
+            rows_parsed=len(events),
+            rows_failed=rows_failed,
+            events=events,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
+        )
         self.validate_result(result)
         return result
+
+
+def _host_line_record_to_event(
+    parser: BaseParser,
+    parsed: ParsedLogLine,
+    index: int,
+    context: ParserContext,
+) -> dict[str, Any]:
+    if parsed.json_payload is not None:
+        row = flatten_json_object(parsed.json_payload)
+        row.update(
+            {
+                key: value
+                for key, value in parsed.row.items()
+                if key.startswith("_") or key in {"line_number", "source_format", "event_index"}
+            }
+        )
+        row["_json_source_type"] = "log_json_line"
+        row["_json_record_index"] = index
+        if not any(_pick(row, key) not in ("", None) for key in ("event_type", "event.action", "event.dataset")):
+            row["event_type"] = "json_log"
+        return _host_event_from_row(
+            parser,
+            row,
+            index,
+            context,
+            modality=_host_json_modality(row),
+        )
+    return _host_event_from_row(
+        parser,
+        parsed.row,
+        index,
+        context,
+        modality=_host_log_modality(parsed.row),
+    )
 
 
 class HostSyscallTraceParser(BaseParser):
@@ -500,6 +564,7 @@ def _host_event_from_row(
 ) -> dict[str, Any]:
     label_fields = _resolve_host_labels(parser, row, context)
     timestamp_source, timestamp = _timestamp_from_host_row(row)
+    raw_event_name = _pick(row, "raw_event_name")
     event_type = (
         _pick(
             row,
@@ -536,6 +601,7 @@ def _host_event_from_row(
     syscall_name = _pick(row, "syscall_name", "sys_call", "syscall")
     host_name = _pick(
         row,
+        "host_name",
         "host.name",
         "host.hostname",
         "host",
@@ -557,7 +623,7 @@ def _host_event_from_row(
         entity_type=_entity_type(modality),
         entity_id=process_name or host_name or syscall_name,
         event_type=_host_event_type(row, str(event_type), modality),
-        raw_event_name=str(event_type) if event_type else None,
+        raw_event_name=str(raw_event_name or event_type) if raw_event_name or event_type else None,
         modality=modality,
         host_name=host_name,
         user_name=_pick(
@@ -775,6 +841,8 @@ def _host_raw_fields(row: dict[str, Any]) -> dict[str, Any]:
 def _host_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any] | None:
     if "_csv_schema" in row:
         return _host_csv_metadata(row, csv_file_role="telemetry")
+    if "_log_source_type" in row:
+        return _host_log_metadata(row, modality=modality)
     if str(row.get("_json_source_type") or "") in HOST_JSON_SOURCE_TYPES:
         return _host_json_metadata(row, modality=modality)
     return None
@@ -804,6 +872,51 @@ def _host_json_modality(row: dict[str, Any]) -> str:
     if _pick(row, "metricset.name", "system.cpu.total.norm.pct", "metric_name") not in ("", None):
         return "metric"
     return "eventlog"
+
+
+def _host_log_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any] | None:
+    metadata = {
+        "log_source_type": row.get("_log_source_type"),
+        "json_source_type": row.get("_json_source_type"),
+        "line_number": row.get("line_number"),
+        "source_format": row.get("source_format"),
+        "raw_line_sha256": row.get("_raw_line_sha256"),
+        "raw_line_length": row.get("_raw_line_length"),
+        "raw_line_preview_truncated": _line_preview_truncated(row),
+        "partial_timestamp": row.get("partial_timestamp"),
+        "timestamp_parse_status": row.get("timestamp_parse_status"),
+        "journal_monotonic_seconds": _float_or_none(row.get("journal_monotonic_seconds")),
+        "auth_method": row.get("auth_method"),
+        "mail_queue_id": row.get("mail_queue_id"),
+        "mail_client": row.get("mail_client"),
+        "mail_recipient": row.get("mail_recipient"),
+        "modality": modality,
+    }
+    return merge_json_objects(metadata, empty_as_none=True)
+
+
+def _host_log_modality(row: dict[str, Any]) -> str:
+    event_type = str(row.get("event_type") or "").lower()
+    source_format = str(row.get("source_format") or "").lower()
+    process_name = str(row.get("process_name") or "").lower()
+    if event_type.startswith("auth_") or source_format == "auth.log" or process_name in {"sshd", "sudo"}:
+        return "auth"
+    if event_type.startswith("mail_") or "mail" in source_format or "postfix" in process_name:
+        return "mail"
+    if "journal" in source_format or row.get("_log_source_type") == "journal":
+        return "journal"
+    return "log"
+
+
+def _line_preview_truncated(row: dict[str, Any]) -> bool | None:
+    preview = row.get("_raw_line_preview")
+    length = row.get("_raw_line_length")
+    if preview is None or length is None:
+        return None
+    try:
+        return int(length) > len(str(preview))
+    except (TypeError, ValueError):
+        return None
 
 
 def _ground_truth_entity_id(row: dict[str, Any]) -> str | None:
