@@ -79,6 +79,26 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertEqual(event["metadata_json"]["return_value"], "0")
         self.assertIn("base64_detected=True", result.warnings)
 
+    def test_readme_like_txt_is_skipped_with_parser_report(self) -> None:
+        path = _write_temp_text(self, "# README\nThis dataset contains traces.\n", file_name="README.txt")
+
+        result = _parser().parse(path, _context(path, source_format="txt"))
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "SKIPPED")
+        self.assertTrue(any("parser_report_status=SKIPPED" in warning for warning in result.warnings))
+
+    def test_empty_trace_file_returns_empty_file_status(self) -> None:
+        path = _write_temp_text(self, "", file_name="empty.txt")
+
+        result = _parser().parse(path, _context(path, source_format="txt"))
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.file_status, "EMPTY_FILE")
+
     def test_bad_line_is_partial_success(self) -> None:
         content = "openat(/tmp/a) = 3\n\x00\x01\x02\nclose(3) = 0\n"
         path = _write_temp_text(self, content, file_name="trace.sc")

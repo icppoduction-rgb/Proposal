@@ -70,13 +70,13 @@ def _render_markdown(language: str, payload: dict[str, Any]) -> str:
         "",
         "## Matrix",
         "",
-        "| branch | role | source_format | files_count | parser_active | parser_class | parser_name | action |",
-        "| --- | --- | --- | ---: | --- | --- | --- | --- |",
+        "| branch | role | source_format | files_count | parser_active | parser_class | parser_name | action | diagnostics |",
+        "| --- | --- | --- | ---: | --- | --- | --- | --- | --- |",
     ]
     for row in payload["matrix"]:
         lines.append(
             "| {branch} | {role} | {source_format} | {files_count} | {parser_active} | "
-            "{parser_class} | {parser_name} | {action} |".format(
+            "{parser_class} | {parser_name} | {action} | {diagnostics} |".format(
                 branch=_markdown_cell(row["branch"]),
                 role=_markdown_cell(row["role"]),
                 source_format=_markdown_cell(row["source_format"]),
@@ -85,6 +85,7 @@ def _render_markdown(language: str, payload: dict[str, Any]) -> str:
                 parser_class=_markdown_cell(row.get("parser_class") or ""),
                 parser_name=_markdown_cell(row.get("parser_name") or ""),
                 action=_markdown_cell(row["action"]),
+                diagnostics=_markdown_cell("; ".join(row.get("diagnostics") or ())),
             )
         )
     lines.extend(

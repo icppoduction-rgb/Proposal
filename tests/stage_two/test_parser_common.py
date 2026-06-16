@@ -10,8 +10,10 @@ from scripts.stage_two.parsers.common import (
     build_default_label_fields,
     build_normalized_event,
     build_timestamp_fields,
+    classify_helper_file,
     generate_event_uid,
     merge_json_objects,
+    parser_report_warning,
 )
 
 
@@ -114,6 +116,45 @@ class ParserCommonTest(unittest.TestCase):
                 "b": "2026-01-01T00:00:00+00:00",
             },
         )
+
+    def test_parser_result_status_override_for_skipped_and_empty_files(self) -> None:
+        skipped = ParserResult(
+            rows_read=0,
+            rows_parsed=0,
+            rows_failed=0,
+            events=[],
+            status_override="SKIPPED",
+            status_reason="helper file",
+        )
+        empty = ParserResult(
+            rows_read=3,
+            rows_parsed=0,
+            rows_failed=0,
+            events=[],
+            status_override="EMPTY_FILE",
+            status_reason="no data rows",
+        )
+
+        self.assertEqual(skipped.file_status, "SKIPPED")
+        self.assertEqual(skipped.parser_run_status, "SKIPPED")
+        self.assertEqual(skipped.status_decision.reason, "helper file")
+        self.assertEqual(empty.file_status, "EMPTY_FILE")
+        self.assertEqual(empty.parser_run_status, "SKIPPED")
+        self.assertEqual(empty.status_decision.reason, "no data rows")
+
+    def test_helper_file_classification_and_report_warning(self) -> None:
+        helper = classify_helper_file("README.txt", source_format="txt")
+        warning = parser_report_warning(
+            status="SKIPPED",
+            reason=helper.reason or "",
+            helper_type=helper.helper_type,
+        )
+
+        self.assertTrue(helper.is_helper)
+        self.assertEqual(helper.helper_type, "readme_like")
+        self.assertFalse(helper.emit_metadata_event)
+        self.assertIn("parser_report_status=SKIPPED", warning)
+        self.assertIn("helper_type=readme_like", warning)
 
 
 def _context() -> ParserContext:

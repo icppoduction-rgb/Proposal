@@ -101,6 +101,8 @@ class ParserResult:
     files_read: int = 1
     error_samples: list[str] = field(default_factory=list)
     parse_errors_count: int | None = None
+    status_override: str | None = None
+    status_reason: str | None = None
 
     def __post_init__(self) -> None:
         """Keep optional counters and error samples bounded and consistent."""
@@ -122,6 +124,10 @@ class ParserResult:
                 "parse_errors_count",
                 self.rows_failed if self.rows_failed > 0 else len(self.error_samples),
             )
+        allowed_status_overrides = {None, "EMPTY_FILE", "FAILED", "SKIPPED", "UNSUPPORTED_FORMAT"}
+        if self.status_override not in allowed_status_overrides:
+            allowed = ", ".join(sorted(value for value in allowed_status_overrides if value is not None))
+            raise ValueError(f"status_override must be one of: {allowed}")
 
     @property
     def events_emitted(self) -> int:
@@ -154,6 +160,22 @@ class ParserResult:
     @property
     def status_decision(self) -> ParserStatusDecision:
         """Return the default status decision inferred from counters."""
+        if self.status_override == "SKIPPED":
+            return ParserStatusDecision(
+                status="SKIPPED",
+                parser_run_status="SKIPPED",
+                file_status="SKIPPED",
+                reason=self.status_reason or "file was intentionally skipped",
+            )
+        if self.status_override == "EMPTY_FILE":
+            decision = calculate_parser_status(self.counters, empty_file=True)
+            return _with_status_reason(decision, self.status_reason)
+        if self.status_override == "FAILED":
+            decision = calculate_parser_status(self.counters, read_failed=True)
+            return _with_status_reason(decision, self.status_reason)
+        if self.status_override == "UNSUPPORTED_FORMAT":
+            decision = calculate_parser_status(self.counters, unsupported_format=True)
+            return _with_status_reason(decision, self.status_reason)
         return calculate_parser_status(self.counters)
 
     @property
@@ -264,6 +286,21 @@ def calculate_parser_status(
         parser_run_status="FAILED",
         file_status="FAILED",
         reason="no rows were parsed successfully",
+    )
+
+
+def _with_status_reason(
+    decision: ParserStatusDecision,
+    reason: str | None,
+) -> ParserStatusDecision:
+    """Return a copy of a status decision with an explicit reason when provided."""
+    if not reason:
+        return decision
+    return ParserStatusDecision(
+        status=decision.status,
+        parser_run_status=decision.parser_run_status,
+        file_status=decision.file_status,
+        reason=reason,
     )
 
 

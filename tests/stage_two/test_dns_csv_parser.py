@@ -115,6 +115,16 @@ class DnsCsvParserTest(unittest.TestCase):
         self.assertEqual(result.events[0]["raw_fields_json"]["TTL"], "not-a-ttl")
         self.assertIn("row has no usable DNS/domain fields", result.error_samples[0])
 
+    def test_empty_dns_csv_returns_empty_file_status(self) -> None:
+        path = _write_temp_csv(self, "", file_name="empty.csv")
+
+        result = DnsCsvParser(UnlabeledResolver()).parse(path, _context(path))
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "EMPTY_FILE")
+
     def test_pcap_csv_packet_rows_infer_query_response_and_partial_success(self) -> None:
         path = _write_temp_csv(
             self,
@@ -242,6 +252,33 @@ class DnsTxtDomainListParserTest(unittest.TestCase):
         self.assertIn("skipped_blank_lines=2", result.warnings)
         self.assertIn("skipped_comment_lines=1", result.warnings)
         self.assertEqual(result.events[0]["query_domain"], "valid.example")
+
+    def test_readme_like_txt_is_skipped_with_report(self) -> None:
+        path = _write_temp_csv(self, "# README\nDomain list notes\n", file_name="README.txt")
+
+        result = DnsTxtDomainListParser(UnlabeledResolver()).parse(
+            path,
+            _context(path, role="VALIDATION", source_format="txt"),
+        )
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "SKIPPED")
+        self.assertTrue(any("parser_report_status=SKIPPED" in warning for warning in result.warnings))
+
+    def test_empty_txt_returns_empty_file_status(self) -> None:
+        path = _write_temp_csv(self, "", file_name="empty.txt")
+
+        result = DnsTxtDomainListParser(UnlabeledResolver()).parse(
+            path,
+            _context(path, role="VALIDATION", source_format="txt"),
+        )
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "EMPTY_FILE")
 
     def test_unknown_class_stays_unlabeled_without_filename_heuristic(self) -> None:
         path = _write_temp_csv(self, "unknown.example\n", file_name="malicious_domains.txt")

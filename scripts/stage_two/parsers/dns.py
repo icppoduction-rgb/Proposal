@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
-from scripts.stage_two.parsers.common import merge_json_objects
-from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, UnlabeledLabelResolver
+from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.common import classify_helper_file, merge_json_objects, parser_report_warning
+from scripts.stage_two.parsers.input_reader import UniversalInputReader
 
 
 HEADERLESS_DNS_TEST_COLUMNS: tuple[str, ...] = (
@@ -253,10 +253,31 @@ class DnsCsvParser(BaseParser):
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse DNS CSV rows into normalized DNS events."""
         file_path = Path(path)
+        helper_decision = classify_helper_file(file_path, source_format=context.source_format)
+        if helper_decision.is_helper and not helper_decision.emit_metadata_event:
+            reason = helper_decision.reason or "helper file"
+            return ParserResult(
+                rows_read=0,
+                rows_parsed=0,
+                rows_failed=0,
+                events=[],
+                warnings=[
+                    parser_report_warning(
+                        status="SKIPPED",
+                        reason=reason,
+                        helper_type=helper_decision.helper_type,
+                    )
+                ],
+                bytes_read=_file_size_or_none(file_path),
+                status_override="SKIPPED",
+                status_reason=reason,
+            )
+
         events: list[dict[str, Any]] = []
         rows_failed = 0
         error_samples: list[str] = []
-        with file_path.open("r", encoding="utf-8", errors="replace", newline="") as file:
+        reader = UniversalInputReader(file_path)
+        with reader.open_text(newline="") as file:
             sample = file.read(4096)
             file.seek(0)
             for index, row in enumerate(_iter_dns_csv_rows(file, sample, context)):
@@ -265,12 +286,32 @@ class DnsCsvParser(BaseParser):
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(row, exc))
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+        ]
+        if reader_metadata.base64_detected:
+            warnings.append("base64_detected=True")
+        status_override = None
+        status_reason = None
+        if len(events) == 0 and rows_failed == 0:
+            if helper_decision.is_helper:
+                status_override = "SKIPPED"
+                status_reason = helper_decision.reason or "helper CSV file has no metadata rows"
+            else:
+                status_override = "EMPTY_FILE"
+                status_reason = "DNS CSV file has no readable data rows"
         result = ParserResult(
             rows_read=len(events) + rows_failed,
             rows_parsed=len(events),
             rows_failed=rows_failed,
             events=events,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
             error_samples=error_samples,
+            status_override=status_override,
+            status_reason=status_reason,
         )
         self.validate_result(result)
         return result
@@ -383,6 +424,12 @@ class DnsPcapCsvParser(DnsCsvParser):
             warnings=warnings,
             bytes_read=reader_metadata.bytes_read,
             error_samples=error_samples,
+            status_override="EMPTY_FILE" if len(events) == 0 and rows_failed == 0 else None,
+            status_reason=(
+                "DNS pcap.csv file has no readable packet rows"
+                if len(events) == 0 and rows_failed == 0
+                else None
+            ),
         )
         self.validate_result(result)
         return result
@@ -399,6 +446,26 @@ class DnsTxtDomainListParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse a domain-list TXT file into normalized DNS events."""
+        helper_decision = classify_helper_file(path, source_format=context.source_format)
+        if helper_decision.is_helper and not helper_decision.emit_metadata_event:
+            reason = helper_decision.reason or "helper file"
+            return ParserResult(
+                rows_read=0,
+                rows_parsed=0,
+                rows_failed=0,
+                events=[],
+                warnings=[
+                    parser_report_warning(
+                        status="SKIPPED",
+                        reason=reason,
+                        helper_type=helper_decision.helper_type,
+                    )
+                ],
+                bytes_read=_file_size_or_none(path),
+                status_override="SKIPPED",
+                status_reason=reason,
+            )
+
         events: list[dict[str, Any]] = []
         rows_failed = 0
         error_samples: list[str] = []
@@ -466,6 +533,12 @@ class DnsTxtDomainListParser(BaseParser):
             warnings=warnings,
             bytes_read=reader_metadata.bytes_read,
             error_samples=error_samples,
+            status_override="EMPTY_FILE" if len(events) == 0 and rows_failed == 0 else None,
+            status_reason=(
+                "DNS TXT file has no readable domain rows"
+                if len(events) == 0 and rows_failed == 0
+                else None
+            ),
         )
         self.validate_result(result)
         return result
@@ -795,3 +868,10 @@ def _error_sample(row: dict[str, Any], exc: Exception) -> str:
 def _event_uid(context: ParserContext, index: int, entity: Any) -> str:
     raw = f"{context.source_file_path}:{index}:{entity or ''}".encode("utf-8", errors="replace")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _file_size_or_none(path: str | Path) -> int | None:
+    try:
+        return Path(path).stat().st_size
+    except OSError:
+        return None

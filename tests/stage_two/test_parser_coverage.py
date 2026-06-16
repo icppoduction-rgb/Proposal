@@ -54,7 +54,7 @@ class ParserCoverageTest(unittest.TestCase):
                     registry_is_active=True,
                     supported_role=None,
                     action="ready_for_normalization",
-                    diagnostics=(),
+                    diagnostics=("diagnostic detail",),
                 ),
             ),
             stage_one_diagnostics={},
@@ -72,6 +72,9 @@ class ParserCoverageTest(unittest.TestCase):
 
             en_payload = json.loads((Path(tmp) / paths["en_json"]).read_text(encoding="utf-8"))
             self.assertEqual(en_payload["matrix"][0]["parser_class"], "DnsCsvParser")
+            en_markdown = (Path(tmp) / paths["en_md"]).read_text(encoding="utf-8")
+            self.assertIn("| branch | role | source_format |", en_markdown)
+            self.assertIn("diagnostic detail", en_markdown)
 
 
 if __name__ == "__main__":

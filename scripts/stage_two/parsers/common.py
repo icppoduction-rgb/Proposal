@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 
@@ -19,6 +21,37 @@ LABEL_FIELD_NAMES: frozenset[str] = frozenset(
         "label_mapping_rule_id",
     }
 )
+CSV_HELPER_FILE_NAMES: frozenset[str] = frozenset({"feature_descr.csv", "ground_truth.csv"})
+README_LIKE_FILE_NAMES: frozenset[str] = frozenset(
+    {
+        "readme",
+        "readme.txt",
+        "readme.md",
+        "readme.rst",
+        "README",
+        "README.txt",
+        "README.md",
+        "README.rst",
+    }
+)
+README_HEADING_TOKENS: tuple[str, ...] = (
+    "readme",
+    "overview",
+    "dataset description",
+    "data description",
+    "license",
+    "citation",
+)
+
+
+@dataclass(frozen=True)
+class HelperFileDecision:
+    """Classification for helper/context files that should not be parsed as telemetry."""
+
+    is_helper: bool
+    helper_type: str | None = None
+    reason: str | None = None
+    emit_metadata_event: bool = False
 
 
 def generate_event_uid(
@@ -135,6 +168,89 @@ def compact_json_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
     return value
+
+
+def classify_helper_file(
+    path: str | Path,
+    *,
+    source_format: str | None = None,
+    sample_text: str | None = None,
+) -> HelperFileDecision:
+    """Return helper/context-file classification for parser fallback decisions."""
+    file_name = Path(path).name
+    lower_name = file_name.lower()
+    if lower_name in CSV_HELPER_FILE_NAMES:
+        return HelperFileDecision(
+            is_helper=True,
+            helper_type=lower_name,
+            reason=f"{file_name} is context metadata, not a telemetry event stream",
+            emit_metadata_event=True,
+        )
+    if is_readme_like_file(path, source_format=source_format, sample_text=sample_text):
+        return HelperFileDecision(
+            is_helper=True,
+            helper_type="readme_like",
+            reason=f"{file_name} is README-like helper text, not a telemetry event stream",
+            emit_metadata_event=False,
+        )
+    return HelperFileDecision(is_helper=False)
+
+
+def is_readme_like_file(
+    path: str | Path,
+    *,
+    source_format: str | None = None,
+    sample_text: str | None = None,
+) -> bool:
+    """Return True for README-like helper text that lands in a parser bucket."""
+    file_name = Path(path).name
+    lower_name = file_name.lower()
+    if lower_name in {name.lower() for name in README_LIKE_FILE_NAMES}:
+        return True
+    suffix = Path(path).suffix.lower()
+    if source_format not in {None, "txt", "log"} and suffix not in {".txt", ".md", ".rst", ""}:
+        return False
+    if sample_text is None:
+        return False
+    first_lines = [line.strip().lower() for line in sample_text.splitlines() if line.strip()][:5]
+    if not first_lines:
+        return False
+    first_text = " ".join(first_lines)
+    return any(token in first_text for token in README_HEADING_TOKENS)
+
+
+def parser_report_warning(
+    *,
+    status: str,
+    reason: str,
+    helper_type: str | None = None,
+) -> str:
+    """Return a compact parser-report warning suitable for ParserResult.warnings."""
+    parts = [f"parser_report_status={status}", f"reason={reason}"]
+    if helper_type:
+        parts.append(f"helper_type={helper_type}")
+    return "; ".join(parts)
+
+
+def helper_file_metadata(
+    *,
+    decision: HelperFileDecision,
+    action: str,
+    rows_read: int | None = None,
+) -> dict[str, Any] | None:
+    """Build compact metadata for helper/context files."""
+    if not decision.is_helper:
+        return None
+    return merge_json_objects(
+        {
+            "helper_file": True,
+            "helper_type": decision.helper_type,
+            "helper_action": action,
+            "parser_reason": decision.reason,
+            "rows_read": rows_read,
+        },
+        empty_as_none=True,
+    )
 
 
 def build_normalized_event(

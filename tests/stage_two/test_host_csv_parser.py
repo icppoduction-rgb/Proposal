@@ -90,7 +90,34 @@ class HostCsvParserTest(unittest.TestCase):
         self.assertEqual(event["label_source"], "none")
         self.assertEqual(event["label_status"], "unlabeled")
         self.assertIn("not a host telemetry event", event["metadata_json"]["parser_reason"])
+        self.assertTrue(event["metadata_json"]["helper_file"])
+        self.assertEqual(event["metadata_json"]["helper_action"], "metadata_event_emitted")
         self.assertIn("csv_schema=feature_description:1", result.warnings)
+        self.assertTrue(any("parser_report_status=SUCCESS" in warning for warning in result.warnings))
+
+    def test_empty_feature_description_csv_is_skipped_with_report(self) -> None:
+        path = _write_temp_text(
+            self,
+            "Feature No,Feature Name,Type\n",
+            file_name="feature_descr.csv",
+        )
+
+        result = _parser().parse(path, _context(path))
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "SKIPPED")
+        self.assertTrue(any("parser_report_status=SKIPPED" in warning for warning in result.warnings))
+
+    def test_empty_host_csv_returns_empty_file_status(self) -> None:
+        path = _write_temp_text(self, "", file_name="empty.csv")
+
+        result = _parser().parse(path, _context(path))
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.file_status, "EMPTY_FILE")
 
     def test_test_role_does_not_use_embedded_csv_label(self) -> None:
         path = _write_temp_text(

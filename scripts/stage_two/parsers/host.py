@@ -13,7 +13,11 @@ from typing import Any
 from config import STAGE_TWO_MAX_RAW_PREVIEW_BYTES
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, unlabeled
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
-from scripts.stage_two.parsers.common import merge_json_objects
+from scripts.stage_two.parsers.common import (
+    classify_helper_file,
+    merge_json_objects,
+    parser_report_warning,
+)
 from scripts.stage_two.parsers.csv_utils import (
     compact_row,
     first_present,
@@ -155,6 +159,7 @@ class HostCsvParser(BaseParser):
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse host CSV rows into normalized host events."""
         file_path = Path(path)
+        helper_decision = classify_helper_file(file_path, source_format=context.source_format)
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
@@ -179,6 +184,23 @@ class HostCsvParser(BaseParser):
         ]
         if schema_counts:
             warnings.extend(f"csv_schema={schema}:{count}" for schema, count in sorted(schema_counts.items()))
+        if helper_decision.is_helper:
+            warnings.append(
+                parser_report_warning(
+                    status="SUCCESS" if events else "SKIPPED",
+                    reason=helper_decision.reason or "helper file",
+                    helper_type=helper_decision.helper_type,
+                )
+            )
+        status_override = None
+        status_reason = None
+        if rows_read == 0 and rows_failed == 0 and not events:
+            if helper_decision.is_helper:
+                status_override = "SKIPPED"
+                status_reason = helper_decision.reason or "helper file has no metadata rows"
+            else:
+                status_override = "EMPTY_FILE"
+                status_reason = "host CSV file has no readable data rows"
         result = ParserResult(
             rows_read=rows_read,
             rows_parsed=len(events),
@@ -187,6 +209,8 @@ class HostCsvParser(BaseParser):
             warnings=warnings,
             bytes_read=reader_metadata.bytes_read,
             error_samples=error_samples,
+            status_override=status_override,
+            status_reason=status_reason,
         )
         self.validate_result(result)
         return result
@@ -233,6 +257,11 @@ class HostJsonLinesParser(BaseParser):
         ]
         if reader_metadata.base64_detected:
             warnings.append("base64_detected=True")
+        status_override = None
+        status_reason = None
+        if rows_read == 0 and rows_failed == 0 and not events:
+            status_override = "EMPTY_FILE"
+            status_reason = "host JSON file has no readable JSON records"
         result = ParserResult(
             rows_read=rows_read,
             rows_parsed=len(events),
@@ -241,6 +270,8 @@ class HostJsonLinesParser(BaseParser):
             warnings=warnings,
             bytes_read=reader_metadata.bytes_read,
             error_samples=error_samples,
+            status_override=status_override,
+            status_reason=status_reason,
         )
         self.validate_result(result)
         return result
@@ -308,6 +339,26 @@ class HostLineLogParser(BaseParser):
         if context.source_format in HOST_METRIC_SOURCE_FORMATS:
             return HostMetricbeatParser(label_resolver=self.label_resolver).parse(path, context)
 
+        helper_decision = classify_helper_file(path, source_format=context.source_format)
+        if helper_decision.is_helper and not helper_decision.emit_metadata_event:
+            reason = helper_decision.reason or "helper file"
+            return ParserResult(
+                rows_read=0,
+                rows_parsed=0,
+                rows_failed=0,
+                events=[],
+                warnings=[
+                    parser_report_warning(
+                        status="SKIPPED",
+                        reason=reason,
+                        helper_type=helper_decision.helper_type,
+                    )
+                ],
+                bytes_read=_file_size_or_none(path),
+                status_override="SKIPPED",
+                status_reason=reason,
+            )
+
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
@@ -338,6 +389,11 @@ class HostLineLogParser(BaseParser):
             *reader_metadata.warnings,
             *(f"reader error: {error}" for error in reader_metadata.errors),
         ]
+        status_override = None
+        status_reason = None
+        if rows_read == 0 and rows_failed == 0 and not events:
+            status_override = "EMPTY_FILE"
+            status_reason = "host line-log file has no readable log lines"
         result = ParserResult(
             rows_read=rows_read,
             rows_parsed=len(events),
@@ -346,6 +402,8 @@ class HostLineLogParser(BaseParser):
             warnings=warnings,
             bytes_read=reader_metadata.bytes_read,
             error_samples=error_samples,
+            status_override=status_override,
+            status_reason=status_reason,
         )
         self.validate_result(result)
         return result
@@ -397,6 +455,26 @@ class HostSyscallTraceParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse syscall trace lines and preserve event_order through event_index."""
+        helper_decision = classify_helper_file(path, source_format=context.source_format)
+        if helper_decision.is_helper and not helper_decision.emit_metadata_event:
+            reason = helper_decision.reason or "helper file"
+            return ParserResult(
+                rows_read=0,
+                rows_parsed=0,
+                rows_failed=0,
+                events=[],
+                warnings=[
+                    parser_report_warning(
+                        status="SKIPPED",
+                        reason=reason,
+                        helper_type=helper_decision.helper_type,
+                    )
+                ],
+                bytes_read=_file_size_or_none(path),
+                status_override="SKIPPED",
+                status_reason=reason,
+            )
+
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
@@ -429,6 +507,11 @@ class HostSyscallTraceParser(BaseParser):
         ]
         if reader_metadata.base64_detected:
             warnings.append("base64_detected=True")
+        status_override = None
+        status_reason = None
+        if rows_read == 0 and rows_failed == 0 and not events:
+            status_override = "EMPTY_FILE"
+            status_reason = "host trace file has no readable trace lines"
         result = ParserResult(
             rows_read=rows_read,
             rows_parsed=len(events),
@@ -437,6 +520,8 @@ class HostSyscallTraceParser(BaseParser):
             warnings=warnings,
             bytes_read=reader_metadata.bytes_read,
             error_samples=error_samples,
+            status_override=status_override,
+            status_reason=status_reason,
         )
         self.validate_result(result)
         return result
@@ -1051,6 +1136,9 @@ def _host_csv_metadata(
         "csv_file_role": csv_file_role,
         "parser_reason": reason,
     }
+    if csv_file_role == "service_file":
+        metadata["helper_file"] = True
+        metadata["helper_action"] = "metadata_event_emitted"
     if first_present(row, ("attack_cat", "attack_category")) not in ("", None):
         metadata["attack_cat"] = first_present(row, ("attack_cat", "attack_category"))
     if first_present(row, ("attack_subcat",)) not in ("", None):
@@ -1269,3 +1357,10 @@ def _event_uid(context: ParserContext, index: int, event_type: Any) -> str:
 
 def _error_sample(row: dict[str, Any], exc: Exception) -> str:
     return f"{type(exc).__name__}: {exc}; row={compact_row(row)}"
+
+
+def _file_size_or_none(path: str | Path) -> int | None:
+    try:
+        return Path(path).stat().st_size
+    except OSError:
+        return None

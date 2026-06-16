@@ -84,17 +84,20 @@ class HostNormalizationService:
         )
         try:
             result = parser.parse(Path(dataset_file.file_path), context)
-            status = "PARTIAL_SUCCESS" if result.has_failures else "SUCCESS"
+            status_decision = result.status_decision
+            status = status_decision.parser_run_status
             modality = result.events[0]["modality"] if result.events else "host"
-            write_result = self.writer.write_normalized(
-                result.events,
-                branch=dataset_file.branch,
-                role=dataset_file.role,
-                modality=modality,
-                dataset_slug=dataset_file.dataset.slug,
-                schema_version=parser_metadata.normalized_schema_version,
-                run_id=parser_run.id,
-            )
+            write_result = None
+            if result.events:
+                write_result = self.writer.write_normalized(
+                    result.events,
+                    branch=dataset_file.branch,
+                    role=dataset_file.role,
+                    modality=modality,
+                    dataset_slug=dataset_file.dataset.slug,
+                    schema_version=parser_metadata.normalized_schema_version,
+                    run_id=parser_run.id,
+                )
         except Exception as exc:
             error_message = str(exc)
             self.parser_repository.fail_parser_run(parser_run, error_message)
@@ -107,25 +110,30 @@ class HostNormalizationService:
             rows_parsed=result.rows_parsed,
             rows_failed=result.rows_failed,
             events_emitted=result.events_emitted,
-            output_parquet_path=write_result.relative_path,
+            output_parquet_path=write_result.relative_path if write_result else None,
             warning_count=len(result.warnings),
         )
-        artifact = self.writer.register_normalized_artifact(
-            self.artifact_repository,
-            write_result,
-            dataset_id=dataset_file.dataset_id,
-            file_id=dataset_file.id,
-            parser_run_id=parser_run.id,
-            schema_version_id=None,
-            role=dataset_file.role,
-            branch=dataset_file.branch,
-            modality=modality,
-            source_format=dataset_file.source_format,
-            schema_name=parser_metadata.normalized_schema_name,
-            schema_version=parser_metadata.normalized_schema_version,
-            event_count=result.events_emitted,
-            status=status,
+        artifact = None
+        if write_result is not None:
+            artifact = self.writer.register_normalized_artifact(
+                self.artifact_repository,
+                write_result,
+                dataset_id=dataset_file.dataset_id,
+                file_id=dataset_file.id,
+                parser_run_id=parser_run.id,
+                schema_version_id=None,
+                role=dataset_file.role,
+                branch=dataset_file.branch,
+                modality=modality,
+                source_format=dataset_file.source_format,
+                schema_name=parser_metadata.normalized_schema_name,
+                schema_version=parser_metadata.normalized_schema_version,
+                event_count=result.events_emitted,
+                status=status,
+            )
+        self.file_repository.mark_file_status(
+            dataset_file,
+            status_decision.file_status,
+            error_message=status_decision.reason if status_decision.file_status == "FAILED" else None,
         )
-        file_status = "PARTIALLY_PARSED" if result.has_failures else "PARSED"
-        self.file_repository.mark_file_status(dataset_file, file_status)
         return artifact
