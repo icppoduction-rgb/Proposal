@@ -21,16 +21,16 @@ except ModuleNotFoundError:
 
 from config import manage_commands
 from scripts.db import session_scope
+from scripts.db.models.constants import BRANCH_VALUES, ROLE_VALUES
 from scripts.db.repositories import DataQualityRepository, DatasetFileRepository
-from scripts.db.models.constants import BRANCH_VALUES
 from scripts.stage_two.parser_coverage import ParserCoverageResult, run_parser_coverage
+from scripts.stage_two.status_tools import MarkReadyRequest, MarkReadyService
 
 
 console = Console()
 
 PLANNED_STAGE_TWO_COMMANDS: frozenset[str] = frozenset(
     {
-        "mark-ready",
         "normalize-format",
         "normalize-all",
     }
@@ -54,6 +54,7 @@ def router_stage_two(
             _seed_parser_registry,
         ),
         "parser-coverage": _parser_coverage,
+        "mark-ready": _mark_ready,
         "normalize-dns": lambda args: _normalize_branch("dns", args),
         "normalize-host": lambda args: _normalize_branch("host", args),
         "run-duckdb-checks": lambda args: _run_no_arg(
@@ -142,6 +143,18 @@ def _parser_coverage(args: Sequence[str]) -> None:
             "rows": len(result.matrix),
             "catalog_gap_rows": result.summary["catalog_gap_rows"],
             "report_paths": result.report_paths,
+        }
+    )
+
+
+def _mark_ready(args: Sequence[str]) -> None:
+    request = _parse_mark_ready_args(args)
+    with session_scope() as session:
+        result = MarkReadyService(session).mark_ready(request)
+    console.print(
+        {
+            "service": "stage-two mark-ready",
+            **asdict(result),
         }
     )
 
@@ -292,6 +305,96 @@ def _parse_optional_branch(args: Sequence[str], *, service: str) -> str | None:
         allowed = ", ".join(BRANCH_VALUES)
         raise ValueError(f"{service} branch must be one of: {allowed}")
     return branch
+
+
+def _parse_mark_ready_args(args: Sequence[str]) -> MarkReadyRequest:
+    if len(args) == 1 and ":" in args[0] and not args[0].startswith("--"):
+        return _parse_mark_ready_fallback(args[0])
+
+    values: dict[str, str] = {}
+    apply_changes = False
+    explicit_dry_run = False
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--apply":
+            apply_changes = True
+            index += 1
+            continue
+        if arg == "--dry-run":
+            explicit_dry_run = True
+            index += 1
+            continue
+        if arg in {"--branch", "--role", "--format"}:
+            if index + 1 >= len(args) or args[index + 1].startswith("--"):
+                raise ValueError(f"mark-ready requires a value for {arg}")
+            values[arg] = args[index + 1]
+            index += 2
+            continue
+        raise ValueError(
+            "mark-ready accepts --branch, --role, --format, --dry-run, --apply "
+            "or fallback action:branch:role:format"
+        )
+
+    if apply_changes and explicit_dry_run:
+        raise ValueError("mark-ready accepts only one execution mode: --dry-run or --apply")
+
+    missing = [flag for flag in ("--branch", "--role", "--format") if flag not in values]
+    if missing:
+        raise ValueError(f"mark-ready missing required arguments: {', '.join(missing)}")
+
+    return _build_mark_ready_request(
+        branch=values["--branch"],
+        role=values["--role"],
+        source_format=values["--format"],
+        apply_changes=apply_changes,
+    )
+
+
+def _parse_mark_ready_fallback(token: str) -> MarkReadyRequest:
+    parts = token.split(":", 3)
+    if len(parts) != 4:
+        raise ValueError("mark-ready fallback format must be action:branch:role:format")
+    action, branch, role, source_format = parts
+    normalized_action = action.strip().lower()
+    if normalized_action == "apply":
+        apply_changes = True
+    elif normalized_action == "dry-run":
+        apply_changes = False
+    else:
+        raise ValueError("mark-ready fallback action must be apply or dry-run")
+    return _build_mark_ready_request(
+        branch=branch,
+        role=role,
+        source_format=source_format,
+        apply_changes=apply_changes,
+    )
+
+
+def _build_mark_ready_request(
+    *,
+    branch: str,
+    role: str,
+    source_format: str,
+    apply_changes: bool,
+) -> MarkReadyRequest:
+    normalized_branch = branch.strip().lower()
+    normalized_role = role.strip().upper()
+    normalized_format = source_format.strip()
+    if normalized_branch not in BRANCH_VALUES:
+        allowed = ", ".join(BRANCH_VALUES)
+        raise ValueError(f"mark-ready branch must be one of: {allowed}")
+    if normalized_role not in ROLE_VALUES:
+        allowed = ", ".join(ROLE_VALUES)
+        raise ValueError(f"mark-ready role must be one of: {allowed}")
+    if not normalized_format:
+        raise ValueError("mark-ready format must not be empty")
+    return MarkReadyRequest(
+        branch=normalized_branch,
+        role=normalized_role,
+        source_format=normalized_format,
+        apply_changes=apply_changes,
+    )
 
 
 def _parse_required_single_arg(args: Sequence[str], *, service: str, usage: str) -> str | None:
