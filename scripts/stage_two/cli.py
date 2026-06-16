@@ -23,6 +23,7 @@ from config import manage_commands
 from scripts.db import session_scope
 from scripts.db.models.constants import BRANCH_VALUES, ROLE_VALUES
 from scripts.db.repositories import DataQualityRepository, DatasetFileRepository
+from scripts.stage_two.normalization.runner import NormalizeFormatRequest, NormalizeFormatRunner
 from scripts.stage_two.parser_coverage import ParserCoverageResult, run_parser_coverage
 from scripts.stage_two.status_tools import MarkReadyRequest, MarkReadyService
 
@@ -31,7 +32,6 @@ console = Console()
 
 PLANNED_STAGE_TWO_COMMANDS: frozenset[str] = frozenset(
     {
-        "normalize-format",
         "normalize-all",
     }
 )
@@ -55,6 +55,7 @@ def router_stage_two(
         ),
         "parser-coverage": _parser_coverage,
         "mark-ready": _mark_ready,
+        "normalize-format": _normalize_format,
         "normalize-dns": lambda args: _normalize_branch("dns", args),
         "normalize-host": lambda args: _normalize_branch("host", args),
         "run-duckdb-checks": lambda args: _run_no_arg(
@@ -154,6 +155,18 @@ def _mark_ready(args: Sequence[str]) -> None:
     console.print(
         {
             "service": "stage-two mark-ready",
+            **asdict(result),
+        }
+    )
+
+
+def _normalize_format(args: Sequence[str]) -> None:
+    request = _parse_normalize_format_args(args)
+    with session_scope() as session:
+        result = NormalizeFormatRunner(session).normalize_format(request)
+    console.print(
+        {
+            "service": "stage-two normalize-format",
             **asdict(result),
         }
     )
@@ -395,6 +408,86 @@ def _build_mark_ready_request(
         source_format=normalized_format,
         apply_changes=apply_changes,
     )
+
+
+def _parse_normalize_format_args(args: Sequence[str]) -> NormalizeFormatRequest:
+    if len(args) == 1 and ":" in args[0] and not args[0].startswith("--"):
+        return _parse_normalize_format_fallback(args[0])
+
+    values: dict[str, str] = {}
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in {"--branch", "--role", "--format", "--limit"}:
+            if index + 1 >= len(args) or args[index + 1].startswith("--"):
+                raise ValueError(f"normalize-format requires a value for {arg}")
+            values[arg] = args[index + 1]
+            index += 2
+            continue
+        raise ValueError(
+            "normalize-format accepts --branch, --role, --format, --limit "
+            "or fallback branch:role:format:limit"
+        )
+
+    missing = [flag for flag in ("--branch", "--role", "--format") if flag not in values]
+    if missing:
+        raise ValueError(f"normalize-format missing required arguments: {', '.join(missing)}")
+
+    return _build_normalize_format_request(
+        branch=values["--branch"],
+        role=values["--role"],
+        source_format=values["--format"],
+        limit=values.get("--limit"),
+    )
+
+
+def _parse_normalize_format_fallback(token: str) -> NormalizeFormatRequest:
+    parts = token.split(":", 3)
+    if len(parts) not in {3, 4}:
+        raise ValueError("normalize-format fallback format must be branch:role:format[:limit]")
+    branch, role, source_format = parts[:3]
+    limit = parts[3] if len(parts) == 4 else None
+    return _build_normalize_format_request(
+        branch=branch,
+        role=role,
+        source_format=source_format,
+        limit=limit,
+    )
+
+
+def _build_normalize_format_request(
+    *,
+    branch: str,
+    role: str,
+    source_format: str,
+    limit: str | None,
+) -> NormalizeFormatRequest:
+    normalized_branch = branch.strip().lower()
+    normalized_role = role.strip().upper()
+    normalized_format = source_format.strip()
+    parsed_limit = _parse_normalize_format_limit(limit)
+    if normalized_branch not in {"dns", "host"}:
+        raise ValueError("normalize-format branch must be one of: dns, host")
+    if normalized_role not in ROLE_VALUES:
+        allowed = ", ".join(ROLE_VALUES)
+        raise ValueError(f"normalize-format role must be one of: {allowed}")
+    if not normalized_format:
+        raise ValueError("normalize-format format must not be empty")
+    return NormalizeFormatRequest(
+        branch=normalized_branch,
+        role=normalized_role,
+        source_format=normalized_format,
+        limit=parsed_limit,
+    )
+
+
+def _parse_normalize_format_limit(limit: str | None) -> int | None:
+    if limit is None or not limit.strip():
+        return None
+    normalized_limit = limit.strip()
+    if normalized_limit.isdecimal():
+        return int(normalized_limit)
+    raise ValueError("normalize-format limit must be a non-negative integer")
 
 
 def _parse_required_single_arg(args: Sequence[str], *, service: str, usage: str) -> str | None:

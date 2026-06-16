@@ -1,0 +1,227 @@
+from __future__ import annotations
+
+import unittest
+from dataclasses import dataclass
+from typing import Any
+
+from scripts.db.models import DatasetFile
+from scripts.stage_two.cli import _parse_normalize_format_args
+from scripts.stage_two.normalization.runner import NormalizeFormatRequest, NormalizeFormatRunner
+
+
+@dataclass(frozen=True)
+class _FakeParser:
+    parser_name: str = "host_auth_log_parser"
+    parser_class: str = "HostLineLogParser"
+
+
+@dataclass(frozen=True)
+class _FakeResolution:
+    parser: _FakeParser | None
+    diagnostics: tuple[Any, ...] = ()
+
+
+@dataclass(frozen=True)
+class _FakeArtifact:
+    id: int
+
+
+class _FakeResolver:
+    def __init__(self, parser: _FakeParser | None) -> None:
+        self.parser = parser
+
+    def resolve_with_diagnostics(
+        self,
+        *,
+        branch: str,
+        role: str,
+        source_format: str,
+    ) -> _FakeResolution:
+        return _FakeResolution(parser=self.parser)
+
+
+class _FakeFileRepository:
+    def __init__(self, files: list[DatasetFile]) -> None:
+        self.files = files
+        self.ready_call: dict[str, Any] | None = None
+
+    def get_files_ready_for_parsing(
+        self,
+        *,
+        branch: str | None = None,
+        role: str | None = None,
+        source_format: str | None = None,
+        limit: int | None = None,
+    ) -> list[DatasetFile]:
+        self.ready_call = {
+            "branch": branch,
+            "role": role,
+            "source_format": source_format,
+            "limit": limit,
+        }
+        result = [
+            file
+            for file in self.files
+            if file.status == "READY_FOR_PARSING"
+            and file.branch == branch
+            and file.role == role
+            and file.source_format == source_format
+        ]
+        return result[:limit] if limit is not None else result
+
+    def mark_file_status(
+        self,
+        file: DatasetFile,
+        status: str,
+        *,
+        error_message: str | None = None,
+    ) -> DatasetFile:
+        file.status = status
+        file.error_message = error_message
+        return file
+
+
+class _FakeSession:
+    def begin_nested(self) -> "_FakeNestedTransaction":
+        return _FakeNestedTransaction()
+
+
+class _FakeNestedTransaction:
+    def __enter__(self) -> "_FakeNestedTransaction":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+        return False
+
+
+class _FakeNormalizationService:
+    def __init__(self, session: _FakeSession) -> None:
+        self.session = session
+
+    def normalize_file(self, dataset_file: DatasetFile) -> _FakeArtifact:
+        if dataset_file.file_name == "bad.log":
+            raise RuntimeError("parse failed")
+        dataset_file.status = "PARSED"
+        return _FakeArtifact(id=dataset_file.id or 0)
+
+
+class NormalizeFormatCliTest(unittest.TestCase):
+    def test_parse_normalize_format_flags(self) -> None:
+        request = _parse_normalize_format_args(
+            [
+                "--branch",
+                "HOST",
+                "--role",
+                "train",
+                "--format",
+                "auth.log",
+                "--limit",
+                "100",
+            ]
+        )
+
+        self.assertEqual(
+            request,
+            NormalizeFormatRequest(
+                branch="host",
+                role="TRAIN",
+                source_format="auth.log",
+                limit=100,
+            ),
+        )
+
+    def test_parse_normalize_format_fallback(self) -> None:
+        request = _parse_normalize_format_args(["dns:VALIDATION:pcap:50"])
+
+        self.assertEqual(request.branch, "dns")
+        self.assertEqual(request.role, "VALIDATION")
+        self.assertEqual(request.source_format, "pcap")
+        self.assertEqual(request.limit, 50)
+
+
+class NormalizeFormatRunnerTest(unittest.TestCase):
+    def test_normalize_format_filters_ready_files_and_continues_after_error(self) -> None:
+        files = [
+            _file(1, "good.log", status="READY_FOR_PARSING"),
+            _file(2, "bad.log", status="READY_FOR_PARSING"),
+            _file(3, "other.log", status="READY_FOR_PARSING", source_format="syslog"),
+            _file(4, "done.log", status="PARSED"),
+        ]
+        repository = _FakeFileRepository(files)
+        runner = _runner(repository, parser=_FakeParser())
+
+        result = runner.normalize_format(
+            NormalizeFormatRequest(
+                branch="host",
+                role="TRAIN",
+                source_format="auth.log",
+                limit=10,
+            )
+        )
+
+        self.assertEqual(
+            repository.ready_call,
+            {"branch": "host", "role": "TRAIN", "source_format": "auth.log", "limit": 10},
+        )
+        self.assertEqual(result.selected, 2)
+        self.assertEqual(result.processed, 2)
+        self.assertEqual(result.parsed, 1)
+        self.assertEqual(result.failed, 1)
+        self.assertEqual(result.normalized, 1)
+        self.assertEqual(result.status, "PARTIAL_SUCCESS")
+        self.assertEqual([files[0].status, files[1].status], ["PARSED", "FAILED"])
+
+    def test_normalize_format_marks_ready_files_unsupported_without_parser(self) -> None:
+        files = [
+            _file(1, "one.log", status="READY_FOR_PARSING"),
+            _file(2, "two.log", status="READY_FOR_PARSING"),
+        ]
+        repository = _FakeFileRepository(files)
+        runner = _runner(repository, parser=None)
+
+        result = runner.normalize_format(
+            NormalizeFormatRequest(branch="host", role="TRAIN", source_format="auth.log")
+        )
+
+        self.assertEqual(result.status, "UNSUPPORTED_FORMAT")
+        self.assertEqual(result.unsupported, 2)
+        self.assertEqual(result.normalized, 0)
+        self.assertEqual([file.status for file in files], ["UNSUPPORTED_FORMAT", "UNSUPPORTED_FORMAT"])
+
+
+def _runner(
+    repository: _FakeFileRepository,
+    *,
+    parser: _FakeParser | None,
+) -> NormalizeFormatRunner:
+    session = _FakeSession()
+    runner = NormalizeFormatRunner(
+        session,  # type: ignore[arg-type]
+        service_factories={"host": _FakeNormalizationService},  # type: ignore[dict-item]
+    )
+    runner.file_repository = repository  # type: ignore[assignment]
+    runner.resolver = _FakeResolver(parser)  # type: ignore[assignment]
+    return runner
+
+
+def _file(
+    file_id: int,
+    file_name: str,
+    *,
+    status: str,
+    source_format: str = "auth.log",
+) -> DatasetFile:
+    return DatasetFile(
+        id=file_id,
+        dataset_id=1,
+        file_path=f"/tmp/{file_name}",
+        file_name=file_name,
+        source_format=source_format,
+        role="TRAIN",
+        branch="host",
+        status=status,
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()
