@@ -735,7 +735,7 @@ def _decoded_payload_looks_supported(data: bytes) -> bool:
         return True
     if data.startswith((*PCAP_MAGIC_PREFIXES, PCAPNG_MAGIC)):
         return True
-    if _looks_like_bson_document(data):
+    if _looks_like_bson_document(data) or _looks_like_bson_stream_preview(data):
         return True
     return _decode_supported_text(data) is not None
 
