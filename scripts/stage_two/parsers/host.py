@@ -5,10 +5,12 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from config import STAGE_TWO_MAX_RAW_PREVIEW_BYTES
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, unlabeled
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
 from scripts.stage_two.parsers.common import merge_json_objects
@@ -128,6 +130,15 @@ HOST_EVENT_ID_FIELDS: tuple[str, ...] = ("event_id", "EventID", "event.code")
 HOST_JSON_SOURCE_TYPES: frozenset[str] = frozenset(
     {"json_lines", "json_array", "json_object", "json_scalar", "log_json_line"}
 )
+TRACE_KEY_VALUE_PATTERN = re.compile(r"(?P<key>[A-Za-z_][\w.\-]*)=(?P<value>\"[^\"]*\"|'[^']*'|\S+)")
+TRACE_CALL_PATTERN = re.compile(
+    r"\b(?P<name>[A-Za-z_][\w.$:@/-]*)\s*\((?P<arguments>.*)\)\s*(?:=\s*(?P<return_value>\S.*))?$"
+)
+TRACE_ISO_TIMESTAMP_PREFIX_PATTERN = re.compile(
+    r"^(?P<timestamp>\d{4}-\d{2}-\d{2}[T ][^\s]+)\s+(?P<body>.+)$"
+)
+TRACE_RELATIVE_TIMESTAMP_PREFIX_PATTERN = re.compile(r"^(?P<relative_timestamp>\d+\.\d+)\s+(?P<body>.+)$")
+TRACE_NAME_PATTERN = re.compile(r"^[A-Za-z_][\w.$:@/-]*$")
 
 
 class HostCsvParser(BaseParser):
@@ -385,20 +396,231 @@ class HostSyscallTraceParser(BaseParser):
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse syscall trace lines and preserve event_order through event_index."""
         events: list[dict[str, Any]] = []
+        rows_read = 0
         rows_failed = 0
-        with Path(path).open("r", encoding="utf-8", errors="replace") as file:
-            for index, line in enumerate(file):
-                syscall = line.strip()
-                if not syscall:
+        error_samples: list[str] = []
+        reader = UniversalInputReader(path)
+        with reader.iter_lines(keepends=False, skip_empty=False) as lines:
+            for index, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                rows_read += 1
+                row, error = _parse_syscall_trace_line(
+                    line,
+                    line_number=index + 1,
+                    source_format=context.source_format,
+                )
+                if error is not None:
+                    rows_failed += 1
+                    error_samples.append(error)
                     continue
                 try:
-                    row = {"syscall_name": syscall}
                     events.append(_host_event_from_row(self, row, index, context, modality="syscall"))
-                except Exception:
+                except Exception as exc:
                     rows_failed += 1
-        result = ParserResult(len(events) + rows_failed, len(events), rows_failed, events)
+                    error_samples.append(_error_sample(row, exc))
+
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+        ]
+        if reader_metadata.base64_detected:
+            warnings.append("base64_detected=True")
+        result = ParserResult(
+            rows_read=rows_read,
+            rows_parsed=len(events),
+            rows_failed=rows_failed,
+            events=events,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
+        )
         self.validate_result(result)
         return result
+
+
+def _parse_syscall_trace_line(
+    line: str,
+    *,
+    line_number: int,
+    source_format: str,
+) -> tuple[dict[str, Any], str | None]:
+    text = line.strip()
+    if _is_control_heavy_trace_line(text):
+        return {}, f"line {line_number}: invalid control-heavy trace line"
+    if not any(char.isalnum() for char in text):
+        return {}, f"line {line_number}: trace line has no alphanumeric syscall/API token"
+
+    body = text
+    timestamp = None
+    relative_timestamp = None
+    timestamp_match = TRACE_ISO_TIMESTAMP_PREFIX_PATTERN.match(body)
+    if timestamp_match:
+        timestamp = timestamp_match.group("timestamp")
+        body = timestamp_match.group("body").strip()
+    else:
+        relative_match = TRACE_RELATIVE_TIMESTAMP_PREFIX_PATTERN.match(body)
+        if relative_match:
+            relative_timestamp = relative_match.group("relative_timestamp")
+            body = relative_match.group("body").strip()
+
+    trace_fields = _trace_key_values(body)
+    syscall_id, explicit_name = _syscall_id_and_name_from_fields(trace_fields)
+    call_match = TRACE_CALL_PATTERN.search(body)
+    arguments = _trace_first_field(trace_fields, ("arguments", "argument", "args", "arg", "argv"))
+    return_value = _trace_first_field(trace_fields, ("return_value", "retval", "ret", "return", "result"))
+    syscall_name = explicit_name
+    if call_match:
+        syscall_name = call_match.group("name")
+        arguments = call_match.group("arguments") or arguments
+        return_value = call_match.group("return_value") or return_value
+
+    tokens = _trace_tokens(body)
+    token_name, token_index = _trace_name_from_tokens(tokens, syscall_id=syscall_id)
+    syscall_name = syscall_name or token_name
+    if syscall_id is None:
+        syscall_id = _trace_numeric_id_from_tokens(tokens)
+    if syscall_name is None and syscall_id is not None:
+        syscall_name = f"syscall_{syscall_id}"
+    if syscall_name is None:
+        return {}, f"line {line_number}: trace line has no syscall/API token"
+    if arguments in ("", None) and token_index is not None:
+        arguments = _trace_arguments_from_tokens(tokens, token_index)
+
+    row: dict[str, Any] = {
+        "_trace_source_type": "syscall_trace",
+        "source_format": source_format,
+        "line_number": line_number,
+        "_raw_line_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
+        "_raw_line_length": len(text),
+        "_raw_line_preview": _trace_line_preview(text),
+        "raw_event_name": syscall_name,
+        "syscall_name": syscall_name,
+        "syscall_id": syscall_id,
+        "event_id": syscall_id,
+        "process_id": _trace_first_field(trace_fields, ("process_id", "pid", "process.pid", "tid")),
+        "parent_process_id": _trace_first_field(trace_fields, ("parent_process_id", "ppid", "parent.pid")),
+        "process_name": _trace_first_field(
+            trace_fields,
+            ("process_name", "process", "proc", "comm", "exe", "executable"),
+        ),
+        "user_name": _trace_first_field(trace_fields, ("user_name", "user", "uid", "euid")),
+        "file_path": _trace_first_field(trace_fields, ("file_path", "file", "path", "pathname", "exe", "executable")),
+        "arguments": arguments,
+        "return_value": return_value,
+        "relative_timestamp": relative_timestamp,
+        "trace_fields": trace_fields,
+        "trace_tokens": tokens,
+        "command_line": _trace_line_preview(body),
+    }
+    if timestamp not in ("", None):
+        row["timestamp"] = timestamp
+    return row, None
+
+
+def _trace_key_values(text: str) -> dict[str, str]:
+    return {
+        match.group("key"): _strip_trace_quotes(match.group("value"))
+        for match in TRACE_KEY_VALUE_PATTERN.finditer(text)
+    }
+
+
+def _syscall_id_and_name_from_fields(fields: dict[str, str]) -> tuple[str | None, str | None]:
+    syscall_value = _trace_first_field(
+        fields,
+        ("syscall_id", "syscall.id", "syscall", "syscall_number", "nr", "id"),
+    )
+    explicit_name = _trace_first_field(
+        fields,
+        ("syscall_name", "syscall.name", "api", "api_name", "call", "function", "function_name"),
+    )
+    syscall_id = None
+    if syscall_value not in ("", None):
+        if str(syscall_value).isdigit():
+            syscall_id = str(syscall_value)
+        elif explicit_name in ("", None):
+            explicit_name = str(syscall_value)
+    if explicit_name not in ("", None) and str(explicit_name).isdigit():
+        syscall_id = syscall_id or str(explicit_name)
+        explicit_name = None
+    return syscall_id, explicit_name
+
+
+def _trace_tokens(text: str) -> list[str]:
+    return [token for token in re.split(r"\s+", text.strip()) if token]
+
+
+def _trace_name_from_tokens(tokens: list[str], *, syscall_id: str | None) -> tuple[str | None, int | None]:
+    for index, token in enumerate(tokens):
+        cleaned = _clean_trace_token(token)
+        if not cleaned or _looks_like_trace_key_value(token):
+            continue
+        if cleaned.isdigit():
+            continue
+        if syscall_id is not None and cleaned == syscall_id:
+            continue
+        if TRACE_NAME_PATTERN.match(cleaned):
+            return cleaned, index
+    return None, None
+
+
+def _trace_numeric_id_from_tokens(tokens: list[str]) -> str | None:
+    for token in tokens:
+        if _looks_like_trace_key_value(token):
+            continue
+        cleaned = _clean_trace_token(token)
+        if cleaned.isdigit():
+            return cleaned
+        if cleaned:
+            return None
+    return None
+
+
+def _trace_arguments_from_tokens(tokens: list[str], name_index: int) -> str | None:
+    arguments = [
+        token
+        for token in tokens[name_index + 1 :]
+        if not _looks_like_trace_key_value(token)
+    ]
+    return " ".join(arguments) if arguments else None
+
+
+def _trace_first_field(fields: dict[str, str], keys: tuple[str, ...]) -> str | None:
+    lowered = {key.lower(): value for key, value in fields.items()}
+    for key in keys:
+        value = fields.get(key) or lowered.get(key.lower())
+        if value not in ("", None):
+            return value
+    return None
+
+
+def _clean_trace_token(token: str) -> str:
+    return token.strip().strip(",;").split("(", 1)[0].strip()
+
+
+def _looks_like_trace_key_value(token: str) -> bool:
+    return "=" in token and TRACE_KEY_VALUE_PATTERN.match(token) is not None
+
+
+def _strip_trace_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _is_control_heavy_trace_line(text: str) -> bool:
+    if "\x00" in text:
+        return True
+    control_count = sum(1 for char in text if not char.isprintable() and char != "\t")
+    return control_count / max(len(text), 1) > 0.2
+
+
+def _trace_line_preview(text: str) -> str:
+    encoded = text.encode("utf-8", errors="replace")
+    if len(encoded) <= STAGE_TWO_MAX_RAW_PREVIEW_BYTES:
+        return text
+    return encoded[:STAGE_TWO_MAX_RAW_PREVIEW_BYTES].decode("utf-8", errors="replace")
 
 
 def _iter_host_csv_rows(lines: Any, context: ParserContext, file_path: Path):
@@ -847,6 +1069,8 @@ def _host_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any] | No
         return _host_csv_metadata(row, csv_file_role="telemetry")
     if "_log_source_type" in row:
         return _host_log_metadata(row, modality=modality)
+    if "_trace_source_type" in row:
+        return _host_trace_metadata(row, modality=modality)
     if str(row.get("_json_source_type") or "") in HOST_JSON_SOURCE_TYPES:
         return _host_json_metadata(row, modality=modality)
     return None
@@ -910,6 +1134,24 @@ def _host_log_modality(row: dict[str, Any]) -> str:
     if "journal" in source_format or row.get("_log_source_type") == "journal":
         return "journal"
     return "log"
+
+
+def _host_trace_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any] | None:
+    arguments = row.get("arguments")
+    metadata = {
+        "trace_source_type": row.get("_trace_source_type"),
+        "line_number": row.get("line_number"),
+        "source_format": row.get("source_format"),
+        "raw_line_sha256": row.get("_raw_line_sha256"),
+        "raw_line_length": row.get("_raw_line_length"),
+        "raw_line_preview_truncated": _line_preview_truncated(row),
+        "syscall_id": row.get("syscall_id"),
+        "arguments_length": len(str(arguments)) if arguments not in ("", None) else None,
+        "return_value": row.get("return_value"),
+        "relative_timestamp": row.get("relative_timestamp"),
+        "modality": modality,
+    }
+    return merge_json_objects(metadata, empty_as_none=True)
 
 
 def _line_preview_truncated(row: dict[str, Any]) -> bool | None:
