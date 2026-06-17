@@ -87,6 +87,7 @@ Per-run parser and normalization diagnostics are written under:
 - [PostgreSQL catalog schema](postgresql_catalog_schema.md)
 - [Normalized event schema](normalized_event_schema.md)
 - [Parser strategy](parser_strategy.md)
+- [Final Codex summary template](final_summary_template.md)
 - [Parquet and DuckDB artifacts](parquet_duckdb_artifacts.md)
 - [Data quality checks](data_quality_checks.md)
 - [Data leakage prevention](data_leakage_prevention.md)
