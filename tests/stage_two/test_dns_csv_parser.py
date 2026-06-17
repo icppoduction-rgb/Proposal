@@ -89,6 +89,41 @@ class DnsCsvParserTest(unittest.TestCase):
         self.assertEqual(event["timestamp_type"], "absolute")
         self.assertEqual(event["raw_fields_json"]["url"], "http://bad.example/path")
 
+    def test_train_embedded_dns_label_column_resolves(self) -> None:
+        path = _write_temp_csv(
+            self,
+            "Domain,label\nbad.example,malicious\n",
+            file_name="train_labels.csv",
+        )
+        parser = DnsCsvParser(LabelResolver(config_path=None, enable_filename_heuristics=True))
+
+        result = parser.parse(path, _context(path, role="TRAIN"))
+
+        self.assertEqual(result.rows_parsed, 1)
+        event = result.events[0]
+        self.assertEqual(event["query_domain"], "bad.example")
+        self.assertEqual(event["label_binary"], 1)
+        self.assertEqual(event["label_source"], "embedded_column")
+        self.assertEqual(event["label_status"], "explicit_label")
+
+    def test_test_role_ignores_embedded_dns_pcap_csv_label_column(self) -> None:
+        path = _write_temp_csv(
+            self,
+            "frame.time_epoch,ip.src,ip.dst,udp.srcport,udp.dstport,_ws.col.Protocol,dns.qry.name,label\n"
+            "1704067200,10.0.0.1,8.8.8.8,53000,53,DNS,bad.example,malicious\n",
+            file_name="malicious_test_labels.pcap.csv",
+        )
+        parser = DnsPcapCsvParser(LabelResolver(config_path=None, enable_filename_heuristics=True))
+
+        result = parser.parse(path, _context(path, role="TEST", source_format="pcap.csv"))
+
+        self.assertEqual(result.rows_parsed, 1)
+        event = result.events[0]
+        self.assertEqual(event["query_domain"], "bad.example")
+        self.assertEqual(event["label_binary"], None)
+        self.assertEqual(event["label_source"], "none")
+        self.assertEqual(event["label_status"], "unlabeled")
+
     def test_unescaped_list_columns_are_preserved_in_raw_fields(self) -> None:
         path = _write_temp_csv(self, "Domain,TTL,features\ngood.example,60,[\"a\",\"b\"]\n")
 

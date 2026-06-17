@@ -28,6 +28,7 @@ SOURCE_PRIORITY: dict[str, int] = {
     "ids_alert": 4,
     "none": 99,
 }
+TEST_DATASET_ROLE = "TEST"
 EMBEDDED_LABEL_FIELDS: tuple[str, ...] = (
     "label_binary",
     "label",
@@ -162,11 +163,13 @@ class LabelResolver:
 
     def _collect_candidates(self, row: dict[str, Any], context: ParserContext) -> list[LabelResolution]:
         candidates: list[LabelResolution] = []
-        candidates.extend(resolve_embedded(row))
+        if label_hints_allowed(context):
+            candidates.extend(resolve_embedded(row))
         candidates.extend(resolve_rules(row, context, self._load_rules(context)))
-        if self.enable_filename_heuristics:
+        if self.enable_filename_heuristics and label_hints_allowed(context):
             candidates.extend(resolve_filename(context))
-        candidates.extend(resolve_ids_alert(row))
+        if label_hints_allowed(context):
+            candidates.extend(resolve_ids_alert(row))
         return candidates
 
     def _load_rules(self, context: ParserContext) -> list[LabelRule]:
@@ -230,7 +233,7 @@ def resolve_rules(row: dict[str, Any], context: ParserContext, rules: list[Label
 
 def resolve_filename(context: ParserContext) -> list[LabelResolution]:
     """Resolve conservative filename labels for non-TEST datasets."""
-    if context.dataset_role == "TEST":
+    if not label_hints_allowed(context):
         return []
     text = Path(context.source_file_path).as_posix().lower()
     tokens = tokenize_label_text(text)
@@ -265,6 +268,11 @@ def resolve_ids_alert(row: dict[str, Any]) -> list[LabelResolution]:
     if "alert" not in text and text not in {"true", "1"}:
         return []
     return [LabelResolution(1, None, None, "ids_alert", "weak_label", 0.5, "ids_alert:weak")]
+
+
+def label_hints_allowed(context: ParserContext) -> bool:
+    """Return True when implicit row/path hints are allowed to create labels."""
+    return str(context.dataset_role).upper() != TEST_DATASET_ROLE
 
 
 def select_resolution(candidates: list[LabelResolution]) -> LabelResolution:
