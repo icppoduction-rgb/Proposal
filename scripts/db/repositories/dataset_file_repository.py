@@ -68,6 +68,7 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         role: str | None = None,
         source_format: str | None = None,
         limit: int | None = None,
+        file_ids: tuple[int, ...] | None = None,
     ) -> list[DatasetFile]:
         """Return files marked READY_FOR_PARSING."""
         statement = select(DatasetFile).where(DatasetFile.status == "READY_FOR_PARSING")
@@ -77,6 +78,8 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
             statement = statement.where(DatasetFile.role == role)
         if source_format is not None:
             statement = statement.where(DatasetFile.source_format == source_format)
+        if file_ids is not None:
+            statement = statement.where(DatasetFile.id.in_(file_ids))
         statement = statement.order_by(DatasetFile.id)
         if limit is not None:
             statement = statement.limit(limit)

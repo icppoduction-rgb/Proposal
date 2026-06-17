@@ -35,6 +35,7 @@ class NormalizeFormatRequest:
     role: str
     source_format: str
     limit: int | None = None
+    file_ids: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -155,12 +156,15 @@ class NormalizeFormatRunner:
     def normalize_format(self, request: NormalizeFormatRequest) -> NormalizeFormatResult:
         """Normalize only matching READY_FOR_PARSING files."""
         _validate_request(request)
-        files = self.file_repository.get_files_ready_for_parsing(
-            branch=request.branch,
-            role=request.role,
-            source_format=request.source_format,
-            limit=request.limit,
-        )
+        file_filters: dict[str, object] = {
+            "branch": request.branch,
+            "role": request.role,
+            "source_format": request.source_format,
+            "limit": request.limit,
+        }
+        if request.file_ids is not None:
+            file_filters["file_ids"] = request.file_ids
+        files = self.file_repository.get_files_ready_for_parsing(**file_filters)
         resolution = self.resolver.resolve_with_diagnostics(
             branch=request.branch,
             role=request.role,

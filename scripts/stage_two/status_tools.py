@@ -39,6 +39,7 @@ class MarkReadyRequest:
     role: str
     source_format: str
     apply_changes: bool = False
+    file_ids: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -148,6 +149,8 @@ class MarkReadyService:
             )
             .order_by(DatasetFile.id.asc())
         )
+        if request.file_ids is not None:
+            statement = statement.where(DatasetFile.id.in_(request.file_ids))
         return list(self.session.execute(statement).scalars().all())
 
 
