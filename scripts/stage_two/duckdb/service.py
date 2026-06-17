@@ -84,7 +84,10 @@ class DuckDBAnalyticsService:
                         f"SELECT * FROM read_parquet('{_sql_string(glob_path)}', union_by_name = true, filename = true)"
                     )
                 else:
-                    empty_columns = ", ".join(f"NULL::VARCHAR AS {column}" for column in EMPTY_VIEW_COLUMNS)
+                    empty_columns = ", ".join(
+                        f"NULL::VARCHAR AS {column}"
+                        for column in _empty_view_columns(view_name)
+                    )
                     connection.execute(
                         f"CREATE OR REPLACE VIEW {view_name} AS SELECT {empty_columns} WHERE false"
                     )
@@ -263,3 +266,8 @@ class DuckDBAnalyticsService:
 
 def _sql_string(value: str) -> str:
     return value.replace("'", "''")
+
+
+def _empty_view_columns(view_name: str) -> tuple[str, ...]:
+    """Return stable placeholder columns for empty Parquet views."""
+    return tuple(dict.fromkeys((*EMPTY_VIEW_COLUMNS, *REQUIRED_COLUMNS.get(view_name, ()))))
