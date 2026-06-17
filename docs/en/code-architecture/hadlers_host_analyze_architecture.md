@@ -125,4 +125,4 @@ Host source files
 
 ## Relation to Stage Two
 
-Stage One can analyze more formats than Stage Two currently normalizes. In particular, `netflow_day`, `netflow_ids`, and `wls_day` have content-analysis handlers, but the Stage Two parser registry keeps the corresponding host netflow parser inactive/planned until the parser is implemented.
+Stage One analysis remains separate from Stage Two normalization. `netflow_day`, `netflow_ids`, and `wls_day` have Stage One content-analysis handlers and are normalized in Stage Two through `HostNetflowParser` when catalog rows are marked `READY_FOR_PARSING` and an active registry entry is available.

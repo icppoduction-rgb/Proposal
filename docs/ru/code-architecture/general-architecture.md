@@ -1,78 +1,91 @@
-﻿# Общая архитектура проекта
+# Общая архитектура проекта
 
-Проект состоит из двух связанных частей:
+Проект состоит из двух связанных pipeline-слоев:
 
-1. Stage One handlers в `scripts/handlers` готовят файловые списки, фильтруют host-датасеты, раскладывают файлы по ролям/форматам и строят отчеты анализа содержимого.
-2. Stage Two в `scripts/stage_two` создает структуру storage, регистрирует raw-файлы в PostgreSQL Catalog, выбирает активные парсеры, нормализует поддерживаемые файлы в Parquet и регистрирует traceability-цепочку.
+1. **Stage One** в `scripts/handlers` работает в основном с файловой системой и JSON-отчетами: обнаруживает датасеты, фильтрует host-ветку, сортирует файлы по ролям/форматам и строит диагностические summaries.
+2. **Stage Two** в `scripts/stage_two` строит PostgreSQL Catalog, регистрирует parser registry, нормализует raw files в Parquet и сохраняет traceability `raw -> parser_run -> normalized_artifact`.
 
-`manage.py` является единой CLI-точкой входа для обеих частей. Данные датасетов остаются в файловом хранилище, а PostgreSQL хранит каталог, версии схем, статусы запусков и ссылки на артефакты.
+Единая точка входа - `manage.py`. Пути и константы берутся из `config.py`, настройки БД - из `scripts/db/config.py` и окружения.
 
 ```mermaid
 flowchart TD
-    A[manage.py] --> B[scripts.router_script]
-    B --> C[handlers]
-    B --> D[stage-two]
-    C --> C1[analyze_dataset]
-    C1 --> C2[filter_dataset]
-    C2 --> C3[sort]
-    C3 --> C4[save_sort]
-    C4 --> C5[dns_analyze / host_analyze]
-    D --> D1[bootstrap-storage]
-    D1 --> D2[catalog-ingest]
-    D2 --> D3[seed-parser-registry]
-    D3 --> D4[normalize-dns / normalize-host]
-    D4 --> D5[Parquet artifacts]
-    D4 --> D6[PostgreSQL Catalog]
-    D6 --> D7[quality checks / trace-artifact]
+    A["manage.py"] --> B["scripts/router_script.py"]
+    B --> C["scripts/handlers/router_handler.py"]
+    B --> D["scripts/stage_two/cli.py"]
+    C --> C1["Stage One: analyze/filter/sort/save/analyze"]
+    D --> D1["bootstrap-storage"]
+    D1 --> D2["catalog-ingest"]
+    D2 --> D3["seed-parser-registry"]
+    D3 --> D4["parser-coverage"]
+    D4 --> D5["mark-ready"]
+    D5 --> D6["normalize-format / normalize-all"]
+    D6 --> D7["Parquet normalized artifacts"]
+    D6 --> D8["PostgreSQL Catalog"]
+    D8 --> D9["DuckDB, leakage, readiness checks"]
 ```
 
-## Основные директории кода
+## Основные директории
 
-| Директория | Назначение |
-|---|---|
-| `manage.py` | CLI entry point. Принимает `module`, `service`, `action` и передает управление router-слою. |
-| `config.py` | Пути, команды помощи и настройки окружения, используемые handlers и Stage Two. |
-| `scripts/router_script.py` | Верхнеуровневая маршрутизация между `handlers` и `stage-two`. |
-| `scripts/handlers` | Stage One pipeline: discovery, host filtering, sorting, path export, content analysis. |
-| `scripts/db` | SQLAlchemy engine/session, ORM-модели и репозитории PostgreSQL Catalog. |
-| `scripts/stage_two` | Stage Two pipeline: storage, ingestion, parser registry, normalization, quality, traceability. |
-| `schemas` | JSON Schema контракты normalized/features/model-ready. |
-| `docs/*/analysis-dataset` | Markdown-отчеты, создаваемые content-analysis handlers. |
+| Путь | Назначение |
+| --- | --- |
+| `manage.py` | CLI entry point. Разбирает `module`, `service`, `action` и дополнительные аргументы. |
+| `config.py` | Глобальные пути storage/datasets/reports и Stage Two технические constants. |
+| `scripts/router_script.py` | Маршрутизация между `handlers` и `stage-two`; для Stage Two передает `extra_args`. |
+| `scripts/handlers` | Stage One handlers: discovery, filtering, sorting, save-sort, content analysis. |
+| `scripts/db` | SQLAlchemy engine/session, ORM-модели, repositories, Alembic migrations и DB smoke check. |
+| `scripts/stage_two` | Catalog ingestion, parser registry, parsers, normalization, reports, quality, traceability. |
+| `schemas` | JSON Schema контракты normalized/features/model-ready artifacts. |
+| `docs` | RU/EN документация проекта. |
+| `reports` / `storage/reports` | Generated reports в зависимости от config path. |
 
-## Разделение ролей TRAIN / VALIDATION / TEST
-
-В коде роли представлены как `TRAIN`, `VALIDATION`, `TEST` и используются в JSON Stage One, в sorted storage, в PostgreSQL check constraints и в Parquet partitioning Stage Two. Stage Two не смешивает роли внутри normalized artifacts: `role` записывается в `dataset_files`, `parser_runs`, `normalized_artifacts`, `feature_artifacts`, `model_ready_artifacts`.
-
-Текущий код содержит проверки leakage на уровне Stage Two, но полная feature/model-ready подготовка не является общей CLI-командой. Для будущих этапов важно сохранять правило: fit/preprocessing выполняется только на TRAIN, VALIDATION/TEST используются как отдельные роли и не должны влиять на fitted state.
-
-## Сквозная traceability
-
-Фактическая traceability строится через PostgreSQL Catalog:
+## Поток данных
 
 ```text
-raw file -> dataset_files -> parser_runs -> normalized_artifacts -> feature_artifacts -> model_ready_artifacts
+raw datasets
+  -> Stage One JSON diagnostics and sorted trees
+  -> Stage Two catalog ingestion
+  -> dataset_files rows with branch/role/source_format/status/hash
+  -> parser registry resolution
+  -> parser run
+  -> normalized Parquet
+  -> normalized_artifacts rows
+  -> DuckDB/leakage/readiness checks
 ```
 
-`TraceabilityService` умеет восстановить цепочку от model-ready artifact по ID или пути. Нормализованные данные записываются в Parquet, а каталог хранит пути, hash, schema metadata, счетчики и статусы.
+Stage Two не использует Stage One JSON как единственный production input. `catalog-ingest` сканирует настроенные raw/sorted roots, вычисляет hashes и upsert-ит PostgreSQL Catalog. Stage One JSON остается полезным диагностическим источником и совместимым legacy artifact.
 
-## Что уже реализовано
+## Роли и разделение данных
 
-| Область | Фактическое состояние |
-|---|---|
-| Stage One discovery/sort/analyze | Реализовано в `scripts/handlers`. |
-| PostgreSQL Catalog | ORM-модели, Alembic migration, session/repository слой реализованы. |
-| Storage bootstrap | Создает требуемые директории Stage Two идемпотентно. |
-| Catalog ingestion | Сканирует настроенные корни, вычисляет hash, upsert-ит datasets/files/runs. |
-| Parser registry | Seed регистрирует schema_versions и активные поддерживаемые парсеры. Planned/unsupported парсеры не активируются. |
-| Normalization | Реализованы DNS/host normalization services для файлов со статусом `READY_FOR_PARSING`. |
-| Parquet writer | Записывает normalized/feature/model-ready Parquet через общие writer APIs. |
-| Quality/traceability | Есть DuckDB checks, leakage checks, readiness check и trace artifact CLI. |
+Проект использует роли `TRAIN`, `VALIDATION`, `TEST`. Они присутствуют в Stage One JSON, sorted tree, `dataset_files`, `parser_runs`, `normalized_artifacts` и Parquet partition path. Нормализация не должна смешивать роли: `normalize-format` выбирает один `branch/role/source_format`, а `normalize-all` обрабатывает ветку группами по role/source_format.
 
-## Что не реализовано как общий pipeline
+Leakage-guard правила:
 
-| Область | Текущее ограничение |
-|---|---|
-| Автоматический перевод catalog files в `READY_FOR_PARSING` | Публичной CLI-команды нет. `normalize-*` берет только файлы с этим статусом. |
-| Полный feature engineering pipeline | Есть контракты и writer/registry APIs, но нет универсальной CLI-команды построения features из всех normalized artifacts. |
-| Полная model-ready сборка | Есть registry/contracts и e2e dry-run, но нет общей CLI-команды production pipeline. |
-| Host netflow/wls normalization | Parser registry хранит planned entries inactive; активный parser для этих форматов отсутствует. |
+- TEST filename heuristic отключен;
+- labels берутся только из безопасных embedded fields или `label_mapping_rules`;
+- traceability fields остаются metadata/context, а не model input features;
+- missing label записывается как `label_binary=None`, `label_status="unlabeled"`.
+
+## Реализованное состояние
+
+| Область | Текущее состояние |
+| --- | --- |
+| Stage One | Discovery/filter/sort/save-sort/content-analysis handlers реализованы. |
+| PostgreSQL Catalog | ORM models, repositories, Alembic migration и `scripts.db.smoke_check` реализованы. |
+| Storage bootstrap | Идемпотентно создает Stage Two storage/report/parquet directories. |
+| Catalog ingestion | Сканирует roots, определяет branch/role/source_format, считает SHA-256, upsert-ит catalog rows. |
+| Parser registry | Seed регистрирует schema_versions и active parser entries для реализованных parser classes. |
+| Parser coverage | CLI строит coverage matrix и RU/EN reports. |
+| Mark-ready | CLI переводит только разрешенные статусы в `READY_FOR_PARSING`, по умолчанию dry-run. |
+| Normalization | `normalize-format`, `normalize-all`, `normalize-dns`, `normalize-host` пишут normalized Parquet и catalog rows. |
+| Reports | Parser/normalization diagnostics пишутся в RU/EN report directories. |
+| Checks | DuckDB, leakage, readiness и direct/catalog smokes доступны как отдельные команды/модули. |
+
+## Что является ограничением
+
+| Область | Ограничение |
+| --- | --- |
+| Feature pipeline | `feature_artifacts` contracts/writers существуют, но общего production CLI для feature extraction нет. |
+| Model-ready pipeline | `model_ready_artifacts` contracts/registry существуют, но full production assembly CLI не реализован. |
+| Stage One naming | Файлы документации `hadlers_*` сохраняют историческую опечатку ради совместимости ссылок. |
+| CLI help in config | `config.manage_commands` может отставать от новых Stage Two команд; фактический список нужно проверять в `scripts/stage_two/cli.py`. |
+| Heavy corpus validation | Документация описывает реализованные команды; full-corpus success можно утверждать только после реального запуска на полном наборе данных. |

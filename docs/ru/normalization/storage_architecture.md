@@ -1,75 +1,85 @@
-# Архитектура хранилища Stage Two
+# Storage architecture
 
-Корневой путь берется из `PATH_DATA_STORAGE` в `.env`. Bootstrap реализован в `scripts/stage_two/storage/bootstrap.py` и вызывается командой:
+Stage Two использует `PATH_DATA_STORAGE` как root для generated data и reports. Значение берется из environment через `config.py`.
+
+Raw datasets находятся вне этого storage tree и никогда не изменяются Stage Two.
+
+## Bootstrap
 
 ```powershell
 python manage.py stage-two bootstrap-storage
 ```
 
-Операция идемпотентна: существующие директории не удаляются и не перезаписываются.
+Implementation: `scripts/stage_two/storage/bootstrap.py`. Команда idempotent и создает только missing directories.
 
-## Основные зоны
+## Основные storage areas
 
-```text
-PATH_DATA_STORAGE/
-  postgres/
-  pgadmin/
-  parquet/
-    normalized/
-    features/
-    model_ready/
-  duckdb/
-    sql/
-    exports/
-  logs/stage-two/
-  backups/
-    postgres_catalog/
-    metadata_exports/
-  temp_data/
-    ingestion/
-    parser_runs/
-    normalization/
-    duckdb/
-  schemas/
-    normalized/
-    features/
-    model_ready/
-  reports/
-    ru/stage-two/
-    en/stage-two/
-  config/
-```
+| Area | Relative path | Purpose |
+| --- | --- | --- |
+| PostgreSQL runtime | `postgres/`, `pgadmin/` | Local database service state при использовании docker-compose. |
+| Normalized Parquet | `parquet/normalized/` | Parser outputs. |
+| Feature Parquet | `parquet/features/` | Target для feature artifact contract. |
+| Model-ready artifacts | `parquet/model_ready/` | Target для model-ready artifact contract. |
+| DuckDB | `duckdb/`, `duckdb/sql`, `duckdb/exports` | Analytical views/check exports. |
+| Reports | `reports/en/stage-two/`, `reports/ru/stage-two/` | Parser, normalization, quality, leakage, readiness reports. |
+| Logs | `logs/stage-two/` | Stage Two operational logs. |
+| Temp data | `temp_data/ingestion`, `temp_data/parser_runs`, `temp_data/normalization`, `temp_data/duckdb` | Intermediate diagnostics. |
+| Config | `config/` | Runtime config files, например label mapping rules. |
+| Schema copies | `schemas/normalized`, `schemas/features`, `schemas/model_ready` | Storage-side schema artifacts. |
 
-## Parquet partitioning
+## Normalized Parquet layout
 
-Normalized events:
+`ParquetArtifactWriter.write_normalized()` пишет:
 
 ```text
 parquet/normalized/{branch}/{role}/{modality}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet
 ```
 
-Feature artifacts:
+Examples:
 
 ```text
-parquet/features/{feature_group}/{role}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet
+parquet/normalized/dns/TRAIN/dns/example-dataset/schema=v1/part-42.parquet
+parquet/normalized/host/VALIDATION/network_flow/example-dataset/schema=v1/part-43.parquet
+parquet/normalized/host/TEST/sandbox/example-dataset/schema=v1/part-44.parquet
 ```
 
-Model-ready tables:
+Parquet path регистрируется в PostgreSQL `normalized_artifacts.normalized_path`.
+
+## Report layout
+
+Coverage reports:
 
 ```text
-parquet/model_ready/{artifact_type}/{branch}/{role}/schema={schema_version}/{file_name}
+reports/en/stage-two/parser/parser_coverage_matrix.md
+reports/ru/stage-two/parser/parser_coverage_matrix.md
 ```
 
-Где `branch` - `dns`, `host`, `network` или `hybrid`; `role` - `TRAIN`, `VALIDATION`, `TEST` или `EXPERIMENTS`.
+Parser run reports:
 
-## Что хранится в PostgreSQL
+```text
+reports/en/stage-two/parser/
+reports/ru/stage-two/parser/
+```
 
-PostgreSQL catalog хранит:
+Normalization reports:
 
-- пути к raw и generated файлам;
-- SHA-256 хеши, размеры и счетчики строк;
-- статусы ingestion, parsing, artifact generation и quality checks;
-- связи raw -> normalized -> features -> model-ready;
-- label mapping rules и parser registry.
+```text
+reports/en/stage-two/normalization/
+reports/ru/stage-two/normalization/
+```
 
-Большие строки normalized events/features/model-ready не пишутся в PostgreSQL. Они остаются в Parquet.
+Quality/leakage reports:
+
+```text
+reports/en/stage-two/quality/
+reports/en/stage-two/leakage/
+reports/ru/stage-two/leakage/
+```
+
+## Storage rules
+
+- Raw input хранится только в original raw dataset roots.
+- Большие normalized rows хранятся в Parquet, не PostgreSQL.
+- PostgreSQL хранит metadata, counters, hashes, paths и bounded diagnostics.
+- TRAIN, VALIDATION, TEST и EXPERIMENTS разделены в artifact paths.
+- Parser code должен брать paths из `config.py`, а не hardcode absolute paths.

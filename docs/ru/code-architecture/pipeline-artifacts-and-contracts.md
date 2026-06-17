@@ -1,126 +1,140 @@
-﻿# Pipeline, артефакты и контракты данных
+# Pipeline, artifacts и data contracts
 
-## Stage One порядок вызова
+## Stage One artifacts
 
-### DNS
+Stage One outputs являются файловыми JSON/Markdown diagnostics:
 
-| Шаг | Команда | Вход | Выход |
-|---|---|---|---|
-| 1 | `handlers analyze-dataset dns-dataset-handler` | `PATH_DNS_DATASETS` | `PATH_TEMP_DATA/dns-path-file.json`, `PATH_TEMP_DATA/dns-file.json` |
-| 2 | `handlers sort sort-dns-dataset-handler` | `dns-path-file.json`, `dns-file.json` | sorted tree в `PATH_DNS_DATASETS_FILTER`, `sort-dns-format-summary.json` |
-| 3 | `handlers save-sort save-sort-dns-dataset-handler` | `PATH_DNS_DATASETS_FILTER` | `sort-path-dns-file.json`, `sort-path-dns-file-summary.json` |
-| 4 | `handlers dns-analyze <action>` | `sort-path-dns-file.json`, sorted files | `analysis-dns-*-summary.json`, Markdown/report files |
+| Этап | Команда | Основные outputs |
+| --- | --- | --- |
+| DNS discovery | `python manage.py handlers analyze-dataset dns-dataset-handler` | `dns-path-file.json`, `dns-file.json`. |
+| Host discovery | `python manage.py handlers analyze-dataset host-dataset-handler` | `host-path-file.json`, `host-file.json`. |
+| Host filter | `python manage.py handlers filter-dataset filter-host-dataset-handler` | `filter_dataset-host-path-file.json`, `filter_dataset-host-file.json`. |
+| Sort | `python manage.py handlers sort sort-*-dataset-handler` | Sorted tree, `sort-*-format-summary.json`. |
+| Save sort | `python manage.py handlers save-sort save-sort-*-dataset-handler` | `sort-path-dns-file.json`, `sort-path-host-file.json`. |
+| Content analysis | `python manage.py handlers dns-analyze ...` / `host-analyze ...` | `analysis-*-summary.json`, Markdown reports. |
 
-### Host
+Stage One JSON не является стабильной normalized schema. Он нужен для диагностики и подготовки, но Stage Two production source of truth - PostgreSQL Catalog.
 
-| Шаг | Команда | Вход | Выход |
-|---|---|---|---|
-| 1 | `handlers analyze-dataset host-dataset-handler` | `PATH_HOST_DATASETS` | `host-path-file.json`, `host-file.json` |
-| 2 | `handlers filter-dataset filter-host-dataset-handler` | `host-path-file.json`, `host-file.json` | `filter_dataset-host-path-file.json`, `filter_dataset-host-file.json`, filter log |
-| 3 | `handlers sort sort-host-dataset-handler` | `filter_dataset-host-path-file.json`, `filter_dataset-host-file.json` | sorted tree в `PATH_HOST_DATASETS_FILTER`, `sort-host-format-summary.json` |
-| 4 | `handlers save-sort save-sort-host-dataset-handler` | `PATH_HOST_DATASETS_FILTER` | `sort-path-host-file.json`, `sort-path-host-file-summary.json` |
-| 5 | `handlers host-analyze <action>` | `sort-path-host-file.json`, sorted files | `analysis-host-*-summary.json`, Markdown/report files |
-
-## Stage Two порядок вызова
+## Stage Two commands и outputs
 
 | Шаг | Команда | Вход | Выход |
-|---|---|---|---|
-| 1 | `stage-two bootstrap-storage` | `PATH_DATA_STORAGE` | Required storage directories. |
-| 2 | `stage-two catalog-ingest` | configured raw/filter roots | `ingestion_runs`, `datasets`, `dataset_files`. |
-| 3 | `stage-two seed-parser-registry` | schema JSON, seed JSON | `schema_versions`, `parser_registry`. |
-| 4 | operational status update | catalog rows | `dataset_files.status = READY_FOR_PARSING` for files selected for parsing. Публичной CLI-команды сейчас нет. |
-| 5 | `stage-two normalize-dns [limit]` / `normalize-host [limit]` | READY catalog files, active parser registry | normalized Parquet, `parser_runs`, `normalized_artifacts`. |
-| 6 | feature/model-ready APIs | normalized artifacts | feature/model-ready Parquet and catalog rows. Общей CLI-команды сейчас нет. |
-| 7 | `stage-two run-duckdb-checks` / `run-leakage-checks` | Parquet/catalog metadata | JSON reports, `data_quality_reports`. |
-| 8 | `stage-two trace-artifact <id-or-path>` | model-ready artifact ID/path | JSON traceability chain. |
+| --- | --- | --- | --- |
+| 1 | `python manage.py stage-two bootstrap-storage` | `config.py` storage paths | Directories under `PATH_DATA_STORAGE`. |
+| 2 | `python -m alembic -c scripts/db/migrations/alembic.ini upgrade head` | Alembic migrations | PostgreSQL Catalog schema. |
+| 3 | `python manage.py stage-two seed-parser-registry` | `schemas/*.schema.json`, registry seed | `schema_versions`, `parser_registry`. |
+| 4 | `python manage.py stage-two catalog-ingest` | Raw/sorted dataset roots | `ingestion_runs`, `datasets`, `dataset_files`. |
+| 5 | `python manage.py stage-two parser-coverage` | Catalog + registry | RU/EN coverage matrix JSON/MD. |
+| 6 | `python manage.py stage-two mark-ready ...` | `dataset_files` rows | Selected statuses changed to `READY_FOR_PARSING`. |
+| 7 | `python manage.py stage-two normalize-format ...` | READY files for one branch/role/source_format | Parquet, `parser_runs`, `normalized_artifacts`, reports. |
+| 8 | `python manage.py stage-two normalize-all ...` | READY files for branch | Same as above, grouped by role/source_format. |
+| 9 | `python manage.py stage-two run-duckdb-checks` | Parquet + catalog metadata | Quality reports. |
+| 10 | `python manage.py stage-two run-leakage-checks` | Catalog/artifact metadata | Leakage reports. |
+| 11 | `python -m scripts.stage_two.readiness_check` | DB/storage/registry/reports | Readiness status. |
 
-## Временные JSON Stage One
+## Normalized event contract
 
-### Discovery JSON
+Normalized events follow `schemas/normalized_event.schema.json`. Parser implementations build events with shared helpers and preserve traceability fields:
 
-```json
-{
-  "TRAIN": ["path-or-file-name"],
-  "VALIDATION": ["path-or-file-name"],
-  "TEST": ["path-or-file-name"]
-}
+| Field group | Examples |
+| --- | --- |
+| Traceability | `dataset_id`, `file_id`, `dataset_name`, `dataset_role`, `branch`, `source_format`, `source_file_path`, `source_file_hash`. |
+| Parser metadata | `parser_name`, `parser_version`, `parser_run_id`, `schema_name`, `schema_version`. |
+| Event identity | `event_uid`, `event_index`, `timestamp`, `timestamp_type`. |
+| Canonical fields | `domain`, `query_domain`, `src_ip`, `dst_ip`, `process_name`, `user_name`, `host_name`, `event_type`, `modality`. |
+| Labels | `label_binary`, `label_source`, `label_status`. |
+| Preservation | `raw_fields_json`, `metadata_json`, `features_json` where applicable. |
+
+Missing values должны оставаться `NULL`/`None`, а не подменяться искусственными defaults. Unknown fields сохраняются в `raw_fields_json`/`metadata_json`, если это безопасно и не содержит огромный payload.
+
+## Parser result contract
+
+Parser returns:
+
+```text
+ParseResult
+  events: list[ParsedEvent]
+  status
+  counters
+  warnings
+  errors/error samples
+  metadata
 ```
 
-Используется в:
+Required counters:
 
-| Файл | Значение элементов | Читатели |
-|---|---|---|
-| `dns-path-file.json` | DNS paths | DNS sorter |
-| `dns-file.json` | DNS file names | DNS sorter |
-| `host-path-file.json` | Host paths | Host filter |
-| `host-file.json` | Host file names | Host filter |
-| `filter_dataset-host-path-file.json` | Filtered host paths | Host sorter |
-| `filter_dataset-host-file.json` | Filtered host file names | Host sorter |
-
-### Sorted path JSON
-
-```json
-{
-  "TRAIN": {
-    "csv": ["path/to/file.csv"],
-    "pcap": ["path/to/file.pcap"]
-  },
-  "VALIDATION": {},
-  "TEST": {}
-}
+```text
+rows_read
+rows_parsed
+rows_failed
+bytes_read
+files_read
+warnings_count
+parse_errors_count
 ```
 
-| Файл | Читатели |
-|---|---|
-| `sort-path-dns-file.json` | DNS content-analysis handlers |
-| `sort-path-host-file.json` | Host content-analysis handlers |
+Parser не должен менять raw file и не должен хранить full binary payload в PostgreSQL/report metadata.
 
-### Analysis summary JSON
+## Parquet layout
 
-Content-analysis summary JSON не имеет единой JSON Schema в коде. Общие поля, которые встречаются в handlers:
+Normalized artifacts пишутся под storage root:
 
-| Поле | Назначение |
-|---|---|
-| `source_json` | Path к `sort-path-*-file.json`. |
-| `role` | TRAIN/VALIDATION/TEST. |
-| `format` | Format bucket. |
-| `scope` | Counters/paths for analyzed files. |
-| `final_status` / `status` | Итог анализа. |
-| `blocking_reason` | Причина невозможности анализа, если применимо. |
-| detected schema/sample fields | Поля, зависящие от конкретного analyzer. |
+```text
+PATH_DATA_STORAGE/
+  parquet/
+    normalized/
+      {branch}/
+        {role}/
+          {modality}/
+            {dataset_slug}/
+              schema={schema_version}/
+                part-{parser_run_id}.parquet
+```
 
-## Stage Two DB/Parquet contracts
+Catalog row `normalized_artifacts` содержит path, relative path, hash, row count, schema metadata и `parser_run_id`. Payload читается через Parquet/DuckDB.
 
-| Layer | DB table | File artifact | Contract source |
-|---|---|---|---|
-| Raw catalog | `dataset_files` | raw source files | scanner + ingestion metadata |
-| Parser execution | `parser_runs` | none | parser registry + parse result counters |
-| Normalized | `normalized_artifacts` | normalized Parquet | `schemas/normalized/normalized_event_v1.json` |
-| Features | `feature_artifacts` | feature Parquet | `schemas/features/feature_artifact_v1.json` |
-| Preprocessing | `preprocessing_artifacts` | fitted preprocessing artifact | registry metadata |
-| Model-ready | `model_ready_artifacts` | model-ready Parquet/artifact | `schemas/model_ready/model_ready_v1.json` |
+## Reports layout
 
-## Normalized event concept
+```text
+PATH_DATA_STORAGE/reports/en/stage-two/parser/
+PATH_DATA_STORAGE/reports/ru/stage-two/parser/
+PATH_DATA_STORAGE/reports/en/stage-two/normalization/
+PATH_DATA_STORAGE/reports/ru/stage-two/normalization/
+```
 
-Parser output is represented by Stage Two parser contracts and must contain enough metadata to preserve traceability:
+Coverage files:
 
-| Field group | Purpose |
-|---|---|
-| source identity | raw file ID/path, parser run linkage, source event UID refs where applicable. |
-| split metadata | branch and role. |
-| event metadata | event type, timestamp fields when available, labels. |
-| raw fields | compact raw fields in JSON metadata for audit/debug. |
-| parser metadata | parser name/version/config and schema version. |
+```text
+parser_coverage_matrix.json
+parser_coverage_matrix.md
+```
 
-Exact column list is defined by `schemas/normalized/normalized_event_v1.json` and registered in `schema_versions` by Stage Two seed.
+Reports должны быть диагностическими: counters/status/warnings/errors samples/hints, но не full raw payload.
 
-## Interaction between required components
+## Traceability chain
 
-| Components | Interaction |
-|---|---|
-| `analyze_dataset` -> `filter_dataset` | Host only: filter reads `host-path-file.json` and `host-file.json`. DNS skips filter. |
-| `filter_dataset` -> `sort` | Host sorter requires filtered JSON. DNS sorter reads original DNS discovery JSON. |
-| `sort` -> `save_sort` | `save_sort` scans the sorted directory tree created by sorter. |
-| `save_sort` -> `dns_analyze` | DNS analyzers read `sort-path-dns-file.json`. |
-| `save_sort` -> `host_analyze` | Host analyzers read `sort-path-host-file.json`. |
-| Stage One -> Stage Two | Stage Two does not consume Stage One temp JSON directly. It scans configured filesystem roots via `catalog-ingest`. |
+Фактическая цепочка:
+
+```text
+dataset_files
+  -> parser_runs
+  -> normalized_artifacts
+  -> feature_artifacts
+  -> model_ready_artifacts
+```
+
+На текущем parser pipeline стабильно создаются `parser_runs` и `normalized_artifacts`. Feature/model-ready tables и writers существуют для следующих стадий, но общий production CLI для полного feature/model-ready workflow не реализован.
+
+## Validation commands
+
+```powershell
+python -m compileall manage.py config.py scripts
+git diff --check
+python -m scripts.db.smoke_check
+python -m alembic -c scripts/db/migrations/alembic.ini current
+python manage.py stage-two parser-coverage
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+```
+
+Не заявляйте full-corpus success, если эти команды не запускались на полном corpus и доступной PostgreSQL DB.

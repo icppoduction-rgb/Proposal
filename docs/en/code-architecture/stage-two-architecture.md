@@ -1,98 +1,119 @@
-﻿# Stage Two: Data Normalization
+# Stage Two Architecture
 
-## Purpose
+Stage Two is implemented under `scripts/stage_two/`.
 
-Stage Two turns the file collection produced by Stage One into a managed catalog plus normalized Parquet artifacts. Its main goal is to preserve `raw -> normalized -> features -> model-ready` traceability, keep TRAIN/VALIDATION/TEST separated, and provide a foundation for new parser implementations.
+## Pipeline
 
-## Stage Two Packages
-
-| Package | Purpose |
-|---|---|
-| `scripts/stage_two/cli.py` | CLI router for Stage Two commands. |
-| `storage/bootstrap.py` | Idempotent storage directory creation. |
-| `ingestion/scanner.py` | File scanning and branch/role/source_format/dataset slug inference. |
-| `ingestion/file_hash_service.py` | SHA-256 hashing for raw files. |
-| `ingestion/catalog_ingestion_service.py` | Creates ingestion runs and upserts datasets/dataset_files. |
-| `parser_registry/seed.py` | Seeds `schema_versions` and `parser_registry`. |
-| `parser_registry/resolver.py` | Selects active parser entry by branch/source_format/role/priority. |
-| `parsers/base.py` | Shared parser contracts (`ParsedEvent`, `ParseResult`, base classes). |
-| `parsers/dns.py` | DNS parser implementations. |
-| `parsers/host.py` | Host parser implementations for supported structured/log formats. |
-| `parsers/packet.py` | Packet-related parser support. |
-| `parsers/bson.py` | BSON parser support. |
-| `normalization/schema_contracts.py` | Loads/registers normalized schema contract. |
-| `normalization/dns_service.py` | DNS normalization service. |
-| `normalization/host_service.py` | Host normalization service. |
-| `labels/resolver.py` | Label resolution from mapping rules/config/raw metadata. |
-| `parquet/writer.py` | Writes Parquet artifacts. |
-| `features/contracts.py`, `features/writer.py` | Feature artifact contract validation/writing APIs. |
-| `model_ready/contracts.py`, `model_ready/registry.py` | Model-ready contract validation/registration APIs. |
-| `duckdb/service.py` | DuckDB views/checks over Parquet artifacts. |
-| `quality/checkers.py`, `quality/checks.py` | Data quality and leakage checks. |
-| `traceability/service.py` | Reconstructs chain from model-ready to raw. |
-| `readiness_check.py` | Checks Stage Two environment readiness. |
-| `e2e_dry_run.py` | End-to-end dry run using sample artifacts. |
-
-## CLI Commands
-
-| Command | Behavior | Main outputs |
-|---|---|---|
-| `stage-two bootstrap-storage` | Creates storage root and required directories. | Directories under `PATH_DATA_STORAGE`. |
-| `stage-two catalog-ingest` | Scans configured roots and upserts catalog rows. | `ingestion_runs`, `datasets`, `dataset_files`. |
-| `stage-two seed-parser-registry` | Registers normalized schema and parser entries. | `schema_versions`, `parser_registry`. |
-| `stage-two normalize-dns [limit]` | Parses READY DNS files and writes normalized Parquet. | `parser_runs`, `normalized_artifacts`, Parquet. |
-| `stage-two normalize-host [limit]` | Parses READY host files and writes normalized Parquet. | `parser_runs`, `normalized_artifacts`, Parquet. |
-| `stage-two run-duckdb-checks` | Builds a DuckDB analytics report. | JSON report, `data_quality_reports`. |
-| `stage-two run-leakage-checks` | Checks leakage between roles/artifacts. | JSON reports, `data_quality_reports`. |
-| `stage-two trace-artifact <id-or-path>` | Prints a traceability chain. | JSON chain on stdout. |
-
-## Normalization
-
-`normalize-dns` and `normalize-host` follow the same flow:
-
-```mermaid
-flowchart TD
-    A[dataset_files status READY_FOR_PARSING] --> B[ParserRegistryResolver]
-    B --> C[Active parser class]
-    C --> D[ParseResult events]
-    D --> E[LabelResolver]
-    E --> F[ParquetWriter]
-    F --> G[normalized_artifacts]
-    C --> H[parser_runs]
+```text
+bootstrap-storage
+  -> alembic upgrade
+  -> seed-parser-registry
+  -> catalog-ingest
+  -> parser-coverage
+  -> mark-ready
+  -> normalize-format / normalize-all
+  -> run-duckdb-checks
+  -> run-leakage-checks
+  -> readiness_check
 ```
 
-1. CLI selects `DatasetFileRepository.get_files_ready_for_parsing(branch, limit)`.
-2. The service tries to find an active parser registry entry for `branch`, `source_format`, and `role`.
-3. The resolver does not select inactive entries. Planned parser entries remain in the registry for documentation but do not participate in normalization.
-4. The parser returns normalized events and counters.
-5. The service writes Parquet through `ParquetWriter`.
-6. The service registers `parser_runs` and `normalized_artifacts`, including schema metadata and path/hash/counters.
+## Modules
 
-## Schema Versions
+| Module | Responsibility |
+| --- | --- |
+| `storage/bootstrap.py` | Idempotent directory creation under `PATH_DATA_STORAGE`. |
+| `ingestion/scanner.py` | Branch/role/source_format inference. |
+| `ingestion/catalog_ingestion_service.py` | Raw file catalog ingestion and status assignment. |
+| `ingestion/file_hash_service.py` | Raw file SHA-256 hashing. |
+| `parser_registry/seed.py` | Registry/schema seeding and parser class validation. |
+| `parser_registry/resolver.py` | Parser selection, class loading, schema version resolution. |
+| `parsers/` | Parser implementations and shared parser utilities. |
+| `labels/resolver.py` | Canonical label resolution and leakage guards. |
+| `normalization/dns_service.py` | DNS file normalization into Parquet/catalog artifacts. |
+| `normalization/host_service.py` | Host file normalization into Parquet/catalog artifacts. |
+| `normalization/runner.py` | `normalize-format` and `normalize-all` batch runners. |
+| `parquet/writer.py` | Parquet writing and artifact registration support. |
+| `reports/parser_reports.py` | Parser coverage and parser run reports. |
+| `duckdb/service.py` | DuckDB views and quality report registration. |
+| `quality/checkers.py` | Leakage checks. |
+| `traceability/service.py` | Artifact lineage lookup. |
+| `readiness_check.py` | Final operational readiness report. |
 
-`seed-parser-registry` calls `seed_stage_two_metadata()`, which must register the `normalized_event` schema in `schema_versions`. Parser registry entries reference `normalized_schema_name` and `normalized_schema_version`. This is mandatory for traceability and readiness checks.
+## Parser Registry
 
-## Parser Registry Policy
+Registry seed maps `branch` and `source_format` to parser module/class. Active parser groups cover DNS CSV/TXT/PCAP, Host CSV/JSON/log/metrics/syscall/BSON/NetFlow/XML/packet formats.
 
-- Only actually implemented parser classes should be active.
-- Planned/unsupported parsers may exist in the registry only with `is_active=false` and config/status metadata.
-- The resolver selects parsers by branch/source_format/role using priority and active flag.
-- A new parser requires a class, seed entry, schema linkage, and a test/check proving the resolver selects it only for supported formats.
+Coverage is checked with:
 
-## Storage
+```powershell
+python manage.py stage-two parser-coverage
+```
 
-Storage bootstrap creates directories for raw, normalized, features, model-ready, reports, config, and temp_data. Roles and branches are separated in paths and catalog metadata. The actual required directory list is in `scripts/stage_two/storage/bootstrap.py`.
+Implemented parser groups:
 
-## Quality and Readiness
+| Branch | Source formats | Parser classes |
+| --- | --- | --- |
+| DNS | `csv` | `DnsCsvParser` |
+| DNS | `pcap.csv` | `DnsPcapCsvParser` |
+| DNS | `txt` | `DnsTxtDomainListParser` |
+| DNS | `pcap`, `pcapng`, `cap` | `DnsPacketCaptureParser` |
+| Host | `csv` | `HostCsvParser` |
+| Host | `json`, `json-1` | `HostJsonLinesParser` |
+| Host | line logs such as `auth.log`, `syslog*`, `messages*`, `mainlog*`, `journal*`, `mail-*`, `log-*`, `info` | `HostLineLogParser` |
+| Host | metric logs such as `cpu.log`, `diskio.log`, `filesystem.log`, `process.summary.log`, `socket.summary.log` | `HostMetricbeatParser` |
+| Host | `ghc`, `sc`, `txt` | `HostSyscallTraceParser` |
+| Host | `bson` | `HostBsonSandboxParser` |
+| Host | `netflow_day`, `netflow_ids`, `wls_day` | `HostNetflowParser` |
+| Host | `xml` | `HostXmlParser` |
+| Host | `pcap`, `pcapng`, `cap` | `HostPacketCaptureParser` |
 
-| Component | Purpose |
-|---|---|
-| `DuckDBAnalyticsService` | Creates views/checks over Parquet artifacts and writes JSON report. |
-| `LeakageChecker` | Checks data leakage risks between splits/artifacts. |
-| `run_stage_two_readiness_check()` | Checks storage, DB, migrations/schema, parser registry, label config, catalog hashes, and writes a readiness report. |
+## Normalization Services
 
-## Current Stage Two Boundaries
+DNS and Host services follow the same pattern:
 
-- `catalog-ingest` registers files but does not expose a public CLI command to mark them `READY_FOR_PARSING` automatically.
-- Feature/model-ready writer and registry APIs exist, but a general production CLI pipeline for feature/model-ready assembly is not implemented.
-- Host netflow/wls planned parsers are inactive.
+1. Resolve parser metadata with `ParserResolver`.
+2. Resolve `schema_version_id` from `schema_versions`.
+3. Create `parser_runs` row.
+4. Build `ParserContext`.
+5. Run parser class.
+6. Write normalized rows to Parquet if events exist.
+7. Register `normalized_artifacts`.
+8. Update parser run/file statuses.
+9. Save parser reports in RU/EN paths.
+
+## Batch Runners
+
+`NormalizeFormatRunner`:
+
+- filters only `READY_FOR_PARSING` files;
+- limits to one `branch`/`role`/`source_format`;
+- wraps each file in a nested transaction;
+- continues on file-level errors.
+
+`NormalizeAllRunner`:
+
+- works for one branch only;
+- groups by role/source_format;
+- respects an overall limit;
+- delegates each group to `NormalizeFormatRunner`.
+
+## Reports
+
+| Report | Command/source |
+| --- | --- |
+| Parser coverage matrix | `parser-coverage` |
+| Parser run diagnostics | normalization services |
+| DuckDB analytics report | `run-duckdb-checks` |
+| Leakage report | `run-leakage-checks` |
+| Readiness report | `scripts.stage_two.readiness_check` |
+
+Reports are written under `PATH_DATA_STORAGE/reports/en/stage-two/` and `PATH_DATA_STORAGE/reports/ru/stage-two/`.
+
+Parser and normalization reports include branch, role, source format, dataset/file IDs, source path/hash, parser name/version, counters, status, warning samples, error samples, and reader hints. They must not store full raw packet payloads, BSON streams, or full raw log content.
+
+## Current Limitations
+
+- Full production feature/model-ready build CLI is not implemented in this parser workflow.
+- Host packet capture registry is active for TRAIN and VALIDATION, not TEST.
+- BSON parser registry is active for host TEST.
+- Full packet payloads and full raw logs are intentionally not stored.

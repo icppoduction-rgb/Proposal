@@ -1,65 +1,121 @@
-﻿# Точки расширения, ограничения и технический долг
+# Точки расширения, ограничения и технический долг
 
-## Точки расширения Stage One
+## Добавление нового parser implementation
 
-| Что расширять | Где менять | Требования |
-|---|---|---|
-| Новый top-level handler service | `scripts/handlers/router_handler.py` | Добавить route и help/update docs. |
-| Новый action для DNS анализа | `scripts/handlers/dns_analyze/router_dns.py`, новый `analyze_dns_*_dataset_handler.py` | Handler должен читать `sort-path-dns-file.json` и возвращать result, совместимый с `run_action.py`. |
-| Новый action для host анализа | `scripts/handlers/host_analyze/router_host.py`, новый `analyze_host_*_dataset_handler.py` | Handler должен читать `sort-path-host-file.json` и сохранять summary/report. |
-| Новая логика host-фильтрации | `filter_host_dataset_handler.py` | Сохранять контракт `filter_dataset-host-path-file.json` и `filter_dataset-host-file.json`. |
-| Новый format bucket sorter | `sort_dns_dataset_handler.py` или `sort_host_dataset_handler.py` | Bucket name должен совпадать с ожиданиями save/analyze handlers и Stage Two scanner. |
+Минимальный безопасный flow:
 
-## Точки расширения Stage Two parser pipeline
+1. Добавить parser class в подходящий модуль `scripts/stage_two/parsers/*` или создать новый модуль.
+2. Использовать `UniversalInputReader`, если формат text/csv/json-lines/base64/compression sensitive.
+3. Строить events через shared helpers из `scripts/stage_two/parsers/common.py`.
+4. Возвращать корректный `ParseResult` со status/counters/warnings/errors.
+5. Добавить class export в `scripts/stage_two/parsers/__init__.py`.
+6. Добавить/обновить `parser_registry_seed.json`.
+7. Проверить `ParserResolver` и `parser-coverage`.
+8. Добавить direct smoke и, если формат catalog-dependent, catalog smoke.
+9. Запустить `compileall`, `git diff --check` и targeted CLI smoke.
 
-| Что расширять | Где менять | Минимальный контракт |
-|---|---|---|
-| Новый parser class | `scripts/stage_two/parsers/*` | Наследовать существующие parser contracts, возвращать `ParseResult` с normalized events/counters. |
-| Новая parser registry запись | seed data, используемые `parser_registry/seed.py` | Указать parser name/version/module/class, branch, source_format, role, schema name/version, `is_active`. |
-| Новая normalized schema | `schemas/normalized/*.json`, `normalization/schema_contracts.py` при необходимости | Зарегистрировать в `schema_versions`; parser registry должен ссылаться на нее. |
-| Новая label rule | `label_mapping_rules` или config `label_mapping_rules.json` | Не смешивать роли; правило должно быть воспроизводимым. |
-| Новые quality checks | `scripts/stage_two/quality/*` или `duckdb/service.py` | Записывать report в `data_quality_reports`. |
-| Feature/model-ready stage | `features/*`, `model_ready/*` | Регистрировать catalog artifacts и сохранять traceability к normalized/raw. |
+Нельзя активировать registry entry, если parser class отсутствует или не импортируется.
 
-## Правила добавления нового Stage Two parser
+## Расширение scanner/source_format inference
 
-1. Изучить Stage One analysis summary для нужного role/format bucket.
-2. Убедиться, что `catalog-ingest` корректно определяет `branch`, `role`, `source_format` для файлов.
-3. Реализовать parser class и покрыть edge cases: пустой файл, битая строка, неизвестная кодировка/формат, отсутствующая label/timestamp информация.
-4. Добавить или обновить schema contract и зарегистрировать его в `schema_versions` через seed.
-5. Добавить parser registry entry. Не ставить `is_active=true`, пока parser class фактически не реализован и не проверен.
-6. Проверить resolver: он должен выбирать parser только для поддерживаемого branch/source_format/role.
-7. Проверить normalization на ограниченном `limit` и убедиться, что создаются `parser_runs`, `normalized_artifacts` и Parquet.
-8. Запустить readiness/quality checks, если окружение доступно.
+`scripts/stage_two/ingestion/scanner.py` должен сохранять точные bucket names. Для compound форматов bucket/source name важнее extension:
 
-## Обнаруженные расхождения старой документации с кодом
+```text
+pcap.csv
+process.summary.log
+socket.summary.log
+netflow_day
+netflow_ids
+wls_day
+journal~
+syslog-1
+```
 
-| Расхождение | Фактическая реализация |
-|---|---|
-| Старые docs описывали только `handlers` module. | `router_script.py` также поддерживает `stage-two`. |
-| Старые docs не описывали `scripts/db`. | DB слой является обязательной частью Stage Two. |
-| Старые docs не описывали Stage Two CLI. | `scripts/stage_two/cli.py` содержит production-facing commands. |
-| Старые docs не фиксировали `schema_versions` как обязательный шаг. | Seed теперь обязан регистрировать normalized schema metadata. |
-| Старые docs не отделяли planned parsers от active parsers. | Planned/unsupported parser entries должны быть inactive. |
-| Часть старых RU docs была в поврежденной кодировке. | Документация переписана в UTF-8. |
+Если новый dataset уже отсортирован в role/format bucket, scanner должен использовать bucket name. Extension heuristic применяется только для raw root без bucket context.
 
-## Ограничения и риски текущей реализации
+## Расширение CLI
 
-| Риск | Влияние | Практическое действие |
-|---|---|---|
-| `manage.py` использует `parse_known_args()`. | Лишние CLI аргументы игнорируются. | Для строгого CI нужен явный parse/validation layer. |
-| Unknown commands печатают help без явного failure. | Автоматизация может считать ошибочную команду успешной. | Возвращать non-zero exit code при неизвестной команде. |
-| `PATH_FILTER_LOG` в `config.py` может быть tuple из-за trailing comma. | Потенциальная ошибка path handling в host filter. | Исправить config и добавить regression test. |
-| Stage Two не имеет публичной команды mark-ready. | `normalize-*` может обработать 0 файлов после ingestion. | Добавить явный review/mark-ready workflow. |
-| Feature/model-ready pipeline неполный как CLI. | Traceability chain до model-ready доступна только при использовании APIs/dry-run. | Реализовать отдельные Stage Two задачи для feature/model-ready сборки. |
-| Host netflow/wls parser entries inactive. | Эти форматы не нормализуются Stage Two. | Реализовать parser или оставить documented inactive. |
-| Stage One temp JSON не валидируется общей schema. | Разные handlers могут расходиться в полях summary. | Добавить JSON Schema для temporary artifacts, если они станут stable contract. |
-| `readiness_check` может hash-ить catalog files. | На полном корпусе проверка может быть дорогой. | Добавить sampling/incremental режим при необходимости. |
-| Stage One и Stage Two ingestion независимы. | Изменения в sorted tree не автоматически отражаются в catalog. | После изменения файлов запускать `catalog-ingest`. |
+Новые Stage Two команды добавляются в `scripts/stage_two/cli.py`. Требования:
 
-## Что не следует делать
+- сохранять `manage.py module/service/action` interface;
+- использовать `extra_args` для flags;
+- поддерживать explicit errors для unknown command;
+- не ломать legacy aliases `normalize-dns` и `normalize-host`;
+- для destructive/status-changing operations использовать dry-run по умолчанию и явный `--apply`.
 
-- Не объявлять parser active, если class отсутствует или не поддерживает формат.
-- Не создавать normalized/features/model-ready файлы без catalog registration.
-- Не использовать TEST для fitted preprocessing или выбора параметров.
-- Не полагаться на Stage One summary как на источник truth для Stage Two catalog; Stage Two catalog строится собственным scanner-ом.
+## Расширение catalog
+
+Изменения DB schema должны идти через Alembic migration и repository layer:
+
+```powershell
+python -m alembic -c scripts/db/migrations/alembic.ini revision -m "..."
+python -m alembic -c scripts/db/migrations/alembic.ini upgrade head
+python -m scripts.db.smoke_check
+```
+
+Repository методы не должны делать скрытый commit, если операция управляется service/session_scope на уровне выше.
+
+## Расширение quality/leakage checks
+
+При добавлении feature/model-ready этапов нужно обновить:
+
+- `scripts/stage_two/quality/checkers.py`;
+- `scripts/stage_two/quality/checks.py`;
+- `scripts/stage_two/duckdb/service.py`;
+- `scripts/stage_two/readiness_check.py`;
+- документацию `docs/*/normalization/data_leakage_prevention.md`.
+
+Запрещенные model input признаки должны оставаться вне features:
+
+- `source_file_path`;
+- `dataset_role`;
+- `source_file_hash`;
+- parser metadata;
+- filename/scenario hints;
+- raw label columns.
+
+## Основные риски
+
+| Риск | Почему важен | Контроль |
+| --- | --- | --- |
+| Registry указывает на несуществующий class | Batch упадет на runtime import. | Resolver class availability validation + parser coverage. |
+| `source_format` схлопывается до extension | Compound buckets получают неправильный parser. | Scanner bucket-first inference и tests. |
+| TEST label leakage | Модель может обучиться на сплитовых/filename hints. | LabelResolver guards и leakage checks. |
+| Full payload в DB/report | Рост БД и утечка данных. | Store Parquet path/hash/counters, raw preview only. |
+| Роль смешивается в batch | Train/validation/test contamination. | `normalize-format` scoped by branch/role/source_format; `normalize-all` groups by role/format. |
+| Raw file mutation | Нарушение reproducibility/hash. | Parser read-only behavior и hash checks. |
+| Feature/model-ready assumptions | Таблицы есть, но общий production CLI не реализован. | Документировать как limitation, не заявлять full pipeline success без проверки. |
+
+## Технический долг
+
+| Область | Состояние |
+| --- | --- |
+| Stage One docs filenames | `hadlers_*` - историческая опечатка в именах документов. |
+| `config.manage_commands` | Может отставать от фактического Stage Two CLI; source of truth - `scripts/stage_two/cli.py`. |
+| Feature/model-ready CLI | Контракты и writers есть, но нужен отдельный production workflow. |
+| Full-corpus validation | Требует доступной PostgreSQL DB и полного набора raw datasets. |
+| Parser specialization | Некоторые форматы покрыты robust generic parser group; при появлении новых schema variants может потребоваться отдельный parser class. |
+
+## Minimum review checklist
+
+Перед merge parser/normalization изменений:
+
+```powershell
+python -m compileall manage.py config.py scripts
+git diff --check
+python -m scripts.stage_two.parser_smoke
+python -m scripts.stage_two.parser_input_smoke
+python manage.py stage-two parser-coverage
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+```
+
+DB/full workflow проверки дополнительно:
+
+```powershell
+python -m scripts.db.smoke_check
+python -m scripts.stage_two.parser_catalog_smoke
+python -m scripts.stage_two.cli_operational_smoke
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+```

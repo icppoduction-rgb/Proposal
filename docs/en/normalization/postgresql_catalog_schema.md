@@ -1,64 +1,108 @@
 # PostgreSQL Catalog Schema
 
-The schema is created by Alembic migration `scripts/db/migrations/versions/5a38996dff5f_create_stage_two_catalog_schema.py`. ORM models are in `scripts/db/models`; repository classes are in `scripts/db/repositories`.
+PostgreSQL is the Stage Two control plane. It stores catalog metadata, parser registry rows, parser run state, artifact records, labels, quality reports, and traceability relationships. It does not store full normalized event payloads.
 
-## Main Tables
-
-| Table | Purpose |
-| --- | --- |
-| `datasets` | Logical datasets with `branch`, `role`, `slug`, and source metadata. |
-| `ingestion_runs` | Root scan runs and discovered-file counters. |
-| `dataset_files` | Raw file catalog: path, format, role, branch, hash, status. |
-| `parser_registry` | Active parser metadata by branch/source_format/role. |
-| `schema_versions` | Versions for normalized, features, and model_ready schemas. |
-| `parser_runs` | Parser executions for individual `dataset_files`. |
-| `normalized_artifacts` | Metadata for normalized Parquet outputs. |
-| `feature_artifacts` | Metadata for feature Parquet outputs. |
-| `preprocessing_artifacts` | TRAIN-fitted preprocessing objects and metadata. |
-| `model_ready_artifacts` | X/y/sequence/split/preprocessing metadata artifacts. |
-| `label_mapping_rules` | Canonical label mapping rules. |
-| `data_quality_reports` | Quality, leakage, and DuckDB reports. |
-
-## Status Values
-
-`dataset_files.status` supports:
+The ORM models live in `scripts/db/models/`. The migration head is:
 
 ```text
-DISCOVERED, REGISTERED, CHANGED, EMPTY_FILE, UNSUPPORTED_FORMAT,
-READY_FOR_PARSING, PARSED, PARTIALLY_PARSED, FAILED, SKIPPED
+5a38996dff5f_create_stage_two_catalog_schema.py
 ```
 
-Artifact/report statuses support:
+Check migration state:
 
-```text
-PENDING, RUNNING, SUCCESS, PARTIAL_SUCCESS, FAILED, SKIPPED, BLOCKED
+```powershell
+python -m alembic -c scripts/db/migrations/alembic.ini current
 ```
 
-## Traceability Links
+## Core Tables
 
-The trace chain is:
+| Table | ORM model | Purpose |
+| --- | --- | --- |
+| `datasets` | `Dataset` | Dataset identity: name, slug, branch, role context. |
+| `ingestion_runs` | `IngestionRun` | One catalog ingestion execution and summary. |
+| `dataset_files` | `DatasetFile` | Raw file catalog row with branch, role, source_format, hash, size, status. |
+| `parser_registry` | `ParserRegistry` | Active/inactive parser metadata and class mapping. |
+| `schema_versions` | `SchemaVersion` | Registered schema contracts, currently `normalized_event` v1 for normalized layer. |
+| `parser_runs` | `ParserRun` | One parser execution for one file, with counters/status/report path. |
+| `normalized_artifacts` | `NormalizedArtifact` | Registered normalized Parquet outputs. |
+| `feature_artifacts` | `FeatureArtifact` | Feature artifact contract/catalog rows. |
+| `model_ready_artifacts` | `ModelReadyArtifact` | Model-ready artifact contract/catalog rows. |
+| `preprocessing_artifacts` | `PreprocessingArtifact` | TRAIN-fitted preprocessing object metadata. |
+| `label_mapping_rules` | `LabelMappingRule` | DB-driven label mapping rules used by `LabelResolver`. |
+| `data_quality_reports` | `DataQualityReport` | DuckDB, leakage, readiness, and other report metadata. |
+
+## Main Relationships
 
 ```text
-model_ready_artifacts.feature_artifact_id
-  -> feature_artifacts.id
-  -> feature_artifacts.normalized_artifact_id
-  -> normalized_artifacts.id
-  -> normalized_artifacts.parser_run_id
-  -> parser_runs.id
-  -> parser_runs.file_id
-  -> dataset_files.id
+datasets.id
   -> dataset_files.dataset_id
-  -> datasets.id
+  -> parser_runs.file_id
+  -> normalized_artifacts.parser_run_id
+  -> feature_artifacts.normalized_artifact_id
+  -> model_ready_artifacts.feature_artifact_id
 ```
 
-CLI check:
+Traceability can be inspected with:
 
 ```powershell
 python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 ```
 
-## Constraints
+## Dataset File Statuses
 
-- `role` and `branch` are validated by check constraints.
-- `preprocessing_artifacts.fitted_on_role` must be `TRAIN`.
-- PostgreSQL stores metadata and paths, not large tabular artifacts.
+| Status | Meaning |
+| --- | --- |
+| `REGISTERED` | File was cataloged and is not yet ready for parsing. |
+| `CHANGED` | Cataloged file changed and needs review. |
+| `DISCOVERED` | File was discovered and can be promoted. |
+| `READY_FOR_PARSING` | File is allowed to be normalized. |
+| `PARSED` | Parser succeeded and wrote normalized rows. |
+| `PARTIALLY_PARSED` | Parser emitted rows and recorded row-level failures. |
+| `EMPTY_FILE` | File has no usable content. |
+| `FAILED` | Parser or file processing failed. |
+| `SKIPPED` | Helper/context file was intentionally skipped. |
+| `UNSUPPORTED_FORMAT` | No active parser is available. |
+
+Only `REGISTERED`, `CHANGED`, and `DISCOVERED` are promoted by `mark-ready`.
+
+## Parser Runs
+
+`parser_runs` records:
+
+- `parser_id` and parser name/version.
+- `schema_version_id` when the normalized schema is registered.
+- status and row counters.
+- warnings/errors summary.
+- output Parquet path.
+- report path.
+
+Parser run reports are saved through `scripts/stage_two/reports/parser_reports.py`.
+
+## Normalized Artifacts
+
+`normalized_artifacts` records:
+
+- dataset/file/parser run ids.
+- branch, role, modality, source format.
+- relative Parquet path and content hash.
+- row count/event count.
+- schema name/version and `schema_version_id` when available.
+- artifact status.
+
+Large event rows are in Parquet only.
+
+## Repository Layer
+
+Repositories in `scripts/db/repositories/` centralize writes and queries:
+
+| Repository | Responsibility |
+| --- | --- |
+| `DatasetRepository` | Dataset get/create/update. |
+| `DatasetFileRepository` | File status transitions and ready-file queries. |
+| `ParserRepository` | Registry, parser runs, parser statuses. |
+| `ArtifactRepository` | Normalized/feature/model-ready artifact registration. |
+| `SchemaRepository` | Schema version registration. |
+| `LabelRepository` | Label mapping rule lookup. |
+| `DataQualityRepository` | Report registration. |
+
+Use `scripts.db.session_scope()` for command-level transactions.

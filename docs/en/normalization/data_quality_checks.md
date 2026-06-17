@@ -1,62 +1,82 @@
 # Data Quality Checks
 
-The quality layer is implemented in `scripts/stage_two/quality/checkers.py`.
+Stage Two quality checks validate that generated artifacts and catalog rows are usable by downstream stages.
 
-## DuckDB Checks
-
-Command:
+## Commands
 
 ```powershell
 python manage.py stage-two run-duckdb-checks
+python -m scripts.stage_two.readiness_check
 ```
 
-Checks:
+## DuckDB Checks
 
-- row counts by role/branch when such columns are available;
-- required columns in `normalized_all`, `features_all`, and `model_ready_all`;
-- split contamination rule for model-ready data;
-- schema mismatch summary.
+`run-duckdb-checks` is implemented by `DuckDBAnalyticsService`.
 
-The report is saved to:
+It verifies that:
+
+- DuckDB can create views over Parquet locations.
+- Required normalized/model-ready columns are present where applicable.
+- Empty buckets do not crash view creation.
+- Reports can be registered in PostgreSQL.
+
+Expected successful output:
 
 ```text
-PATH_DATA_STORAGE/reports/en/stage-two/quality/duckdb_analytics_report.json
+"service": "stage-two run-duckdb-checks"
+"status": "SUCCESS"
+"check_count": <number>
 ```
 
-and registered in `data_quality_reports`.
+## Readiness Check
 
-## DataQualityChecker
+`scripts.stage_two.readiness_check` validates:
 
-`DataQualityChecker` also checks:
+| Check | Purpose |
+| --- | --- |
+| `storage_paths` | Required `PATH_DATA_STORAGE` paths exist. |
+| `migrations` | Alembic head is applied. |
+| `catalog_counts` | Required catalog tables are not unexpectedly empty. |
+| `schema_versions` | Normalized schema version is registered. |
+| `normalized_artifacts` | Normalized artifact statuses are valid. |
+| `artifact_registration` | Artifact relationships are intact. |
+| `parser_coverage` | Catalog files have parser coverage. |
+| `quality_leakage_reports` | Quality/leakage reports exist and no critical leakage is present. |
+| `raw_files` | Catalog file hashes still match raw files. |
+| `traceability` | Raw -> parser run -> normalized -> feature -> model-ready chain can be traversed when rows exist. |
 
-- required columns;
-- null counts for required columns;
-- duplicate keys for `event_uid`/`sample_uid` when present;
-- allowed role and branch values.
-
-Reports are saved in RU and EN:
+Readiness reports:
 
 ```text
-PATH_DATA_STORAGE/reports/en/stage-two/quality/quality_report.json
-PATH_DATA_STORAGE/reports/ru/stage-two/quality/quality_report.json
+reports/en/stage-two/stage_two_readiness_report.json
+reports/en/stage-two/stage_two_readiness_report.md
+reports/ru/stage-two/stage_two_readiness_report.md
 ```
 
-## Severity
+## Parser Smoke Checks
 
-- Successful checks use `INFO`.
-- Quality failures use `ERROR`.
-- Leakage checks use `CRITICAL` on failure.
+Use these before accepting parser changes:
 
-## Catalog Registration
+```powershell
+python -m scripts.stage_two.parser_smoke
+python -m scripts.stage_two.parser_input_smoke
+python -m scripts.stage_two.parser_catalog_smoke
+python -m scripts.stage_two.cli_operational_smoke
+```
 
-Aggregate results are stored in `data_quality_reports` with:
+| Smoke | What it validates |
+| --- | --- |
+| `parser_smoke` | One direct parser smoke per parser group. |
+| `parser_input_smoke` | Base64, encodings, gzip, negative base64 cases, raw hash preservation. |
+| `parser_catalog_smoke` | Registry -> catalog ingestion -> mark-ready -> normalization -> Parquet -> catalog artifact registration with rollback. |
+| `cli_operational_smoke` | CLI workflow, old aliases, dry-run/apply semantics, normalize-format scope, normalize-all grouping. |
 
-- `artifact_type`
-- `check_group`
-- `check_name`
-- `status`
-- `severity`
-- row counters
-- mismatch/leakage counters
-- `report_path`
-- `details_json`
+## Typical Failures
+
+| Failure | Meaning | Fix |
+| --- | --- | --- |
+| missing storage path | `bootstrap-storage` has not been run or `PATH_DATA_STORAGE` is wrong. | Configure path and run bootstrap. |
+| missing schema version | Parser registry seed was not run. | Run `seed-parser-registry`. |
+| parser coverage gap | Catalog has format without active parser. | Add registry/parser or fix scanner inference. |
+| raw hash mismatch | Raw file changed after catalog ingestion. | Re-ingest catalog and review `CHANGED` status. |
+| traceability failure | Artifact relationships are incomplete. | Inspect parser run and artifact registration code. |

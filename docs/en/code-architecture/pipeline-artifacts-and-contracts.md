@@ -1,126 +1,83 @@
-﻿# Pipeline, Artifacts, and Data Contracts
+# Pipeline Artifacts And Contracts
 
-## Stage One Call Order
+This document maps pipeline stages to input/output artifacts.
 
-### DNS
+## Stage One Artifacts
 
-| Step | Command | Input | Output |
-|---|---|---|---|
-| 1 | `handlers analyze-dataset dns-dataset-handler` | `PATH_DNS_DATASETS` | `PATH_TEMP_DATA/dns-path-file.json`, `PATH_TEMP_DATA/dns-file.json` |
-| 2 | `handlers sort sort-dns-dataset-handler` | `dns-path-file.json`, `dns-file.json` | sorted tree in `PATH_DNS_DATASETS_FILTER`, `sort-dns-format-summary.json` |
-| 3 | `handlers save-sort save-sort-dns-dataset-handler` | `PATH_DNS_DATASETS_FILTER` | `sort-path-dns-file.json`, `sort-path-dns-file-summary.json` |
-| 4 | `handlers dns-analyze <action>` | `sort-path-dns-file.json`, sorted files | `analysis-dns-*-summary.json`, Markdown/report files |
+| Artifact | Config/path | Producer |
+| --- | --- | --- |
+| DNS file summary | `DNS_FILE` | `handlers analyze-dataset dns-dataset-handler` |
+| Host file summary | `HOST_FILE` | `handlers analyze-dataset host-dataset-handler` |
+| DNS path summary | `DNS_PATH_FILE` | Stage One handlers |
+| Host path summary | `HOST_PATH_FILE` | Stage One handlers |
+| DNS format summary | `SORT_DNS_FORMAT_SUMMARY` | `handlers sort sort-dns-dataset-handler` |
+| Host format summary | `SORT_HOST_FORMAT_SUMMARY` | `handlers sort sort-host-dataset-handler` |
+| DNS sorted paths | `SORT_PATH_DNS_FILE` | `handlers save-sort save-sort-dns-dataset-handler` |
+| Host sorted paths | `SORT_PATH_HOST_FILE` | `handlers save-sort save-sort-host-dataset-handler` |
 
-### Host
+Stage One artifacts are JSON diagnostics. Stage Two may read sorted path JSON for coverage diagnostics only; PostgreSQL catalog ingestion remains the production input.
 
-| Step | Command | Input | Output |
-|---|---|---|---|
-| 1 | `handlers analyze-dataset host-dataset-handler` | `PATH_HOST_DATASETS` | `host-path-file.json`, `host-file.json` |
-| 2 | `handlers filter-dataset filter-host-dataset-handler` | `host-path-file.json`, `host-file.json` | `filter_dataset-host-path-file.json`, `filter_dataset-host-file.json`, filter log |
-| 3 | `handlers sort sort-host-dataset-handler` | `filter_dataset-host-path-file.json`, `filter_dataset-host-file.json` | sorted tree in `PATH_HOST_DATASETS_FILTER`, `sort-host-format-summary.json` |
-| 4 | `handlers save-sort save-sort-host-dataset-handler` | `PATH_HOST_DATASETS_FILTER` | `sort-path-host-file.json`, `sort-path-host-file-summary.json` |
-| 5 | `handlers host-analyze <action>` | `sort-path-host-file.json`, sorted files | `analysis-host-*-summary.json`, Markdown/report files |
+## Stage Two Catalog Artifacts
 
-## Stage Two Call Order
+| Artifact | Table |
+| --- | --- |
+| Dataset metadata | `datasets` |
+| File metadata/status | `dataset_files` |
+| Parser metadata | `parser_registry` |
+| Parser execution | `parser_runs` |
+| Schema version | `schema_versions` |
+| Normalized output metadata | `normalized_artifacts` |
+| Feature output metadata | `feature_artifacts` |
+| Model-ready output metadata | `model_ready_artifacts` |
+| Quality/leakage/readiness report metadata | `data_quality_reports` |
 
-| Step | Command | Input | Output |
-|---|---|---|---|
-| 1 | `stage-two bootstrap-storage` | `PATH_DATA_STORAGE` | Required storage directories. |
-| 2 | `stage-two catalog-ingest` | configured raw/filter roots | `ingestion_runs`, `datasets`, `dataset_files`. |
-| 3 | `stage-two seed-parser-registry` | schema JSON, seed JSON | `schema_versions`, `parser_registry`. |
-| 4 | operational status update | catalog rows | `dataset_files.status = READY_FOR_PARSING` for files selected for parsing. No public CLI command exists today. |
-| 5 | `stage-two normalize-dns [limit]` / `normalize-host [limit]` | READY catalog files, active parser registry | normalized Parquet, `parser_runs`, `normalized_artifacts`. |
-| 6 | feature/model-ready APIs | normalized artifacts | feature/model-ready Parquet and catalog rows. No general CLI command exists today. |
-| 7 | `stage-two run-duckdb-checks` / `run-leakage-checks` | Parquet/catalog metadata | JSON reports, `data_quality_reports`. |
-| 8 | `stage-two trace-artifact <id-or-path>` | model-ready artifact ID/path | JSON traceability chain. |
+## Schema Contracts
 
-## Temporary Stage One JSON
+| Contract | File | Status |
+| --- | --- | --- |
+| Normalized event | `schemas/normalized/normalized_event_v1.json` | Used by parser registry and normalized Parquet. |
+| Feature artifact | `schemas/features/feature_artifact_v1.json` | Contract exists; full production CLI not implemented. |
+| Model-ready artifact | `schemas/model_ready/model_ready_v1.json` | Contract exists; full production CLI not implemented. |
 
-### Discovery JSON
+## Parquet Artifacts
 
-```json
-{
-  "TRAIN": ["path-or-file-name"],
-  "VALIDATION": ["path-or-file-name"],
-  "TEST": ["path-or-file-name"]
-}
+| Layer | Path template |
+| --- | --- |
+| Normalized | `parquet/normalized/{branch}/{role}/{modality}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet` |
+| Features | `parquet/features/{feature_group}/{role}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet` |
+| Model-ready tabular | `parquet/model_ready/tabular/{branch}/{role}/schema=v1/*.parquet` |
+| Model-ready labels | `parquet/model_ready/labels/{branch}/{role}/schema=v1/*.parquet` |
+| Model-ready sequences | `parquet/model_ready/sequences/{branch}/{role}/schema=v1/*.npz` |
+| Preprocessing metadata | `parquet/model_ready/preprocessing/{branch}/schema=v1/*` |
+
+Only the normalized Parquet production writer is exercised by current parser normalization commands.
+
+## Report Artifacts
+
+| Report | Path |
+| --- | --- |
+| Parser coverage | `reports/{en,ru}/stage-two/parser/parser_coverage_matrix.{json,md}` |
+| Parser run diagnostics | `reports/{en,ru}/stage-two/parser/` |
+| Normalization diagnostics | `reports/{en,ru}/stage-two/normalization/` |
+| DuckDB quality | `reports/en/stage-two/quality/duckdb_analytics_report.json` |
+| Leakage | `reports/{en,ru}/stage-two/leakage/leakage_report.json` |
+| Readiness | `reports/{en,ru}/stage-two/stage_two_readiness_report.md` and EN JSON |
+
+## Traceability Contract
+
+The intended lineage is:
+
+```text
+raw file
+  -> dataset_files
+  -> parser_runs
+  -> normalized_artifacts
+  -> feature_artifacts
+  -> model_ready_artifacts
 ```
 
-Used by:
+Use:
 
-| File | Element meaning | Readers |
-|---|---|---|
-| `dns-path-file.json` | DNS paths | DNS sorter |
-| `dns-file.json` | DNS file names | DNS sorter |
-| `host-path-file.json` | Host paths | Host filter |
-| `host-file.json` | Host file names | Host filter |
-| `filter_dataset-host-path-file.json` | Filtered host paths | Host sorter |
-| `filter_dataset-host-file.json` | Filtered host file names | Host sorter |
-
-### Sorted Path JSON
-
-```json
-{
-  "TRAIN": {
-    "csv": ["path/to/file.csv"],
-    "pcap": ["path/to/file.pcap"]
-  },
-  "VALIDATION": {},
-  "TEST": {}
-}
+```powershell
+python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 ```
-
-| File | Readers |
-|---|---|
-| `sort-path-dns-file.json` | DNS content-analysis handlers |
-| `sort-path-host-file.json` | Host content-analysis handlers |
-
-### Analysis Summary JSON
-
-Content-analysis summary JSON does not have one shared JSON Schema in code. Common fields used by handlers include:
-
-| Field | Purpose |
-|---|---|
-| `source_json` | Path to `sort-path-*-file.json`. |
-| `role` | TRAIN/VALIDATION/TEST. |
-| `format` | Format bucket. |
-| `scope` | Counters/paths for analyzed files. |
-| `final_status` / `status` | Final analysis status. |
-| `blocking_reason` | Reason why analysis cannot proceed, when applicable. |
-| detected schema/sample fields | Fields that depend on the concrete analyzer. |
-
-## Stage Two DB/Parquet Contracts
-
-| Layer | DB table | File artifact | Contract source |
-|---|---|---|---|
-| Raw catalog | `dataset_files` | raw source files | scanner + ingestion metadata |
-| Parser execution | `parser_runs` | none | parser registry + parse result counters |
-| Normalized | `normalized_artifacts` | normalized Parquet | `schemas/normalized/normalized_event_v1.json` |
-| Features | `feature_artifacts` | feature Parquet | `schemas/features/feature_artifact_v1.json` |
-| Preprocessing | `preprocessing_artifacts` | fitted preprocessing artifact | registry metadata |
-| Model-ready | `model_ready_artifacts` | model-ready Parquet/artifact | `schemas/model_ready/model_ready_v1.json` |
-
-## Normalized Event Concept
-
-Parser output is represented by Stage Two parser contracts and must contain enough metadata to preserve traceability:
-
-| Field group | Purpose |
-|---|---|
-| source identity | raw file ID/path, parser run linkage, source event UID refs where applicable. |
-| split metadata | branch and role. |
-| event metadata | event type, timestamp fields when available, labels. |
-| raw fields | compact raw fields in JSON metadata for audit/debug. |
-| parser metadata | parser name/version/config and schema version. |
-
-The exact column list is defined by `schemas/normalized/normalized_event_v1.json` and registered in `schema_versions` by Stage Two seed.
-
-## Interaction Between Required Components
-
-| Components | Interaction |
-|---|---|
-| `analyze_dataset` -> `filter_dataset` | Host only: filter reads `host-path-file.json` and `host-file.json`. DNS skips filter. |
-| `filter_dataset` -> `sort` | Host sorter requires filtered JSON. DNS sorter reads original DNS discovery JSON. |
-| `sort` -> `save_sort` | `save_sort` scans the sorted directory tree created by sorter. |
-| `save_sort` -> `dns_analyze` | DNS analyzers read `sort-path-dns-file.json`. |
-| `save_sort` -> `host_analyze` | Host analyzers read `sort-path-host-file.json`. |
-| Stage One -> Stage Two | Stage Two does not consume Stage One temp JSON directly. It scans configured filesystem roots through `catalog-ingest`. |

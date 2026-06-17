@@ -1,62 +1,82 @@
 # Data quality checks
 
-Quality layer реализован в `scripts/stage_two/quality/checkers.py`.
+Stage Two quality checks проверяют, что generated artifacts и catalog rows пригодны для downstream stages.
 
-## DuckDB checks
-
-Команда:
+## Commands
 
 ```powershell
 python manage.py stage-two run-duckdb-checks
+python -m scripts.stage_two.readiness_check
 ```
+
+## DuckDB checks
+
+`run-duckdb-checks` реализован в `DuckDBAnalyticsService`.
 
 Проверяет:
 
-- row counts по role/branch, если такие колонки доступны;
-- наличие обязательных колонок в `normalized_all`, `features_all`, `model_ready_all`;
-- split contamination rule для model-ready;
-- schema mismatch summary.
+- DuckDB может создать views поверх Parquet locations.
+- Required normalized/model-ready columns присутствуют там, где применимо.
+- Empty buckets не ломают view creation.
+- Reports регистрируются в PostgreSQL.
 
-Отчет сохраняется в:
-
-```text
-PATH_DATA_STORAGE/reports/en/stage-two/quality/duckdb_analytics_report.json
-```
-
-и регистрируется в `data_quality_reports`.
-
-## DataQualityChecker
-
-`DataQualityChecker` дополнительно проверяет:
-
-- required columns;
-- null counts для required columns;
-- duplicate keys для `event_uid`/`sample_uid`, когда ключ присутствует;
-- допустимые значения role и branch.
-
-Сохранение отчетов выполняется в RU и EN:
+Expected successful output:
 
 ```text
-PATH_DATA_STORAGE/reports/en/stage-two/quality/quality_report.json
-PATH_DATA_STORAGE/reports/ru/stage-two/quality/quality_report.json
+"service": "stage-two run-duckdb-checks"
+"status": "SUCCESS"
+"check_count": <number>
 ```
 
-## Severity
+## Readiness check
 
-- Успешные проверки получают `INFO`.
-- Ошибки quality получают `ERROR`.
-- Leakage checks используют `CRITICAL` при провале.
+`scripts.stage_two.readiness_check` проверяет:
 
-## Catalog registration
+| Check | Purpose |
+| --- | --- |
+| `storage_paths` | Required `PATH_DATA_STORAGE` paths exist. |
+| `migrations` | Alembic head applied. |
+| `catalog_counts` | Required catalog tables not unexpectedly empty. |
+| `schema_versions` | Normalized schema version registered. |
+| `normalized_artifacts` | Normalized artifact statuses valid. |
+| `artifact_registration` | Artifact relationships intact. |
+| `parser_coverage` | Catalog files have parser coverage. |
+| `quality_leakage_reports` | Quality/leakage reports exist and no critical leakage. |
+| `raw_files` | Catalog file hashes still match raw files. |
+| `traceability` | Raw -> parser run -> normalized -> feature -> model-ready chain traversable when rows exist. |
 
-Агрегированные результаты пишутся в `data_quality_reports` с:
+Readiness reports:
 
-- `artifact_type`
-- `check_group`
-- `check_name`
-- `status`
-- `severity`
-- row counters
-- mismatch/leakage counters
-- `report_path`
-- `details_json`
+```text
+reports/en/stage-two/stage_two_readiness_report.json
+reports/en/stage-two/stage_two_readiness_report.md
+reports/ru/stage-two/stage_two_readiness_report.md
+```
+
+## Parser smoke checks
+
+Перед acceptance parser changes:
+
+```powershell
+python -m scripts.stage_two.parser_smoke
+python -m scripts.stage_two.parser_input_smoke
+python -m scripts.stage_two.parser_catalog_smoke
+python -m scripts.stage_two.cli_operational_smoke
+```
+
+| Smoke | Что проверяет |
+| --- | --- |
+| `parser_smoke` | One direct parser smoke per parser group. |
+| `parser_input_smoke` | Base64, encodings, gzip, negative base64 cases, raw hash preservation. |
+| `parser_catalog_smoke` | Registry -> catalog ingestion -> mark-ready -> normalization -> Parquet -> catalog artifact registration with rollback. |
+| `cli_operational_smoke` | CLI workflow, old aliases, dry-run/apply semantics, normalize-format scope, normalize-all grouping. |
+
+## Typical failures
+
+| Failure | Meaning | Fix |
+| --- | --- | --- |
+| missing storage path | `bootstrap-storage` не запускался или `PATH_DATA_STORAGE` wrong. | Configure path and run bootstrap. |
+| missing schema version | Parser registry seed не запускался. | Run `seed-parser-registry`. |
+| parser coverage gap | Catalog имеет format без active parser. | Add registry/parser or fix scanner inference. |
+| raw hash mismatch | Raw file changed after catalog ingestion. | Re-ingest catalog and review `CHANGED` status. |
+| traceability failure | Artifact relationships incomplete. | Inspect parser run and artifact registration code. |
