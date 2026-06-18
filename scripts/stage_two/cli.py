@@ -9,9 +9,15 @@ from typing import Any
 
 try:
     from rich.console import Console
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
     from rich.table import Table
 except ModuleNotFoundError:
+    BarColumn = None  # type: ignore[assignment]
+    Progress = None  # type: ignore[assignment]
+    SpinnerColumn = None  # type: ignore[assignment]
     Table = None  # type: ignore[assignment]
+    TextColumn = None  # type: ignore[assignment]
+    TimeElapsedColumn = None  # type: ignore[assignment]
 
     class Console:  # type: ignore[no-redef]
         """Minimal console fallback when rich is not installed."""
@@ -106,9 +112,33 @@ def _bootstrap_storage() -> None:
 
 
 def _catalog_ingest() -> None:
-    from scripts.stage_two.ingestion.catalog_ingestion_service import ingest_configured_catalog_roots
+    from scripts.stage_two.ingestion.catalog_ingestion_service import CatalogIngestionService
 
-    results = ingest_configured_catalog_roots()
+    if Progress is None:
+        with session_scope() as session:
+            results = CatalogIngestionService(
+                session,
+                progress_callback=_print_catalog_ingest_progress,
+            ).ingest_configured_roots()
+    else:
+        progress_tasks: dict[tuple[str, str, str], int] = {}
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+
+            def progress_callback(event: str, payload: dict[str, Any]) -> None:
+                _update_catalog_ingest_progress(progress, progress_tasks, event, payload)
+
+            with session_scope() as session:
+                results = CatalogIngestionService(
+                    session,
+                    progress_callback=progress_callback,
+                ).ingest_configured_roots()
+
     console.print(
         {
             "service": "stage-two catalog-ingest",
@@ -116,6 +146,129 @@ def _catalog_ingest() -> None:
             "run_count": len(results),
         }
     )
+
+
+def _catalog_progress_task_key(payload: dict[str, Any], phase: str) -> tuple[str, str, str]:
+    return (
+        str(payload.get("root_kind") or ""),
+        str(payload.get("root_path") or ""),
+        phase,
+    )
+
+
+def _update_catalog_ingest_progress(
+    progress: Any,
+    progress_tasks: dict[tuple[str, str, str], int],
+    event: str,
+    payload: dict[str, Any],
+) -> None:
+    root_kind = str(payload.get("root_kind") or "catalog")
+    root_path = str(payload.get("root_path") or "")
+
+    if event == "root_skipped":
+        reason = str(payload.get("reason") or "skipped")
+        progress.add_task(f"{root_kind}: skipped ({reason})", total=1, completed=1)
+        return
+
+    if event == "scan_started":
+        key = _catalog_progress_task_key(payload, "scan")
+        progress_tasks[key] = progress.add_task(f"{root_kind}: scanning", total=1)
+        return
+
+    if event == "scan_finished":
+        key = _catalog_progress_task_key(payload, "scan")
+        task_id = progress_tasks.get(key)
+        total = int(payload.get("total") or 0)
+        description = f"{root_kind}: scanned {total} files"
+        if task_id is None:
+            progress.add_task(description, total=1, completed=1)
+        else:
+            progress.update(task_id, description=description, completed=1)
+        return
+
+    if event == "register_started":
+        key = _catalog_progress_task_key(payload, "register")
+        total = int(payload.get("total") or 0)
+        progress_tasks[key] = progress.add_task(f"{root_kind}: registering", total=max(total, 1))
+        if total == 0:
+            progress.update(progress_tasks[key], completed=1)
+        return
+
+    if event in {"candidate_registered", "candidate_failed"}:
+        key = _catalog_progress_task_key(payload, "register")
+        task_id = progress_tasks.get(key)
+        if task_id is None:
+            return
+        current = int(payload.get("current") or 0)
+        total = int(payload.get("total") or 0)
+        failed = int(payload.get("files_failed") or 0)
+        description = f"{root_kind}: registering {current}/{total}"
+        if failed:
+            description = f"{description}, failed {failed}"
+        progress.update(task_id, description=description, completed=max(current, 1))
+        return
+
+    if event == "bulk_upsert_started":
+        key = _catalog_progress_task_key(payload, "upsert")
+        row_count = int(payload.get("row_count") or 0)
+        progress_tasks[key] = progress.add_task(
+            f"{root_kind}: upserting {row_count} rows",
+            total=1,
+        )
+        return
+
+    if event == "bulk_upsert_finished":
+        key = _catalog_progress_task_key(payload, "upsert")
+        task_id = progress_tasks.get(key)
+        row_count = int(payload.get("row_count") or 0)
+        description = f"{root_kind}: upserted {row_count} rows"
+        if task_id is None:
+            progress.add_task(description, total=1, completed=1)
+        else:
+            progress.update(task_id, description=description, completed=1)
+        return
+
+    if event == "root_finished":
+        status = str(payload.get("status") or "finished")
+        files_seen = int(payload.get("files_seen") or 0)
+        progress.add_task(f"{root_kind}: {status}, {files_seen} files", total=1, completed=1)
+        return
+
+    if event == "root_failed":
+        error = str(payload.get("error") or "unknown error")
+        location = f" ({root_path})" if root_path else ""
+        progress.add_task(f"{root_kind}: failed{location}: {error}", total=1, completed=1)
+
+
+def _print_catalog_ingest_progress(event: str, payload: dict[str, Any]) -> None:
+    root_kind = str(payload.get("root_kind") or "catalog")
+    if event == "root_skipped":
+        console.print(
+            {
+                "service": "stage-two catalog-ingest",
+                "event": event,
+                "root_kind": root_kind,
+                "reason": payload.get("reason"),
+            }
+        )
+        return
+    lifecycle_events = {
+        "root_started",
+        "scan_started",
+        "scan_finished",
+        "bulk_upsert_started",
+        "bulk_upsert_finished",
+        "root_finished",
+        "root_failed",
+    }
+    if event in lifecycle_events:
+        console.print({"service": "stage-two catalog-ingest", "event": event, **payload})
+        return
+    if event in {"candidate_registered", "candidate_failed"}:
+        current = int(payload.get("current") or 0)
+        total = int(payload.get("total") or 0)
+        if current in {1, total} or current % 100 == 0:
+            console.print({"service": "stage-two catalog-ingest", "event": event, **payload})
 
 
 def _seed_parser_registry() -> None:

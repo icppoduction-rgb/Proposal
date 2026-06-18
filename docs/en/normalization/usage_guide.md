@@ -14,8 +14,11 @@ DATABASE_URL=<PostgreSQL SQLAlchemy URL>
 ```
 
 2. PostgreSQL must be reachable from `DATABASE_URL`.
-3. Python dependencies from `requirements.txt` must be installed.
-4. Run commands from the repository root.
+3. Python 3.11.x is the supported runtime. On the local Windows dev machine, use `C:\Users\fmark\.conda\envs\proposal2\python.exe` or activate `conda activate proposal2`.
+4. Python dependencies from `requirements-dev.txt` must be installed for development and CI checks; production/runtime installs may use `requirements.txt`.
+5. Run commands from the repository root.
+6. Run Stage Two smoke scripts as modules with `python -m scripts.stage_two.<module>`.
+   Direct file-path execution such as `python scripts/stage_two/parser_smoke.py` is not supported because it can remove the repository root from `sys.path` and break `scripts.*` imports.
 
 ## Recommended Order
 
@@ -213,6 +216,7 @@ python -m scripts.stage_two.cli_operational_smoke
 ```
 
 Catalog smoke and CLI smoke use synthetic files and roll back database changes.
+Do not run these smoke scripts with `python scripts/stage_two/*.py`; use the module form above.
 
 ## Troubleshooting
 

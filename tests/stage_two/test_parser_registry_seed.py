@@ -103,6 +103,23 @@ class ParserRegistrySeedTest(unittest.TestCase):
                 active_packet_entries,
             )
 
+    def test_seed_external_tool_flags_match_in_repo_parsers(self) -> None:
+        rows = expand_parser_seed(_load_seed_payload())
+        in_repo_parser_classes = {
+            "DnsPacketCaptureParser",
+            "HostPacketCaptureParser",
+            "HostBsonSandboxParser",
+        }
+
+        flagged_rows = [
+            row
+            for row in rows
+            if row["parser_class"] in in_repo_parser_classes
+            and (row["requires_external_tools"] or row["external_tools_json"] is not None)
+        ]
+
+        self.assertEqual(flagged_rows, [])
+
     def test_validation_helper_reports_missing_parser_class(self) -> None:
         validation = validate_parser_class(
             parser_module="scripts.stage_two.parsers.host",

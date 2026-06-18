@@ -55,8 +55,7 @@
       "parser_class": "DnsPacketCaptureParser",
       "priority": 40,
       "supports_streaming": true,
-      "requires_external_tools": true,
-      "external_tools_json": {"python_packages": ["scapy"]}
+      "requires_external_tools": false
     },
     {
       "parser_name": "host_csv_parser",
@@ -189,8 +188,7 @@
       "parser_class": "HostPacketCaptureParser",
       "priority": 60,
       "supports_streaming": true,
-      "requires_external_tools": true,
-      "external_tools_json": {"python_packages": ["scapy"]}
+      "requires_external_tools": false
     },
     {
       "parser_name": "host_bson_sandbox_parser",
@@ -204,8 +202,7 @@
       "parser_class": "HostBsonSandboxParser",
       "priority": 70,
       "supports_streaming": true,
-      "requires_external_tools": true,
-      "external_tools_json": {"python_packages": ["pymongo"]}
+      "requires_external_tools": false
     }
   ]
 }

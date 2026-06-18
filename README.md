@@ -92,14 +92,24 @@ PATH_FOLDER_DATASETS_FILTER=C:\Users\Public\PythonProjects\storages\datasets-fil
 
 ## 5. Установка
 
+Поддерживаемый runtime для production/dev окружений - Python 3.11.x. Локально проект проверяется через conda environment `proposal2`: `C:\Users\fmark\.conda\envs\proposal2`, текущий интерпретатор - Python 3.11.15.
+
 Минимальная установка для локального запуска:
 
 ```powershell
 cd C:\Users\Public\PythonProjects\Proposal
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+conda activate proposal2
+python --version
+python -m pip install -r requirements-dev.txt
 copy .env.example .env
+```
+
+Если conda activation недоступен в текущем PowerShell, используйте интерпретатор напрямую:
+
+```powershell
+& "C:\Users\fmark\.conda\envs\proposal2\python.exe" --version
+& "C:\Users\fmark\.conda\envs\proposal2\python.exe" -m pip install -r requirements-dev.txt
+& "C:\Users\fmark\.conda\envs\proposal2\python.exe" -m pytest -q
 ```
 
 После копирования `.env` проверьте, что пути к `storages`, `datasets`, `datasets-filter` и `storage` существуют или могут быть созданы.

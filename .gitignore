@@ -6,3 +6,6 @@ __pycache__/
 logs
 temp_data
 test_work
+environment.yml
+requirements-dev.txt
+.python-version

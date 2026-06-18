@@ -27,6 +27,8 @@ python manage.py stage-two run-leakage-checks
 python -m scripts.stage_two.readiness_check
 ```
 
+Stage Two smoke scripts are supported only in module form, for example `python -m scripts.stage_two.parser_smoke`. Do not run them as file paths such as `python scripts/stage_two/parser_smoke.py`, because that execution mode can break package imports.
+
 Backward-compatible normalization aliases remain available:
 
 ```powershell

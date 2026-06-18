@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,9 @@ class CatalogIngestionResult:
     files_failed: int
 
 
+ProgressCallback = Callable[[str, dict[str, Any]], None]
+
+
 class CatalogIngestionService:
     """Register raw dataset files and ingestion run metadata in PostgreSQL."""
 
@@ -43,11 +47,13 @@ class CatalogIngestionService:
         *,
         scanner: DatasetFileScanner | None = None,
         hash_service: FileHashService | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         """Initialize the service with an externally managed SQLAlchemy session."""
         self.session = session
         self.scanner = scanner or DatasetFileScanner()
         self.hash_service = hash_service or FileHashService()
+        self.progress_callback = progress_callback
         self.dataset_repository = DatasetRepository(session)
         self.file_repository = DatasetFileRepository(session)
         self.ingestion_repository = IngestionRepository(session)
@@ -57,9 +63,16 @@ class CatalogIngestionService:
         results: list[CatalogIngestionResult] = []
         for root_kind, root_path in self.configured_roots():
             if not root_path:
+                self._emit("root_skipped", root_kind=root_kind, reason="empty_path")
                 continue
             path = Path(root_path).expanduser()
             if not path.exists():
+                self._emit(
+                    "root_skipped",
+                    root_kind=root_kind,
+                    root_path=str(path),
+                    reason="missing_path",
+                )
                 continue
             results.append(self.ingest_root(path, root_kind=root_kind))
         return results
@@ -67,13 +80,21 @@ class CatalogIngestionService:
     def ingest_root(self, root_path: str | Path, *, root_kind: str) -> CatalogIngestionResult:
         """Scan one root and register discovered files."""
         root = Path(root_path).expanduser().resolve()
+        self._emit("root_started", root_kind=root_kind, root_path=str(root))
         ingestion_run = self.ingestion_repository.start_run(
             root_path=str(root),
             root_path_kind=root_kind,
         )
 
         try:
+            self._emit("scan_started", root_kind=root_kind, root_path=str(root))
             candidates = self.scanner.scan(root)
+            self._emit(
+                "scan_finished",
+                root_kind=root_kind,
+                root_path=str(root),
+                total=len(candidates),
+            )
             counters = self._register_candidates(ingestion_run, candidates)
             status = "SUCCESS" if counters["files_failed"] == 0 else "PARTIAL_SUCCESS"
             self.ingestion_repository.finish_run(
@@ -85,8 +106,21 @@ class CatalogIngestionService:
                 files_changed=counters["files_changed"],
                 files_failed=counters["files_failed"],
             )
+            self._emit(
+                "root_finished",
+                root_kind=root_kind,
+                root_path=str(root),
+                status=status,
+                **counters,
+            )
             return CatalogIngestionResult(run_id=ingestion_run.id, status=status, **counters)
         except Exception as exc:
+            self._emit(
+                "root_failed",
+                root_kind=root_kind,
+                root_path=str(root),
+                error=str(exc),
+            )
             self.ingestion_repository.mark_failed(ingestion_run, str(exc))
             raise
 
@@ -111,8 +145,14 @@ class CatalogIngestionService:
             "files_failed": 0,
         }
         rows: list[dict[str, Any]] = []
+        progress_payload = {
+            "root_kind": ingestion_run.root_path_kind,
+            "root_path": ingestion_run.root_path,
+            "total": len(candidates),
+        }
+        self._emit("register_started", **progress_payload)
 
-        for candidate in candidates:
+        for index, candidate in enumerate(candidates, start=1):
             try:
                 dataset, _created = self.dataset_repository.get_or_create_dataset(
                     name=candidate.dataset_name,
@@ -146,8 +186,26 @@ class CatalogIngestionService:
                 )
             except OSError:
                 counters["files_failed"] += 1
+                self._emit(
+                    "candidate_failed",
+                    **progress_payload,
+                    current=index,
+                    file_path=str(candidate.path),
+                    **counters,
+                )
+                continue
 
+            self._emit(
+                "candidate_registered",
+                **progress_payload,
+                current=index,
+                file_path=str(candidate.path),
+                **counters,
+            )
+
+        self._emit("bulk_upsert_started", **progress_payload, row_count=len(rows))
         self.file_repository.bulk_upsert_files(rows)
+        self._emit("bulk_upsert_finished", **progress_payload, row_count=len(rows))
         return counters
 
     def _build_dataset_file_row(
@@ -185,6 +243,10 @@ class CatalogIngestionService:
                 "root_relative_path": str(candidate.relative_path),
             },
         }
+
+    def _emit(self, event: str, **payload: Any) -> None:
+        if self.progress_callback is not None:
+            self.progress_callback(event, payload)
 
 
 def ingest_configured_catalog_roots() -> list[CatalogIngestionResult]:
