@@ -21,7 +21,7 @@ from scripts.stage_two.model_ready import X_FORBIDDEN_COLUMNS
 from scripts.stage_two.quality.checks import QualityCheckResult, QualityReportResult
 
 
-ROLE_VALUES: tuple[str, ...] = ("TRAIN", "VALIDATION", "TEST", "EXPERIMENTS")
+ROLE_VALUES: tuple[str, ...] = ("TRAIN", "VALIDATION", "TEST")
 BRANCH_VALUES: tuple[str, ...] = ("dns", "host", "network", "hybrid")
 
 

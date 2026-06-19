@@ -2,9 +2,9 @@
 
 ## Назначение
 
-Stage Two превращает raw/sorted files в управляемые normalized artifacts. Он отвечает за:
+Stage Two превращает filtered dataset files в управляемые normalized artifacts. Authoritative input для Stage Two - `PATH_FOLDER_DATASETS_FILTER`. `PATH_FOLDER_DATASETS` сохраняется как immutable raw source root для Stage One и аудита/traceback, но не сканируется `catalog-ingest` по умолчанию. Stage Two отвечает за:
 
-- catalog ingestion raw files в PostgreSQL;
+- catalog ingestion filtered files в PostgreSQL;
 - parser registry и проверку покрытия source formats;
 - безопасный перевод файлов в `READY_FOR_PARSING`;
 - запуск parser implementations;
@@ -58,7 +58,7 @@ bootstrap-storage
 
 `catalog-ingest` использует scanner:
 
-1. Обходит настроенные dataset roots.
+1. Обходит `PATH_FOLDER_DATASETS_FILTER`.
 2. Определяет `branch`, `role`, `source_format`, `dataset_slug`.
 3. Считает file hash.
 4. Создает/обновляет `datasets`.
@@ -103,7 +103,7 @@ Resolver выбирает только active entries и проверяет, ч�
 python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
 ```
 
-`normalize-all` обрабатывает все `READY_FOR_PARSING` файлы выбранной ветки, группируя их по role/source_format:
+`normalize-all` обрабатывает все `READY_FOR_PARSING` файлы выбранной ветки из `PATH_FOLDER_DATASETS_FILTER`, группируя их по role/source_format:
 
 ```powershell
 python manage.py stage-two normalize-all --branch dns --limit 1000

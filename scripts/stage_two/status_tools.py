@@ -9,8 +9,12 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from scripts.db.models import DatasetFile
-from scripts.db.models.constants import BRANCH_VALUES, ROLE_VALUES
+from scripts.db.models import Dataset, DatasetFile
+from scripts.db.models.constants import (
+    ACTIVE_CATALOG_SOURCE_GROUP,
+    ACTIVE_DATASET_ROLE_VALUES,
+    BRANCH_VALUES,
+)
 from scripts.stage_two.parser_registry.resolver import ParserResolver
 from scripts.stage_two.parser_registry.seed import ParserClassValidationResult
 
@@ -151,6 +155,10 @@ class MarkReadyService:
         )
         if request.file_ids is not None:
             statement = statement.where(DatasetFile.id.in_(request.file_ids))
+        else:
+            statement = statement.join(Dataset).where(
+                Dataset.source_group == ACTIVE_CATALOG_SOURCE_GROUP
+            )
         return list(self.session.execute(statement).scalars().all())
 
 
@@ -158,8 +166,8 @@ def _validate_request(request: MarkReadyRequest) -> None:
     if request.branch not in BRANCH_VALUES:
         allowed = ", ".join(BRANCH_VALUES)
         raise ValueError(f"mark-ready branch must be one of: {allowed}")
-    if request.role not in ROLE_VALUES:
-        allowed = ", ".join(ROLE_VALUES)
+    if request.role not in ACTIVE_DATASET_ROLE_VALUES:
+        allowed = ", ".join(ACTIVE_DATASET_ROLE_VALUES)
         raise ValueError(f"mark-ready role must be one of: {allowed}")
     if not request.source_format.strip():
         raise ValueError("mark-ready format must not be empty")

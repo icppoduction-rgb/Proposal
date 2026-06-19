@@ -9,7 +9,11 @@ from typing import Protocol
 from sqlalchemy.orm import Session
 
 from scripts.db.models import DatasetFile, NormalizedArtifact
-from scripts.db.models.constants import BRANCH_VALUES, ROLE_VALUES
+from scripts.db.models.constants import (
+    ACTIVE_CATALOG_SOURCE_GROUP,
+    ACTIVE_DATASET_ROLE_VALUES,
+    BRANCH_VALUES,
+)
 from scripts.db.repositories import DatasetFileRepository
 from scripts.stage_two.normalization.dns_service import DnsNormalizationService
 from scripts.stage_two.normalization.host_service import HostNormalizationService
@@ -164,6 +168,8 @@ class NormalizeFormatRunner:
         }
         if request.file_ids is not None:
             file_filters["file_ids"] = request.file_ids
+        else:
+            file_filters["source_group"] = ACTIVE_CATALOG_SOURCE_GROUP
         files = self.file_repository.get_files_ready_for_parsing(**file_filters)
         resolution = self.resolver.resolve_with_diagnostics(
             branch=request.branch,
@@ -259,8 +265,8 @@ def _validate_request(request: NormalizeFormatRequest) -> None:
     if request.branch not in SUPPORTED_NORMALIZATION_BRANCHES:
         allowed = ", ".join(SUPPORTED_NORMALIZATION_BRANCHES)
         raise ValueError(f"normalize-format branch must be one of: {allowed}")
-    if request.role not in ROLE_VALUES:
-        allowed = ", ".join(ROLE_VALUES)
+    if request.role not in ACTIVE_DATASET_ROLE_VALUES:
+        allowed = ", ".join(ACTIVE_DATASET_ROLE_VALUES)
         raise ValueError(f"normalize-format role must be one of: {allowed}")
     if not request.source_format.strip():
         raise ValueError("normalize-format format must not be empty")
@@ -349,7 +355,10 @@ class NormalizeAllRunner:
 
         remaining = request.limit
         group_results: list[NormalizeAllGroupResult] = []
-        for group in self.file_repository.get_ready_file_groups(branch=request.branch):
+        for group in self.file_repository.get_ready_file_groups(
+            branch=request.branch,
+            source_group=ACTIVE_CATALOG_SOURCE_GROUP,
+        ):
             if remaining is not None and remaining <= 0:
                 break
             group_limit = min(group["files_count"], remaining) if remaining is not None else None

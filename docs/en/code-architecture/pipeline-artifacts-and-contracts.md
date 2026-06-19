@@ -15,7 +15,7 @@ This document maps pipeline stages to input/output artifacts.
 | DNS sorted paths | `SORT_PATH_DNS_FILE` | `handlers save-sort save-sort-dns-dataset-handler` |
 | Host sorted paths | `SORT_PATH_HOST_FILE` | `handlers save-sort save-sort-host-dataset-handler` |
 
-Stage One artifacts are JSON diagnostics. Stage Two may read sorted path JSON for coverage diagnostics only; PostgreSQL catalog ingestion remains the production input.
+Stage One artifacts are JSON diagnostics. Stage Two may read sorted path JSON for coverage diagnostics only; `PATH_FOLDER_DATASETS_FILTER` plus PostgreSQL catalog ingestion remains the production input.
 
 ## Stage Two Catalog Artifacts
 
@@ -68,7 +68,7 @@ Only the normalized Parquet production writer is exercised by current parser nor
 The intended lineage is:
 
 ```text
-raw file
+filtered source file
   -> dataset_files
   -> parser_runs
   -> normalized_artifacts

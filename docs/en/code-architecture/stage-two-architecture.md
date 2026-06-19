@@ -1,6 +1,6 @@
 # Stage Two Architecture
 
-Stage Two is implemented under `scripts/stage_two/`.
+Stage Two is implemented under `scripts/stage_two/`. Its authoritative dataset input is `PATH_FOLDER_DATASETS_FILTER`. The raw root `PATH_FOLDER_DATASETS` is retained for immutable source storage, Stage One discovery, and audit/backtracking; it is not scanned by default catalog ingestion.
 
 ## Pipeline
 
@@ -23,7 +23,7 @@ bootstrap-storage
 | --- | --- |
 | `storage/bootstrap.py` | Idempotent directory creation under `PATH_DATA_STORAGE`. |
 | `ingestion/scanner.py` | Branch/role/source_format inference. |
-| `ingestion/catalog_ingestion_service.py` | Raw file catalog ingestion and status assignment. |
+| `ingestion/catalog_ingestion_service.py` | Filtered dataset catalog ingestion and status assignment. |
 | `ingestion/file_hash_service.py` | Raw file SHA-256 hashing. |
 | `parser_registry/seed.py` | Registry/schema seeding and parser class validation. |
 | `parser_registry/resolver.py` | Parser selection, class loading, schema version resolution. |
@@ -87,6 +87,7 @@ DNS and Host services follow the same pattern:
 
 - filters only `READY_FOR_PARSING` files;
 - limits to one `branch`/`role`/`source_format`;
+- selects catalog rows from `PATH_FOLDER_DATASETS_FILTER` unless exact file ids are supplied;
 - wraps each file in a nested transaction;
 - continues on file-level errors.
 
@@ -94,6 +95,7 @@ DNS and Host services follow the same pattern:
 
 - works for one branch only;
 - groups by role/source_format;
+- uses only active roles: TRAIN, VALIDATION, TEST;
 - respects an overall limit;
 - delegates each group to `NormalizeFormatRunner`.
 

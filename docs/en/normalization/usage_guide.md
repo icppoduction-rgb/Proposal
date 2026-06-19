@@ -1,6 +1,6 @@
 # Stage Two Usage Guide
 
-This runbook describes the implemented operational path from configured raw dataset roots to normalized Parquet artifacts.
+This runbook describes the implemented operational path from the filtered dataset root to normalized Parquet artifacts.
 
 ## Prerequisites
 
@@ -8,8 +8,8 @@ This runbook describes the implemented operational path from configured raw data
 
 ```text
 PATH_DATA_STORAGE=<absolute storage root>
-PATH_FOLDER_DATASETS=<absolute raw dataset root>
-PATH_FOLDER_DATASETS_FILTER=<optional filtered dataset root>
+PATH_FOLDER_DATASETS=<absolute raw dataset root retained for Stage One/audit>
+PATH_FOLDER_DATASETS_FILTER=<absolute filtered dataset root used by Stage Two>
 DATABASE_URL=<PostgreSQL SQLAlchemy URL>
 ```
 
@@ -80,10 +80,11 @@ python manage.py stage-two catalog-ingest
 
 What happens:
 
-- `DatasetFileScanner` scans configured roots.
+- `DatasetFileScanner` scans `PATH_FOLDER_DATASETS_FILTER` only.
 - `branch`, `role`, `source_format`, dataset name, file size, and SHA-256 hash are inferred.
 - `datasets`, `ingestion_runs`, and `dataset_files` are inserted or updated.
 - Raw files are not modified.
+- Only `TRAIN`, `VALIDATION`, and `TEST` are cataloged for Stage Two. `EXPERIMENTS` is ignored.
 
 Typical statuses after ingestion:
 
@@ -94,6 +95,8 @@ Typical statuses after ingestion:
 | `DISCOVERED` | File was seen and can be promoted. |
 | `EMPTY_FILE` | File exists but has no usable bytes. |
 | `UNSUPPORTED_FORMAT` | Scanner found a format without active parser coverage. |
+
+`PATH_FOLDER_DATASETS` is intentionally not ingested by this command. It remains the immutable raw source location and may contain extra datasets that are not part of the current processing corpus.
 
 ### 5. Check Parser Coverage
 
@@ -233,6 +236,7 @@ Do not run these smoke scripts with `python scripts/stage_two/*.py`; use the mod
 ## Production Safety Notes
 
 - Do not edit raw datasets to make parsing easier.
+- Do not use `EXPERIMENTS` in Stage Two commands; supported processing roles are `TRAIN`, `VALIDATION`, and `TEST`.
 - Do not store raw packet payloads, BSON streams, or full raw logs in PostgreSQL metadata.
 - Do not mark whole branches ready without reviewing `parser-coverage`.
 - Do not interpret full-corpus readiness from synthetic smoke tests alone.

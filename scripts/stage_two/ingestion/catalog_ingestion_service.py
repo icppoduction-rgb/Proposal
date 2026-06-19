@@ -1,4 +1,4 @@
-"""Catalog ingestion service for raw and sorted dataset directories."""
+"""Catalog ingestion service for the filtered Stage Two dataset directory."""
 
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from config import PATH_FOLDER_DATASETS, PATH_FOLDER_DATASETS_FILTER
+from config import PATH_FOLDER_DATASETS_FILTER
+from scripts.db.models.constants import ACTIVE_DATASET_ROLE_VALUES
 from scripts.db import session_scope
 from scripts.db.models import IngestionRun
 from scripts.db.repositories import DatasetFileRepository, DatasetRepository, IngestionRepository
@@ -39,7 +40,7 @@ ProgressCallback = Callable[[str, dict[str, Any]], None]
 
 
 class CatalogIngestionService:
-    """Register raw dataset files and ingestion run metadata in PostgreSQL."""
+    """Register filtered dataset files and ingestion run metadata in PostgreSQL."""
 
     def __init__(
         self,
@@ -59,7 +60,7 @@ class CatalogIngestionService:
         self.ingestion_repository = IngestionRepository(session)
 
     def ingest_configured_roots(self) -> list[CatalogIngestionResult]:
-        """Ingest configured PATH_FOLDER_DATASETS and PATH_FOLDER_DATASETS_FILTER roots."""
+        """Ingest the configured PATH_FOLDER_DATASETS_FILTER root."""
         results: list[CatalogIngestionResult] = []
         for root_kind, root_path in self.configured_roots():
             if not root_path:
@@ -126,9 +127,8 @@ class CatalogIngestionService:
 
     @staticmethod
     def configured_roots() -> tuple[tuple[str, str], ...]:
-        """Return configured dataset roots with stable root kind labels."""
+        """Return the authoritative Stage Two dataset root."""
         return (
-            ("PATH_FOLDER_DATASETS", PATH_FOLDER_DATASETS),
             ("PATH_FOLDER_DATASETS_FILTER", PATH_FOLDER_DATASETS_FILTER),
         )
 
@@ -137,8 +137,11 @@ class CatalogIngestionService:
         ingestion_run: IngestionRun,
         candidates: list[DatasetFileCandidate],
     ) -> dict[str, int]:
+        active_candidates = _deduplicate_candidates_by_resolved_path(
+            [candidate for candidate in candidates if candidate.role in ACTIVE_DATASET_ROLE_VALUES]
+        )
         counters = {
-            "files_seen": len(candidates),
+            "files_seen": len(active_candidates),
             "files_new": 0,
             "files_existing": 0,
             "files_changed": 0,
@@ -148,11 +151,11 @@ class CatalogIngestionService:
         progress_payload = {
             "root_kind": ingestion_run.root_path_kind,
             "root_path": ingestion_run.root_path,
-            "total": len(candidates),
+            "total": len(active_candidates),
         }
         self._emit("register_started", **progress_payload)
 
-        for index, candidate in enumerate(candidates, start=1):
+        for index, candidate in enumerate(active_candidates, start=1):
             try:
                 dataset, _created = self.dataset_repository.get_or_create_dataset(
                     name=candidate.dataset_name,
@@ -247,6 +250,16 @@ class CatalogIngestionService:
     def _emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
             self.progress_callback(event, payload)
+
+
+def _deduplicate_candidates_by_resolved_path(
+    candidates: list[DatasetFileCandidate],
+) -> list[DatasetFileCandidate]:
+    """Keep one candidate per resolved file path inside one ingestion run."""
+    deduplicated: dict[Path, DatasetFileCandidate] = {}
+    for candidate in candidates:
+        deduplicated[candidate.path.resolve()] = candidate
+    return list(deduplicated.values())
 
 
 def ingest_configured_catalog_roots() -> list[CatalogIngestionResult]:

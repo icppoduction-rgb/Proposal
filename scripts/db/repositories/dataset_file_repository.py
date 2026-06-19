@@ -8,9 +8,12 @@ from typing import Any
 from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from scripts.db.models import DatasetFile
-from scripts.db.models.constants import ROLE_VALUES
+from scripts.db.models import Dataset, DatasetFile
+from scripts.db.models.constants import ACTIVE_DATASET_ROLE_VALUES
 from scripts.db.repositories.base_repository import BaseRepository
+
+
+MAX_BULK_UPSERT_ROWS = 1000
 
 
 class DatasetFileRepository(BaseRepository[DatasetFile]):
@@ -23,6 +26,13 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         if not rows:
             return 0
 
+        total = 0
+        deduplicated_rows = self._deduplicate_file_rows(rows)
+        for chunk in self._chunk_rows(deduplicated_rows, chunk_size=MAX_BULK_UPSERT_ROWS):
+            total += self._bulk_upsert_file_chunk(chunk)
+        return total
+
+    def _bulk_upsert_file_chunk(self, rows: list[dict[str, Any]]) -> int:
         table = DatasetFile.__table__
         statement = insert(table).values(rows)
         excluded = statement.excluded
@@ -61,6 +71,25 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         self.session.flush()
         return result.rowcount or 0
 
+    @staticmethod
+    def _deduplicate_file_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep one row per upsert key to avoid duplicate updates inside one INSERT."""
+        deduplicated: dict[tuple[int, str], dict[str, Any]] = {}
+        for row in rows:
+            key = (int(row["dataset_id"]), str(row["file_path"]))
+            deduplicated[key] = row
+        return list(deduplicated.values())
+
+    @staticmethod
+    def _chunk_rows(
+        rows: list[dict[str, Any]],
+        *,
+        chunk_size: int,
+    ) -> list[list[dict[str, Any]]]:
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be a positive integer")
+        return [rows[index : index + chunk_size] for index in range(0, len(rows), chunk_size)]
+
     def get_files_ready_for_parsing(
         self,
         *,
@@ -69,9 +98,12 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         source_format: str | None = None,
         limit: int | None = None,
         file_ids: tuple[int, ...] | None = None,
+        source_group: str | None = None,
     ) -> list[DatasetFile]:
         """Return files marked READY_FOR_PARSING."""
         statement = select(DatasetFile).where(DatasetFile.status == "READY_FOR_PARSING")
+        if source_group is not None:
+            statement = statement.join(Dataset).where(Dataset.source_group == source_group)
         if branch is not None:
             statement = statement.where(DatasetFile.branch == branch)
         if role is not None:
@@ -80,16 +112,26 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
             statement = statement.where(DatasetFile.source_format == source_format)
         if file_ids is not None:
             statement = statement.where(DatasetFile.id.in_(file_ids))
+        if role is None:
+            statement = statement.where(DatasetFile.role.in_(ACTIVE_DATASET_ROLE_VALUES))
         statement = statement.order_by(DatasetFile.id)
         if limit is not None:
             statement = statement.limit(limit)
         return list(self.session.execute(statement).scalars())
 
-    def get_ready_file_groups(self, *, branch: str) -> list[dict[str, Any]]:
+    def get_ready_file_groups(
+        self,
+        *,
+        branch: str,
+        source_group: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Return READY_FOR_PARSING counts grouped by role and source format."""
         role_order = case(
-            *((DatasetFile.role == role, index) for index, role in enumerate(ROLE_VALUES)),
-            else_=len(ROLE_VALUES),
+            *(
+                (DatasetFile.role == role, index)
+                for index, role in enumerate(ACTIVE_DATASET_ROLE_VALUES)
+            ),
+            else_=len(ACTIVE_DATASET_ROLE_VALUES),
         )
         statement = (
             select(
@@ -100,10 +142,13 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
             .where(
                 DatasetFile.status == "READY_FOR_PARSING",
                 DatasetFile.branch == branch,
+                DatasetFile.role.in_(ACTIVE_DATASET_ROLE_VALUES),
             )
             .group_by(DatasetFile.role, DatasetFile.source_format)
             .order_by(role_order.asc(), DatasetFile.source_format.asc())
         )
+        if source_group is not None:
+            statement = statement.join(Dataset).where(Dataset.source_group == source_group)
         return [
             {
                 "role": role,

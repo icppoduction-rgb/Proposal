@@ -85,6 +85,25 @@ class DatasetFileScannerSourceFormatTest(unittest.TestCase):
             "process.summary.log",
         )
 
+    def test_experiments_and_unroled_paths_are_not_catalog_candidates(self) -> None:
+        scanner = DatasetFileScanner()
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dns" / "TRAIN" / "csv").mkdir(parents=True)
+            (root / "dns" / "TRAIN" / "csv" / "train.csv").write_text("x", encoding="utf-8")
+            (root / "dns" / "EXPERIMENTS" / "csv").mkdir(parents=True)
+            (root / "dns" / "EXPERIMENTS" / "csv" / "experiment.csv").write_text(
+                "x",
+                encoding="utf-8",
+            )
+            (root / "dns" / "misc").mkdir(parents=True)
+            (root / "dns" / "misc" / "unknown.csv").write_text("x", encoding="utf-8")
+
+            candidates = scanner.scan(root)
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].role, "TRAIN")
+
 
 if __name__ == "__main__":
     unittest.main()

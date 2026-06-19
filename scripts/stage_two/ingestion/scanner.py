@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.db.models.constants import BRANCH_VALUES, ROLE_VALUES
+from scripts.db.models.constants import ACTIVE_DATASET_ROLE_VALUES, BRANCH_VALUES
 
 
 KNOWN_SOURCE_FORMATS: tuple[str, ...] = (
@@ -101,6 +101,8 @@ class DatasetFileScanner:
             relative = path.relative_to(root)
             branch = self.infer_branch(relative, root)
             role = self.infer_role(relative)
+            if role is None:
+                continue
             source_format = self.infer_source_format(path, relative_path=relative)
             dataset_name = self.infer_dataset_name(relative, branch, role, source_format)
             candidates.append(
@@ -125,13 +127,13 @@ class DatasetFileScanner:
                 return branch
         return "hybrid"
 
-    def infer_role(self, relative_path: Path) -> str:
-        """Infer TRAIN/VALIDATION/TEST/EXPERIMENTS from path parts."""
+    def infer_role(self, relative_path: Path) -> str | None:
+        """Infer an active TRAIN/VALIDATION/TEST role from path parts."""
         upper_parts = [part.upper() for part in relative_path.parts]
-        for role in ROLE_VALUES:
+        for role in ACTIVE_DATASET_ROLE_VALUES:
             if role in upper_parts:
                 return role
-        return "EXPERIMENTS"
+        return None
 
     def infer_source_format(self, path: Path, relative_path: Path | None = None) -> str:
         """Infer the Stage Two source_format value from bucket context or file name."""
@@ -152,7 +154,11 @@ class DatasetFileScanner:
 
         upper_parts = [part.upper() for part in parts]
         role_index = next(
-            (index for index, part in enumerate(upper_parts[:-1]) if part in ROLE_VALUES),
+            (
+                index
+                for index, part in enumerate(upper_parts[:-1])
+                if part in ACTIVE_DATASET_ROLE_VALUES
+            ),
             None,
         )
         if role_index is None:
@@ -190,7 +196,8 @@ class DatasetFileScanner:
         dataset_parts = [
             part
             for part in parts[start:end]
-            if part.lower() not in SUPPORTED_SOURCE_FORMATS and part.upper() not in ROLE_VALUES
+            if part.lower() not in SUPPORTED_SOURCE_FORMATS
+            and part.upper() not in ACTIVE_DATASET_ROLE_VALUES
         ]
         if dataset_parts:
             return dataset_parts[0]

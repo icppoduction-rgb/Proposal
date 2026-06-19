@@ -27,7 +27,7 @@ class DNSDatasetSortResult:
 class DNSDatasetSortHandler:
     """Сортирует DNS-файлы по ролям и форматам на основе dns-path/file JSON."""
 
-    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION", "EXPERIMENTS")
+    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION")
 
     def __init__(
         self,
@@ -140,7 +140,7 @@ class DNSDatasetSortHandler:
             )
 
     def _create_base_role_directories(self) -> None:
-        """Создаёт обязательные разделы TRAIN/TEST/VALIDATION/EXPERIMENTS."""
+        """Создаёт обязательные разделы TRAIN/TEST/VALIDATION."""
         for role in self.ROLE_ORDER:
             (self.dns_datasets_filter_path / role).mkdir(parents=True, exist_ok=True)
 

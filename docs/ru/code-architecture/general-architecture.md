@@ -3,7 +3,7 @@
 Проект состоит из двух связанных pipeline-слоев:
 
 1. **Stage One** в `scripts/handlers` работает в основном с файловой системой и JSON-отчетами: обнаруживает датасеты, фильтрует host-ветку, сортирует файлы по ролям/форматам и строит диагностические summaries.
-2. **Stage Two** в `scripts/stage_two` строит PostgreSQL Catalog, регистрирует parser registry, нормализует raw files в Parquet и сохраняет traceability `raw -> parser_run -> normalized_artifact`.
+2. **Stage Two** в `scripts/stage_two` строит PostgreSQL Catalog на основе `PATH_FOLDER_DATASETS_FILTER`, регистрирует parser registry, нормализует filtered files в Parquet и сохраняет traceability `filtered source -> parser_run -> normalized_artifact`.
 
 Единая точка входа - `manage.py`. Пути и константы берутся из `config.py`, настройки БД - из `scripts/db/config.py` и окружения.
 
@@ -43,6 +43,7 @@ flowchart TD
 ```text
 raw datasets
   -> Stage One JSON diagnostics and sorted trees
+  -> PATH_FOLDER_DATASETS_FILTER
   -> Stage Two catalog ingestion
   -> dataset_files rows with branch/role/source_format/status/hash
   -> parser registry resolution
@@ -52,7 +53,7 @@ raw datasets
   -> DuckDB/leakage/readiness checks
 ```
 
-Stage Two не использует Stage One JSON как единственный production input. `catalog-ingest` сканирует настроенные raw/sorted roots, вычисляет hashes и upsert-ит PostgreSQL Catalog. Stage One JSON остается полезным диагностическим источником и совместимым legacy artifact.
+Stage Two не использует Stage One JSON как единственный production input. `catalog-ingest` сканирует `PATH_FOLDER_DATASETS_FILTER`, вычисляет hashes и upsert-ит PostgreSQL Catalog. Stage One JSON остается полезным диагностическим источником и совместимым legacy artifact. `PATH_FOLDER_DATASETS` сохраняется для immutable raw sources и аудита, но не является рабочим источником Stage Two.
 
 ## Роли и разделение данных
 
@@ -72,7 +73,7 @@ Leakage-guard правила:
 | Stage One | Discovery/filter/sort/save-sort/content-analysis handlers реализованы. |
 | PostgreSQL Catalog | ORM models, repositories, Alembic migration и `scripts.db.smoke_check` реализованы. |
 | Storage bootstrap | Идемпотентно создает Stage Two storage/report/parquet directories. |
-| Catalog ingestion | Сканирует roots, определяет branch/role/source_format, считает SHA-256, upsert-ит catalog rows. |
+| Catalog ingestion | Сканирует `PATH_FOLDER_DATASETS_FILTER`, определяет branch/role/source_format, считает SHA-256, upsert-ит catalog rows. |
 | Parser registry | Seed регистрирует schema_versions и active parser entries для реализованных parser classes. |
 | Parser coverage | CLI строит coverage matrix и RU/EN reports. |
 | Mark-ready | CLI переводит только разрешенные статусы в `READY_FOR_PARSING`, по умолчанию dry-run. |

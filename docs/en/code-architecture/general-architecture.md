@@ -3,8 +3,8 @@
 The project has two main data pipeline layers:
 
 ```text
-Stage One: raw filesystem analysis -> JSON summaries and reports
-Stage Two: raw files -> PostgreSQL catalog -> parser normalization -> Parquet -> checks and traceability
+Stage One: raw filesystem analysis -> filtered dataset tree -> JSON summaries and reports
+Stage Two: PATH_FOLDER_DATASETS_FILTER -> PostgreSQL catalog -> parser normalization -> Parquet -> checks and traceability
 ```
 
 ## Repository Layout
@@ -28,7 +28,8 @@ Stage Two: raw files -> PostgreSQL catalog -> parser normalization -> Parquet ->
 flowchart LR
   A["Raw dataset roots"] --> B["Stage One handlers"]
   B --> C["Temp JSON summaries"]
-  A --> D["Stage Two catalog ingestion"]
+  B --> D0["Filtered dataset tree"]
+  D0 --> D["Stage Two catalog ingestion"]
   D --> E["PostgreSQL Catalog"]
   E --> F["ParserResolver"]
   F --> G["Parser classes"]
@@ -46,7 +47,8 @@ Important groups:
 
 | Config group | Examples |
 | --- | --- |
-| Dataset roots | `PATH_FOLDER_DATASETS`, `PATH_HOST_DATASETS`, `PATH_DNS_DATASETS` |
+| Raw dataset roots | `PATH_FOLDER_DATASETS`, `PATH_HOST_DATASETS`, `PATH_DNS_DATASETS` |
+| Stage Two dataset roots | `PATH_FOLDER_DATASETS_FILTER`, `PATH_HOST_DATASETS_FILTER`, `PATH_DNS_DATASETS_FILTER` |
 | Storage root | `PATH_DATA_STORAGE`, `PATH_TEMP_DATA`, `PATH_LOGS` |
 | Stage One artifacts | `SORT_PATH_HOST_FILE`, `SORT_PATH_DNS_FILE`, `ANALYSIS_*_SUMMARY` |
 | Stage Two storage | `PARQUET_NORMALIZED_RELATIVE`, `REPORTS_EN_STAGE_TWO`, `TEMP_DATA_*_RELATIVE` |

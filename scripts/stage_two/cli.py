@@ -27,7 +27,11 @@ except ModuleNotFoundError:
 
 from config import manage_commands
 from scripts.db import session_scope
-from scripts.db.models.constants import BRANCH_VALUES, ROLE_VALUES
+from scripts.db.models.constants import (
+    ACTIVE_CATALOG_SOURCE_GROUP,
+    ACTIVE_DATASET_ROLE_VALUES,
+    BRANCH_VALUES,
+)
 from scripts.db.repositories import DataQualityRepository, DatasetFileRepository
 from scripts.stage_two.normalization.runner import (
     NormalizeAllRequest,
@@ -348,7 +352,11 @@ def _normalize_branch(branch: str, args: Sequence[str]) -> None:
 
     with session_scope() as session:
         file_repository = DatasetFileRepository(session)
-        files = file_repository.get_files_ready_for_parsing(branch=branch, limit=limit)
+        files = file_repository.get_files_ready_for_parsing(
+            branch=branch,
+            limit=limit,
+            source_group=ACTIVE_CATALOG_SOURCE_GROUP,
+        )
         service = service_class(session)
         normalized = 0
         skipped = 0
@@ -564,8 +572,8 @@ def _build_mark_ready_request(
     if normalized_branch not in BRANCH_VALUES:
         allowed = ", ".join(BRANCH_VALUES)
         raise ValueError(f"mark-ready branch must be one of: {allowed}")
-    if normalized_role not in ROLE_VALUES:
-        allowed = ", ".join(ROLE_VALUES)
+    if normalized_role not in ACTIVE_DATASET_ROLE_VALUES:
+        allowed = ", ".join(ACTIVE_DATASET_ROLE_VALUES)
         raise ValueError(f"mark-ready role must be one of: {allowed}")
     if not normalized_format:
         raise ValueError("mark-ready format must not be empty")
@@ -635,8 +643,8 @@ def _build_normalize_format_request(
     parsed_limit = _parse_normalize_format_limit(limit)
     if normalized_branch not in {"dns", "host"}:
         raise ValueError("normalize-format branch must be one of: dns, host")
-    if normalized_role not in ROLE_VALUES:
-        allowed = ", ".join(ROLE_VALUES)
+    if normalized_role not in ACTIVE_DATASET_ROLE_VALUES:
+        allowed = ", ".join(ACTIVE_DATASET_ROLE_VALUES)
         raise ValueError(f"normalize-format role must be one of: {allowed}")
     if not normalized_format:
         raise ValueError("normalize-format format must not be empty")

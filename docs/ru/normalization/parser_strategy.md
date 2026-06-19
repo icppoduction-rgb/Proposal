@@ -19,8 +19,10 @@ python manage.py stage-two seed-parser-registry
 `DatasetFileScanner` в `scripts/stage_two/ingestion/scanner.py` определяет:
 
 1. `branch` из path/root parts: `dns`, `host`, иначе `hybrid`.
-2. `role` из path parts: `TRAIN`, `VALIDATION`, `TEST`, иначе `EXPERIMENTS`.
+2. `role` из path parts: `TRAIN`, `VALIDATION`, `TEST`. Файлы вне этих role directories пропускаются Stage Two catalog ingestion.
 3. `source_format` сначала из sorted-tree format buckets, затем file-name heuristics.
+
+`EXPERIMENTS` не является активной рабочей ролью. Значение может оставаться в старых DB constraints для совместимости, но scanner/catalog/normalization/reporting workflows его игнорируют.
 
 Compound names сохраняются:
 

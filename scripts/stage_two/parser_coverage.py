@@ -13,8 +13,12 @@ from sqlalchemy.orm import Session
 
 from config import SORT_PATH_DNS_FILE, SORT_PATH_HOST_FILE
 from scripts.db import session_scope
-from scripts.db.models import DatasetFile, ParserRegistry
-from scripts.db.models.constants import BRANCH_VALUES, ROLE_VALUES
+from scripts.db.models import Dataset, DatasetFile, ParserRegistry
+from scripts.db.models.constants import (
+    ACTIVE_CATALOG_SOURCE_GROUP,
+    ACTIVE_DATASET_ROLE_VALUES,
+    BRANCH_VALUES,
+)
 from scripts.stage_two.parser_registry import ParserResolver, validate_parser_registry_row
 from scripts.stage_two.reports.parser_reports import save_parser_coverage_reports
 
@@ -96,6 +100,11 @@ class ParserCoverageService:
             )
             .group_by(DatasetFile.branch, DatasetFile.role, DatasetFile.source_format)
             .order_by(DatasetFile.branch, DatasetFile.role, DatasetFile.source_format)
+            .join(Dataset)
+            .where(
+                Dataset.source_group == ACTIVE_CATALOG_SOURCE_GROUP,
+                DatasetFile.role.in_(ACTIVE_DATASET_ROLE_VALUES),
+            )
         )
         if branch is not None:
             statement = statement.where(DatasetFile.branch == branch)
@@ -272,6 +281,8 @@ def _stage_one_counts_from_payload(payload: Any) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         return counts
     for role, formats in payload.items():
+        if str(role) not in ACTIVE_DATASET_ROLE_VALUES:
+            continue
         if not isinstance(formats, dict):
             continue
         for source_format, files in formats.items():
@@ -312,8 +323,10 @@ def _matching_registry_rows(
 
 def _roles_for_registry_row(row: ParserRegistry) -> tuple[str, ...]:
     if row.supported_role is not None:
+        if row.supported_role not in ACTIVE_DATASET_ROLE_VALUES:
+            return ()
         return (row.supported_role,)
-    return ROLE_VALUES
+    return ACTIVE_DATASET_ROLE_VALUES
 
 
 def _coverage_action(
@@ -388,9 +401,9 @@ def _branch_sort_value(branch: str) -> int:
 
 def _role_sort_value(role: str) -> int:
     try:
-        return ROLE_VALUES.index(role)
+        return ACTIVE_DATASET_ROLE_VALUES.index(role)
     except ValueError:
-        return len(ROLE_VALUES)
+        return len(ACTIVE_DATASET_ROLE_VALUES)
 
 
 def _validate_branch_filter(branch: str | None) -> None:

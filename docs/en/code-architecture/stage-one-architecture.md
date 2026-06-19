@@ -48,7 +48,7 @@ Important config paths:
 | `SORT_PATH_DNS_FILE`, `SORT_PATH_HOST_FILE` | Sorted path JSON used as diagnostics by Stage Two coverage. |
 | `ANALYSIS_*_SUMMARY` | Role/format analysis summaries under temp data. |
 
-Stage One JSON outputs are diagnostics and analysis artifacts. Stage Two production ingestion uses raw dataset roots and PostgreSQL catalog, not Stage One JSON as the primary source of truth.
+Stage One JSON outputs are diagnostics and analysis artifacts. Stage Two production ingestion uses the filtered tree configured by `PATH_FOLDER_DATASETS_FILTER` and PostgreSQL catalog rows, not Stage One JSON as the primary source of truth.
 
 ## Relationship To Stage Two
 

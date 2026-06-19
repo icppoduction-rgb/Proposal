@@ -1,11 +1,11 @@
 # Stage Two: Data Normalization
 
-Stage Two is the data normalization and catalog control plane for the project. It reads immutable raw dataset files, registers them in PostgreSQL, resolves a parser through the parser registry, writes normalized event data to Parquet, and keeps traceability in catalog tables.
+Stage Two is the data normalization and catalog control plane for the project. Its authoritative input is the filtered dataset tree configured by `PATH_FOLDER_DATASETS_FILTER`. It registers those files in PostgreSQL, resolves parsers through the parser registry, writes normalized event data to Parquet, and keeps traceability in catalog tables.
 
 Current implemented CLI scope:
 
 ```text
-raw datasets -> catalog ingestion -> parser registry -> parser run -> normalized Parquet -> catalog artifact registration -> quality/leakage/readiness checks
+PATH_FOLDER_DATASETS_FILTER -> catalog ingestion -> parser registry -> parser run -> normalized Parquet -> catalog artifact registration -> quality/leakage/readiness checks
 ```
 
 Feature and model-ready schemas, catalog tables, and artifact contracts exist in `schemas/features/feature_artifact_v1.json`, `schemas/model_ready/model_ready_v1.json`, `scripts/stage_two/features/`, and `scripts/stage_two/model_ready/`. A production CLI that builds every feature/model-ready artifact for the full corpus is not part of the current parser workflow.
@@ -38,7 +38,7 @@ python manage.py stage-two normalize-host 10
 
 ## Documentation Map
 
-- [Stage Two usage guide](usage_guide.md): operational runbook from raw files to normalized artifacts.
+- [Stage Two usage guide](usage_guide.md): operational runbook from filtered datasets to normalized artifacts.
 - [Parser strategy](parser_strategy.md): source formats, parser classes, statuses, and registry behavior.
 - [Parser development guide](parser_development_guide.md): how to add a new parser safely.
 - [PostgreSQL catalog schema](postgresql_catalog_schema.md): catalog tables and relationships.
@@ -51,9 +51,12 @@ python manage.py stage-two normalize-host 10
 
 ## Core Invariants
 
+- `PATH_FOLDER_DATASETS_FILTER` is the authoritative Stage Two input.
+- `PATH_FOLDER_DATASETS` is retained for immutable raw source storage, Stage One discovery, and audit/backtracking; it is not ingested by default into the Stage Two catalog.
 - Raw datasets are never modified by Stage Two.
 - PostgreSQL stores metadata, statuses, relationships, parser runs, and artifact records; large normalized data is stored in Parquet.
-- TRAIN, VALIDATION, TEST, and EXPERIMENTS remain logically separated in catalog rows and physically separated in Parquet paths.
+- Only TRAIN, VALIDATION, and TEST are active processing roles. `EXPERIMENTS` is a legacy DB-compatible value and is not used by catalog ingestion, mark-ready, normalization, reports, or downstream checks.
+- TRAIN, VALIDATION, and TEST remain logically separated in catalog rows and physically separated in Parquet paths.
 - `catalog-ingest` does not automatically mark files as `READY_FOR_PARSING`; `mark-ready` is the explicit operational gate.
 - `normalize-format` processes exactly one `branch`/`role`/`source_format` slice.
 - `normalize-all` processes one branch in role/source_format groups, not one uncontrolled mixed transaction.

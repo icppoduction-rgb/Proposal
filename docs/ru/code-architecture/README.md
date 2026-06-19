@@ -14,7 +14,7 @@ manage.py
 Код построен вокруг двух этапов:
 
 - **Stage One** - файловый discovery/sort/analyze слой, который готовит временные JSON summaries и sorted tree.
-- **Stage Two** - catalog-driven слой, который регистрирует raw files в PostgreSQL, выбирает parsers через registry, пишет normalized Parquet и сохраняет traceability.
+- **Stage Two** - catalog-driven слой, который использует filtered tree из `PATH_FOLDER_DATASETS_FILTER`, регистрирует файлы в PostgreSQL, выбирает parsers через registry, пишет normalized Parquet и сохраняет traceability. `PATH_FOLDER_DATASETS` остается immutable raw source root для Stage One и аудита/traceback.
 
 ## Документы
 

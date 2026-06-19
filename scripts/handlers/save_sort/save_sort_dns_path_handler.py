@@ -20,7 +20,7 @@ class DNSSortedPathExportResult:
 class DNSSortedPathExportHandler:
     """Сканирует PATH_DNS_DATASETS_FILTER и сохраняет пути в JSON по ролям/форматам."""
 
-    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION", "EXPERIMENTS")
+    ROLE_ORDER: tuple[str, ...] = ("TRAIN", "TEST", "VALIDATION")
 
     def __init__(
         self,

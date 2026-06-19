@@ -1,6 +1,6 @@
 # Stage Two usage guide
 
-Этот runbook описывает реализованный операционный путь от configured raw dataset roots до normalized Parquet artifacts.
+Этот runbook описывает реализованный операционный путь от filtered dataset root до normalized Parquet artifacts.
 
 ## Предварительные условия
 
@@ -8,8 +8,8 @@
 
 ```text
 PATH_DATA_STORAGE=<absolute storage root>
-PATH_FOLDER_DATASETS=<absolute raw dataset root>
-PATH_FOLDER_DATASETS_FILTER=<optional filtered dataset root>
+PATH_FOLDER_DATASETS=<absolute raw dataset root для Stage One/audit>
+PATH_FOLDER_DATASETS_FILTER=<absolute filtered dataset root для Stage Two>
 DATABASE_URL=<PostgreSQL SQLAlchemy URL>
 ```
 
@@ -80,10 +80,11 @@ python manage.py stage-two catalog-ingest
 
 Что происходит:
 
-- `DatasetFileScanner` сканирует configured roots.
+- `DatasetFileScanner` сканирует только `PATH_FOLDER_DATASETS_FILTER`.
 - Определяются `branch`, `role`, `source_format`, dataset name, file size и SHA-256 hash.
 - Заполняются или обновляются `datasets`, `ingestion_runs`, `dataset_files`.
 - Raw files не изменяются.
+- В Stage Two catalog попадают только роли `TRAIN`, `VALIDATION`, `TEST`. `EXPERIMENTS` игнорируется.
 
 Типовые statuses после ingestion:
 
@@ -94,6 +95,8 @@ python manage.py stage-two catalog-ingest
 | `DISCOVERED` | Файл найден и может быть promoted. |
 | `EMPTY_FILE` | Файл пустой. |
 | `UNSUPPORTED_FORMAT` | Scanner нашел format без active parser coverage. |
+
+`PATH_FOLDER_DATASETS` намеренно не сканируется этой командой. Он остается immutable raw source location и может содержать лишние датасеты, которые не входят в текущий рабочий корпус.
 
 ### 5. Parser coverage
 
@@ -233,6 +236,7 @@ Catalog smoke и CLI smoke используют synthetic files и откаты�
 ## Production safety notes
 
 - Не редактировать raw datasets, чтобы parser "заработал".
+- Не использовать `EXPERIMENTS` в Stage Two командах; рабочие роли: `TRAIN`, `VALIDATION`, `TEST`.
 - Не хранить raw packet payloads, BSON streams или full raw logs в PostgreSQL metadata.
 - Не переводить целые branches в ready без просмотра `parser-coverage`.
 - Не считать synthetic smoke tests подтверждением full-corpus readiness.

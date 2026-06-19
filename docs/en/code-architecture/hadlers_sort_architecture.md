@@ -65,5 +65,5 @@ analyze_dataset -> filter_dataset -> sort-host-dataset-handler -> save-sort-host
 ## Constraints
 
 - Sorters operate on the filesystem and may copy large data volumes.
-- They do not register files in the PostgreSQL Catalog; Stage Two `catalog-ingest` scans configured roots separately.
+- They do not register files in the PostgreSQL Catalog; Stage Two `catalog-ingest` scans `PATH_FOLDER_DATASETS_FILTER` separately.
 - Downstream analysis depends on format bucket names matching action-specific handlers.

@@ -65,5 +65,5 @@ analyze_dataset -> filter_dataset -> sort-host-dataset-handler -> save-sort-host
 ## Ограничения
 
 - Sorter работает с файловой системой и может копировать большие объемы данных.
-- Он не регистрирует файлы в PostgreSQL Catalog; Stage Two `catalog-ingest` делает отдельное сканирование configured roots.
+- Он не регистрирует файлы в PostgreSQL Catalog; Stage Two `catalog-ingest` отдельно сканирует `PATH_FOLDER_DATASETS_FILTER`.
 - Корректность downstream analysis зависит от совпадения format bucket names с action-specific handlers.

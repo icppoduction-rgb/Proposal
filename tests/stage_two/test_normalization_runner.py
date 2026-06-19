@@ -58,12 +58,14 @@ class _FakeFileRepository:
         role: str | None = None,
         source_format: str | None = None,
         limit: int | None = None,
+        source_group: str | None = None,
     ) -> list[DatasetFile]:
         self.ready_call = {
             "branch": branch,
             "role": role,
             "source_format": source_format,
             "limit": limit,
+            "source_group": source_group,
         }
         self.ready_calls.append(self.ready_call)
         result = [
@@ -87,7 +89,12 @@ class _FakeFileRepository:
         file.error_message = error_message
         return file
 
-    def get_ready_file_groups(self, *, branch: str) -> list[dict[str, Any]]:
+    def get_ready_file_groups(
+        self,
+        *,
+        branch: str,
+        source_group: str | None = None,
+    ) -> list[dict[str, Any]]:
         groups: dict[tuple[str, str], int] = {}
         for file in self.files:
             if file.status == "READY_FOR_PARSING" and file.branch == branch:
@@ -192,7 +199,13 @@ class NormalizeFormatRunnerTest(unittest.TestCase):
 
         self.assertEqual(
             repository.ready_call,
-            {"branch": "host", "role": "TRAIN", "source_format": "auth.log", "limit": 10},
+            {
+                "branch": "host",
+                "role": "TRAIN",
+                "source_format": "auth.log",
+                "limit": 10,
+                "source_group": "PATH_FOLDER_DATASETS_FILTER",
+            },
         )
         self.assertEqual(result.selected, 2)
         self.assertEqual(result.processed, 2)
@@ -248,12 +261,14 @@ class NormalizeAllRunnerTest(unittest.TestCase):
                     "role": "TRAIN",
                     "source_format": "auth.log",
                     "limit": 1,
+                    "source_group": "PATH_FOLDER_DATASETS_FILTER",
                 },
                 {
                     "branch": "host",
                     "role": "TRAIN",
                     "source_format": "syslog",
                     "limit": 1,
+                    "source_group": "PATH_FOLDER_DATASETS_FILTER",
                 },
             ],
         )

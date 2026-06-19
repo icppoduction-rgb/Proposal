@@ -3,6 +3,7 @@
 Stage Two uses `PATH_DATA_STORAGE` as the root for generated data and reports. The path is configured in `config.py` from the environment.
 
 Raw datasets stay outside this storage tree and are never modified by Stage Two.
+The current Stage Two working input is `PATH_FOLDER_DATASETS_FILTER`, not `PATH_FOLDER_DATASETS`. The raw root is kept for immutable source storage, Stage One discovery, and audit/backtracking.
 
 ## Bootstrap
 
@@ -81,7 +82,9 @@ reports/ru/stage-two/leakage/
 ## Storage Rules
 
 - Store raw input only in the original raw dataset roots.
+- Use `PATH_FOLDER_DATASETS_FILTER` as the Stage Two catalog and normalization source.
 - Store large normalized rows in Parquet, not PostgreSQL.
 - Store only metadata, counters, hashes, paths, and bounded diagnostics in PostgreSQL.
-- Keep TRAIN, VALIDATION, TEST, and EXPERIMENTS separated in artifact paths.
+- Keep TRAIN, VALIDATION, and TEST separated in catalog rows and artifact paths.
+- Do not create or process `EXPERIMENTS` artifacts in Stage Two.
 - Use configured paths from `config.py`; do not hardcode absolute storage paths in parser code.

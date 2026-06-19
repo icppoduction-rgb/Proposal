@@ -2,6 +2,8 @@
 
 BRANCH_VALUES: tuple[str, ...] = ("dns", "host", "network", "hybrid")
 ROLE_VALUES: tuple[str, ...] = ("TRAIN", "VALIDATION", "TEST", "EXPERIMENTS")
+ACTIVE_DATASET_ROLE_VALUES: tuple[str, ...] = ("TRAIN", "VALIDATION", "TEST")
+ACTIVE_CATALOG_SOURCE_GROUP: str = "PATH_FOLDER_DATASETS_FILTER"
 FILE_STATUS_VALUES: tuple[str, ...] = (
     "DISCOVERED",
     "REGISTERED",

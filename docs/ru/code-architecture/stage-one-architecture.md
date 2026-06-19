@@ -55,7 +55,7 @@ python manage.py handlers dns-analyze analyze-train-csv-content
 Stage One не создает `dataset_files`, `parser_runs` или `normalized_artifacts`. Эти сущности создаются Stage Two. Практический порядок такой:
 
 1. Stage One обнаруживает и сортирует raw files.
-2. Stage Two `catalog-ingest` сканирует raw/sorted roots и регистрирует catalog rows.
+2. Stage Two `catalog-ingest` сканирует `PATH_FOLDER_DATASETS_FILTER` и регистрирует catalog rows.
 3. `parser-coverage` показывает, какие role/source_format buckets имеют активный parser.
 4. `mark-ready` переводит выбранные файлы в `READY_FOR_PARSING`.
 5. `normalize-format` или `normalize-all` создают normalized Parquet artifacts.
@@ -76,4 +76,3 @@ Stage One JSON contracts простые и в основном dict/list based:
 ```
 
 У content-analysis summaries нет единой JSON Schema в коде. Поэтому их нельзя считать стабильным parser input contract для новых Stage Two parser implementations. Для новых парсеров source of truth - `dataset_files.source_format`, parser registry и raw file path/hash.
-

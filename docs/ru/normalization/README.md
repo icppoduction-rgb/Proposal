@@ -1,11 +1,11 @@
 # Stage Two: нормализация данных
 
-Stage Two - это слой нормализации данных и PostgreSQL control plane. Он читает неизменяемые raw datasets, регистрирует файлы в PostgreSQL, выбирает parser через parser registry, пишет normalized events в Parquet и сохраняет traceability в catalog tables.
+Stage Two - это слой нормализации данных и PostgreSQL control plane. Его актуальный вход - отфильтрованное дерево датасетов из `PATH_FOLDER_DATASETS_FILTER`. Stage Two регистрирует эти файлы в PostgreSQL, выбирает parser через parser registry, пишет normalized events в Parquet и сохраняет traceability в catalog tables.
 
 Текущий реализованный CLI scope:
 
 ```text
-raw datasets -> catalog ingestion -> parser registry -> parser run -> normalized Parquet -> catalog artifact registration -> quality/leakage/readiness checks
+PATH_FOLDER_DATASETS_FILTER -> catalog ingestion -> parser registry -> parser run -> normalized Parquet -> catalog artifact registration -> quality/leakage/readiness checks
 ```
 
 Feature и model-ready schemas, catalog tables и artifact contracts уже есть в `schemas/features/feature_artifact_v1.json`, `schemas/model_ready/model_ready_v1.json`, `scripts/stage_two/features/`, `scripts/stage_two/model_ready/`. Production CLI для построения всех feature/model-ready artifacts на полном корпусе не входит в текущий parser workflow.
@@ -38,7 +38,7 @@ python manage.py stage-two normalize-host 10
 
 ## Карта документации
 
-- [Stage Two usage guide](usage_guide.md): операционный сценарий от raw files до normalized artifacts.
+- [Stage Two usage guide](usage_guide.md): операционный сценарий от filtered datasets до normalized artifacts.
 - [Parser strategy](parser_strategy.md): source formats, parser classes, statuses и registry behavior.
 - [Parser development guide](parser_development_guide.md): как безопасно добавить новый parser.
 - [PostgreSQL catalog schema](postgresql_catalog_schema.md): catalog tables и связи.
@@ -51,9 +51,12 @@ python manage.py stage-two normalize-host 10
 
 ## Ключевые инварианты
 
+- `PATH_FOLDER_DATASETS_FILTER` является authoritative input для Stage Two.
+- `PATH_FOLDER_DATASETS` сохраняется для immutable raw sources, Stage One discovery и аудита/traceback; по умолчанию он не попадает в Stage Two catalog ingestion.
 - Raw datasets никогда не изменяются Stage Two.
 - PostgreSQL хранит metadata, statuses, relationships, parser runs и artifact records; большие normalized данные хранятся в Parquet.
-- TRAIN, VALIDATION, TEST и EXPERIMENTS разделены логически в catalog rows и физически в Parquet paths.
+- Активные рабочие роли: TRAIN, VALIDATION, TEST. `EXPERIMENTS` оставлен только как legacy-compatible значение схемы БД и не используется в catalog ingestion, mark-ready, normalization, reports и downstream checks.
+- TRAIN, VALIDATION и TEST разделены логически в catalog rows и физически в Parquet paths.
 - `catalog-ingest` не переводит файлы в `READY_FOR_PARSING` автоматически; `mark-ready` является явным operational gate.
 - `normalize-format` обрабатывает ровно один срез `branch`/`role`/`source_format`.
 - `normalize-all` обрабатывает одну branch группами role/source_format, а не одной неконтролируемой смешанной транзакцией.

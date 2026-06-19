@@ -13,7 +13,7 @@ Stage One outputs являются файловыми JSON/Markdown diagnostics:
 | Save sort | `python manage.py handlers save-sort save-sort-*-dataset-handler` | `sort-path-dns-file.json`, `sort-path-host-file.json`. |
 | Content analysis | `python manage.py handlers dns-analyze ...` / `host-analyze ...` | `analysis-*-summary.json`, Markdown reports. |
 
-Stage One JSON не является стабильной normalized schema. Он нужен для диагностики и подготовки, но Stage Two production source of truth - PostgreSQL Catalog.
+Stage One JSON не является стабильной normalized schema. Он нужен для диагностики и подготовки, но Stage Two production source of truth - `PATH_FOLDER_DATASETS_FILTER` и PostgreSQL Catalog.
 
 ## Stage Two commands и outputs
 
@@ -22,7 +22,7 @@ Stage One JSON не является стабильной normalized schema. О�
 | 1 | `python manage.py stage-two bootstrap-storage` | `config.py` storage paths | Directories under `PATH_DATA_STORAGE`. |
 | 2 | `python -m alembic -c scripts/db/migrations/alembic.ini upgrade head` | Alembic migrations | PostgreSQL Catalog schema. |
 | 3 | `python manage.py stage-two seed-parser-registry` | `schemas/*.schema.json`, registry seed | `schema_versions`, `parser_registry`. |
-| 4 | `python manage.py stage-two catalog-ingest` | Raw/sorted dataset roots | `ingestion_runs`, `datasets`, `dataset_files`. |
+| 4 | `python manage.py stage-two catalog-ingest` | `PATH_FOLDER_DATASETS_FILTER` | `ingestion_runs`, `datasets`, `dataset_files`. |
 | 5 | `python manage.py stage-two parser-coverage` | Catalog + registry | RU/EN coverage matrix JSON/MD. |
 | 6 | `python manage.py stage-two mark-ready ...` | `dataset_files` rows | Selected statuses changed to `READY_FOR_PARSING`. |
 | 7 | `python manage.py stage-two normalize-format ...` | READY files for one branch/role/source_format | Parquet, `parser_runs`, `normalized_artifacts`, reports. |

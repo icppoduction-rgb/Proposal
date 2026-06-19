@@ -11,7 +11,7 @@ manage.py
     -> scripts/stage_two/cli.py     Stage Two catalog/parser/normalization checks
 ```
 
-Stage One produces analysis and sorted-path JSON artifacts. Stage Two uses configured raw roots and PostgreSQL catalog rows to normalize files into Parquet and register traceability.
+Stage One produces analysis and sorted-path JSON artifacts and prepares the filtered dataset tree. Stage Two uses `PATH_FOLDER_DATASETS_FILTER` and PostgreSQL catalog rows to normalize files into Parquet and register traceability. `PATH_FOLDER_DATASETS` remains the immutable raw source root for Stage One and audit/backtracking.
 
 ## Documents
 
@@ -53,6 +53,7 @@ The filename typo `hadlers_*` is preserved to avoid breaking existing links.
 
 - Stage One is filesystem/JSON oriented.
 - Stage Two is PostgreSQL catalog plus Parquet artifact oriented.
-- Raw datasets are read-only inputs.
+- Raw datasets are read-only inputs and are not the default Stage Two catalog source.
+- Stage Two processing roles are limited to TRAIN, VALIDATION, and TEST.
 - Full parser normalization is implemented.
 - Feature/model-ready contracts exist, but full production feature/model-ready CLI is not implemented in the current parser workflow.

@@ -41,15 +41,15 @@ registry/parser/scanner состояние.
 
 Dry-run:
 
-python manage.py stage-two mark-ready --branch <dns|host> --role <TRAIN|VALIDATION|TEST|EXPERIMENTS> --format <FORMAT> --dry-run
+python manage.py stage-two mark-ready --branch <dns|host> --role <TRAIN|VALIDATION|TEST> --format <FORMAT> --dry-run
 
 Apply:
 
-python manage.py stage-two mark-ready --branch <dns|host> --role <TRAIN|VALIDATION|TEST|EXPERIMENTS> --format <FORMAT> --apply
+python manage.py stage-two mark-ready --branch <dns|host> --role <TRAIN|VALIDATION|TEST> --format <FORMAT> --apply
 
 Normalize:
 
-python manage.py stage-two normalize-format --branch <dns|host> --role <TRAIN|VALIDATION|TEST|EXPERIMENTS> --format <FORMAT> --limit 100
+python manage.py stage-two normalize-format --branch <dns|host> --role <TRAIN|VALIDATION|TEST> --format <FORMAT> --limit 100
 
 Fallback syntax:
 
@@ -70,7 +70,7 @@ python manage.py stage-two normalize-format host:TRAIN:auth.log:100
 ----------------------------------------
 
 DNS роли:
-- csv, pcap.csv, cap, pcap, pcapng: TRAIN, VALIDATION, TEST, EXPERIMENTS
+- csv, pcap.csv, cap, pcap, pcapng: TRAIN, VALIDATION, TEST
 - txt: только VALIDATION
 
 DNS csv:
@@ -113,7 +113,7 @@ python manage.py stage-two normalize-format --branch dns --role VALIDATION --for
 6. Host: поддерживаемые форматы
 -------------------------------
 
-Для этих host форматов активны роли TRAIN, VALIDATION, TEST, EXPERIMENTS:
+Для этих host форматов активны роли TRAIN, VALIDATION, TEST:
 
 csv
 json
@@ -270,4 +270,3 @@ python manage.py stage-two normalize-format --branch dns --role TRAIN --format c
 python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --apply
 python manage.py stage-two normalize-format --branch host --role TRAIN --format csv --limit 100
-

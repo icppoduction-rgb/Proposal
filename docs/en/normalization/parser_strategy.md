@@ -19,8 +19,10 @@ python manage.py stage-two seed-parser-registry
 `DatasetFileScanner` in `scripts/stage_two/ingestion/scanner.py` detects:
 
 1. `branch` from path/root parts: `dns`, `host`, otherwise `hybrid`.
-2. `role` from path parts: `TRAIN`, `VALIDATION`, `TEST`, otherwise `EXPERIMENTS`.
+2. `role` from path parts: `TRAIN`, `VALIDATION`, `TEST`. Files outside these role directories are skipped by Stage Two catalog ingestion.
 3. `source_format` from sorted-tree format buckets first, then file-name heuristics.
+
+`EXPERIMENTS` is not an active processing role. It may remain in old DB constraints for compatibility, but scanner/catalog/normalization/reporting workflows ignore it.
 
 Compound names are preserved. For example:
 

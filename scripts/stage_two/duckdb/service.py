@@ -169,7 +169,7 @@ class DuckDBAnalyticsService:
                     f"""
                     SELECT
                         regexp_extract(filename, '[/\\\\](dns|host|network|hybrid)[/\\\\]', 1) AS branch_from_path,
-                        regexp_extract(filename, '[/\\\\](TRAIN|VALIDATION|TEST|EXPERIMENTS)[/\\\\]', 1) AS role_from_path,
+                        regexp_extract(filename, '[/\\\\](TRAIN|VALIDATION|TEST)[/\\\\]', 1) AS role_from_path,
                         COUNT(*) AS row_count
                     FROM {view_name}
                     GROUP BY branch_from_path, role_from_path
