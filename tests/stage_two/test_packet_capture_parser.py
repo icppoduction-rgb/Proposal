@@ -102,6 +102,33 @@ class PacketCaptureParserTest(unittest.TestCase):
         self.assertEqual(event["modality"], "host_network_packet")
         self.assertEqual(event["query_domain"], "cap.example")
 
+    def test_packet_parser_can_stream_batches_without_changing_parse_contract(self) -> None:
+        packets = [
+            _ethernet_ipv4_udp_packet(
+                src_ip="10.0.0.1",
+                dst_ip="8.8.8.8",
+                src_port=53000 + index,
+                dst_port=53,
+                payload=_dns_query(f"batch-{index}.example"),
+            )
+            for index in range(3)
+        ]
+        path = _write_binary(self, "dns-batched.pcap", _pcap_file(packets))
+        parser = DnsPacketCaptureParser(UnlabeledLabelResolver())
+        context = _context(path, branch="dns", source_format="pcap")
+
+        batches = list(parser.parse_batches(path, context, batch_size=2))
+        result = parser.parse(path, context)
+
+        self.assertEqual([batch.rows_parsed for batch in batches], [2, 1])
+        self.assertEqual(sum(batch.events_emitted for batch in batches), 3)
+        self.assertEqual(result.rows_parsed, 3)
+        self.assertEqual([event["query_domain"] for event in result.events], [
+            "batch-0.example",
+            "batch-1.example",
+            "batch-2.example",
+        ])
+
 
 def _context(path: Path, *, branch: str, source_format: str) -> ParserContext:
     return ParserContext(

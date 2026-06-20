@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -69,23 +70,38 @@ class HostNormalizationService:
                 parser_run_id=parser_run.id,
                 metadata=dataset_file.metadata_json or {},
             )
-            result = parser.parse(Path(dataset_file.file_path), context)
+            write_result = None
+            artifact = None
+            parse_batches = getattr(parser, "parse_batches", None)
+            if callable(parse_batches):
+                result, artifact, output_path, modality = self._parse_and_write_batches(
+                    parse_batches,
+                    Path(dataset_file.file_path),
+                    context,
+                    dataset_file=dataset_file,
+                    parser_run_id=parser_run.id,
+                    schema_version_id=schema_version.id if schema_version is not None else None,
+                    schema_name=parser_metadata.normalized_schema_name,
+                    schema_version=parser_metadata.normalized_schema_version,
+                )
+            else:
+                result = parser.parse(Path(dataset_file.file_path), context)
+                modality = result.events[0]["modality"] if result.events else "host"
+                if result.events:
+                    write_result = self.writer.write_normalized(
+                        result.events,
+                        branch=dataset_file.branch,
+                        role=dataset_file.role,
+                        modality=modality,
+                        dataset_slug=dataset_file.dataset.slug,
+                        schema_version=parser_metadata.normalized_schema_version,
+                        run_id=parser_run.id,
+                    )
+                output_path = write_result.relative_path if write_result else None
             status_decision = result.status_decision
             status = status_decision.parser_run_status
-            modality = result.events[0]["modality"] if result.events else "host"
-            write_result = None
-            if result.events:
-                write_result = self.writer.write_normalized(
-                    result.events,
-                    branch=dataset_file.branch,
-                    role=dataset_file.role,
-                    modality=modality,
-                    dataset_slug=dataset_file.dataset.slug,
-                    schema_version=parser_metadata.normalized_schema_version,
-                    run_id=parser_run.id,
-                )
         except Exception as exc:
-            error_message = str(exc)
+            error_message = _exception_message(exc)
             self.parser_repository.fail_parser_run(parser_run, error_message)
             self.file_repository.mark_file_status(dataset_file, "FAILED", error_message=error_message)
             report_paths = save_parser_run_reports(
@@ -107,11 +123,10 @@ class HostNormalizationService:
             rows_parsed=result.rows_parsed,
             rows_failed=result.rows_failed,
             events_emitted=result.events_emitted,
-            output_parquet_path=write_result.relative_path if write_result else None,
+            output_parquet_path=output_path,
             warning_count=len(result.warnings),
             error_message=_parser_result_error_message(result),
         )
-        artifact = None
         if write_result is not None:
             artifact = self.writer.register_normalized_artifact(
                 self.artifact_repository,
@@ -139,7 +154,7 @@ class HostNormalizationService:
             dataset_file=dataset_file,
             parser_result=result,
             parser_registry=parser_metadata,
-            output_artifact_path=write_result.relative_path if write_result else None,
+            output_artifact_path=output_path,
             storage_root=self.writer.storage_root,
         )
         self.parser_repository.set_parser_run_report_path(
@@ -147,6 +162,85 @@ class HostNormalizationService:
             report_paths["en_parser_json"],
         )
         return artifact
+
+    def _parse_and_write_batches(
+        self,
+        parse_batches: Any,
+        path: Path,
+        context: ParserContext,
+        *,
+        dataset_file: DatasetFile,
+        parser_run_id: int,
+        schema_version_id: int | None,
+        schema_name: str,
+        schema_version: str,
+    ) -> tuple[ParserResult, NormalizedArtifact | None, str | None, str]:
+        rows_read = 0
+        rows_parsed = 0
+        rows_failed = 0
+        events_emitted = 0
+        warnings: list[str] = []
+        error_samples: list[str] = []
+        bytes_read: int | None = None
+        artifact: NormalizedArtifact | None = None
+        output_paths: list[str] = []
+        first_modality = "host"
+
+        for batch_index, batch_result in enumerate(parse_batches(path, context), start=1):
+            rows_read += batch_result.rows_read
+            rows_parsed += batch_result.rows_parsed
+            rows_failed += batch_result.rows_failed
+            events_emitted += batch_result.events_emitted
+            warnings.extend(batch_result.warnings)
+            error_samples.extend(batch_result.error_samples)
+            bytes_read = batch_result.bytes_read
+            if not batch_result.events:
+                continue
+            batch_modality = batch_result.events[0]["modality"]
+            first_modality = batch_modality if first_modality == "host" else first_modality
+            write_result = self.writer.write_normalized(
+                batch_result.events,
+                branch=dataset_file.branch,
+                role=dataset_file.role,
+                modality=batch_modality,
+                dataset_slug=dataset_file.dataset.slug,
+                schema_version=schema_version,
+                run_id=f"{parser_run_id}-{batch_index:06d}",
+            )
+            output_paths.append(write_result.relative_path)
+            registered = self.writer.register_normalized_artifact(
+                self.artifact_repository,
+                write_result,
+                dataset_id=dataset_file.dataset_id,
+                file_id=dataset_file.id,
+                parser_run_id=parser_run_id,
+                schema_version_id=schema_version_id,
+                role=dataset_file.role,
+                branch=dataset_file.branch,
+                modality=batch_modality,
+                source_format=dataset_file.source_format,
+                schema_name=schema_name,
+                schema_version=schema_version,
+                event_count=batch_result.events_emitted,
+                status=batch_result.status_decision.parser_run_status,
+            )
+            artifact = artifact or registered
+
+        return (
+            ParserResult(
+                rows_read=rows_read,
+                rows_parsed=rows_parsed,
+                rows_failed=rows_failed,
+                events=[],
+                warnings=warnings,
+                bytes_read=bytes_read,
+                error_samples=error_samples,
+                emitted_events_count=events_emitted,
+            ),
+            artifact,
+            _batched_output_path(output_paths, parser_run_id),
+            first_modality,
+        )
 
 
 def _parser_result_error_message(result: ParserResult) -> str | None:
@@ -157,3 +251,17 @@ def _parser_result_error_message(result: ParserResult) -> str | None:
         samples = "; ".join(result.error_samples[:3])
         return f"{decision.reason}: {samples}"
     return decision.reason
+
+
+def _batched_output_path(output_paths: list[str], parser_run_id: int) -> str | None:
+    if not output_paths:
+        return None
+    if len(output_paths) == 1:
+        return output_paths[0]
+    first = Path(output_paths[0])
+    return (first.parent / f"part-{parser_run_id}-*.parquet").as_posix()
+
+
+def _exception_message(exc: BaseException) -> str:
+    message = str(exc).strip()
+    return message or type(exc).__name__

@@ -240,7 +240,7 @@ class NormalizeFormatRunner:
                 self._emit_file_processed(result, index=index, total=total)
                 return result
         except Exception as exc:
-            result = self._mark_failed(file, str(exc))
+            result = self._mark_failed(file, _exception_message(exc))
             self._emit_file_processed(result, index=index, total=total)
             return result
 
@@ -512,3 +512,8 @@ def _build_all_result(
         errors=errors,
         groups=groups,
     )
+
+
+def _exception_message(exc: BaseException) -> str:
+    message = str(exc).strip()
+    return message or type(exc).__name__

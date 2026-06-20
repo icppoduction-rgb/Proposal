@@ -1,6 +1,15 @@
 Команды Stage Two для DNS/HOST по parser_active.txt
 =========================================================================
 
+Актуализировано: 2026-06-20.
+
+Важно после исправления DNS CSV / Parquet mixed JSON fields:
+- Если normalize-format уже вернул PARTIAL_SUCCESS и часть файлов получила статус FAILED,
+  обычный mark-ready --apply их не поднимет повторно.
+- Для повторной обработки таких файлов использовать mark-ready --retry-failed.
+- --retry-failed переводит только FAILED, SKIPPED и PARTIALLY_PARSED в READY_FOR_PARSING.
+- PARSED не трогать: уже успешно нормализованные файлы не должны перезаписываться без отдельной причины.
+
 Исходный файл:
 C:\Users\fmark\OneDrive\Desktop\Заметки\parser_active.txt
 
@@ -27,18 +36,43 @@ python manage.py stage-two catalog-ingest
 
 python manage.py stage-two parser-coverage
 
-2. Дальше для каждой связки branch/role/format выполнять строго три команды подряд:
+1.1. Перед массовой нормализацией желательно проверить кодовую базу:
+
+python -m compileall -q manage.py config.py scripts tests
+python -m pytest -q
+python -m scripts.stage_two.parser_smoke
+python -m scripts.stage_two.parser_input_smoke
+python -m scripts.stage_two.parser_catalog_smoke
+python -m scripts.db.smoke_check
+
+2. Дальше для каждой новой связки branch/role/format выполнять обычный поток:
 
    2.1. mark-ready --dry-run
         Проверяет, сколько файлов будет выбрано. Ничего не меняет в БД.
 
    2.2. mark-ready --apply
-        Переводит выбранные файлы в READY_FOR_PARSING.
+        Переводит выбранные файлы из REGISTERED, CHANGED, DISCOVERED в READY_FOR_PARSING.
         Выполнять только если dry-run показал ожидаемые selected/eligible и нет ошибок.
 
    2.3. normalize-format
         Нормализует выбранный формат в Parquet artifacts.
         --limit 100 означает максимум 100 файлов catalog dataset_files за один запуск, не 100 строк внутри CSV/логов.
+
+2.4. Если предыдущий normalize-format завершился PARTIAL_SUCCESS/FAILED и нужно повторить только проблемные файлы:
+
+python manage.py stage-two mark-ready --branch <branch> --role <role> --format <format> --retry-failed --dry-run
+python manage.py stage-two mark-ready --branch <branch> --role <role> --format <format> --retry-failed --apply
+python manage.py stage-two normalize-format --branch <branch> --role <role> --format <format> --limit 100
+
+   В retry-режиме mark-ready выбирает только FAILED, SKIPPED и PARTIALLY_PARSED.
+   Это штатный сценарий восстановления после частичной нормализации.
+
+2.5. Отчеты mark-ready сохраняются относительно PATH_DATA_STORAGE:
+
+reports/en/stage-two/status/mark_ready_<branch>_<role>_<format>_<initial|retry_failed>.md
+reports/en/stage-two/status/mark_ready_<branch>_<role>_<format>_<initial|retry_failed>.json
+reports/ru/stage-two/status/mark_ready_<branch>_<role>_<format>_<initial|retry_failed>.md
+reports/ru/stage-two/status/mark_ready_<branch>_<role>_<format>_<initial|retry_failed>.json
 
 3. Рекомендуемый порядок:
 
@@ -69,9 +103,22 @@ DNS: что найдено в parser_active.txt
 
 DNS TRAIN csv
 
+Если это первый запуск или файлы еще в REGISTERED/CHANGED/DISCOVERED:
+
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
 python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100
+
+Если ранее был результат PARTIAL_SUCCESS с failed=4 для файлов CSV_benign.csv,
+CSV_malware.csv, CSV_phishing.csv, CSV_spam.csv, использовать retry-поток:
+
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --apply
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100
+
+Ожидаемо после исправления writer/parquet: 8 selected, 8 processed, 8 normalized,
+0 failed. Если снова будет PARTIAL_SUCCESS, смотреть error по каждому file_id
+и соответствующий отчет mark_ready_dns_train_csv_retry_failed.
 
 DNS TRAIN pcap
 

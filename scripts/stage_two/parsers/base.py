@@ -101,6 +101,7 @@ class ParserResult:
     files_read: int = 1
     error_samples: list[str] = field(default_factory=list)
     parse_errors_count: int | None = None
+    emitted_events_count: int | None = None
     status_override: str | None = None
     status_reason: str | None = None
 
@@ -117,6 +118,8 @@ class ParserResult:
                 raise ValueError(f"{name} must be non-negative")
         if self.bytes_read is not None and self.bytes_read < 0:
             raise ValueError("bytes_read must be non-negative when provided")
+        if self.emitted_events_count is not None and self.emitted_events_count < 0:
+            raise ValueError("emitted_events_count must be non-negative when provided")
         object.__setattr__(self, "error_samples", limit_error_samples(self.error_samples))
         if self.parse_errors_count is None:
             object.__setattr__(
@@ -132,6 +135,8 @@ class ParserResult:
     @property
     def events_emitted(self) -> int:
         """Return the number of normalized events emitted."""
+        if self.emitted_events_count is not None:
+            return self.emitted_events_count
         return len(self.events)
 
     @property

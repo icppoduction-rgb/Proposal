@@ -8,8 +8,9 @@ import struct
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, BinaryIO, Iterator
 
+from config import STAGE_TWO_PACKET_BATCH_SIZE
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
 from scripts.stage_two.parsers.input_reader import InputReaderError, UniversalInputReader
@@ -33,6 +34,7 @@ ETHERTYPE_QINQ = 0x88A8
 IP_PROTO_TCP = 6
 IP_PROTO_UDP = 17
 DNS_PORT = 53
+MAX_CAPTURED_PACKET_BYTES = 64 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,48 @@ class PacketCaptureParser(BaseParser):
         rows_read = 0
         rows_failed = 0
         warnings: list[str] = []
+        error_samples: list[str] = []
+        bytes_read: int | None = None
+        for batch in self.parse_batches(
+            path,
+            context,
+            batch_size=max(STAGE_TWO_PACKET_BATCH_SIZE, 1),
+        ):
+            rows_read += batch.rows_read
+            rows_failed += batch.rows_failed
+            events.extend(batch.events)
+            warnings.extend(batch.warnings)
+            error_samples.extend(batch.error_samples)
+            bytes_read = batch.bytes_read
+        result = ParserResult(
+            rows_read=rows_read,
+            rows_parsed=len(events),
+            rows_failed=rows_failed,
+            events=events,
+            warnings=warnings,
+            bytes_read=bytes_read,
+            error_samples=error_samples,
+            status_override="EMPTY_FILE" if rows_read == 0 and (bytes_read or 0) == 0 else None,
+            status_reason="packet capture has no packet records" if rows_read == 0 and (bytes_read or 0) == 0 else None,
+        )
+        self.validate_result(result)
+        return result
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_PACKET_BATCH_SIZE,
+    ) -> Iterator[ParserResult]:
+        """Parse packet capture records as bounded batches of normalized events."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        events: list[dict[str, Any]] = []
+        rows_read = 0
+        rows_failed = 0
+        warnings: list[str] = []
+        error_samples: list[str] = []
         reader = UniversalInputReader(path)
         try:
             for index, record in enumerate(_iter_capture_records(Path(path), reader=reader)):
@@ -90,11 +134,30 @@ class PacketCaptureParser(BaseParser):
                     events.append(self._record_to_event(record, summary, index, context))
                 except Exception as exc:
                     rows_failed += 1
-                    warnings.append(f"packet {index}: {exc}")
-            warnings.extend(reader.metadata.warnings)
+                    message = f"packet {index}: {_exception_message(exc)}"
+                    warnings.append(message)
+                    error_samples.append(message)
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        warnings=warnings,
+                        bytes_read=reader.metadata.bytes_read,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    warnings = []
+                    error_samples = []
         except (InputReaderError, ValueError) as exc:
-            raise ValueError(f"failed to read packet capture: {exc}") from exc
+            raise ValueError(f"failed to read packet capture: {_exception_message(exc)}") from exc
 
+        warnings.extend(reader.metadata.warnings)
         result = ParserResult(
             rows_read=rows_read,
             rows_parsed=len(events),
@@ -102,9 +165,16 @@ class PacketCaptureParser(BaseParser):
             events=events,
             warnings=warnings,
             bytes_read=reader.metadata.bytes_read,
+            error_samples=error_samples,
+            status_override="EMPTY_FILE" if rows_read == 0 and reader.metadata.bytes_read == 0 else None,
+            status_reason=(
+                "packet capture has no packet records"
+                if rows_read == 0 and reader.metadata.bytes_read == 0
+                else None
+            ),
         )
         self.validate_result(result)
-        return result
+        yield result
 
     def _record_to_event(
         self,
@@ -185,15 +255,14 @@ def _iter_capture_records(
 ) -> Iterator[PacketRecord]:
     input_reader = reader or UniversalInputReader(path)
     binary_type = input_reader.detect_binary_type()
-    with input_reader.open("packet_bytes") as chunks:
-        data = b"".join(chunks)
-    if binary_type == "pcap":
-        yield from _iter_pcap_records(data)
-        return
-    if binary_type == "pcapng":
-        yield from _iter_pcapng_records(data)
-        return
-    raise ValueError(f"unsupported packet capture binary type: {binary_type}")
+    with input_reader.open_binary() as stream:
+        if binary_type == "pcap":
+            yield from _iter_pcap_records_stream(stream)
+            return
+        if binary_type == "pcapng":
+            yield from _iter_pcapng_records_stream(stream)
+            return
+        raise ValueError(f"unsupported packet capture binary type: {binary_type}")
 
 
 def _iter_pcap_records(data: bytes) -> Iterator[PacketRecord]:
@@ -211,6 +280,26 @@ def _iter_pcap_records(data: bytes) -> Iterator[PacketRecord]:
             raise ValueError("truncated PCAP packet payload")
         payload = data[offset : offset + captured_len]
         offset += captured_len
+        timestamp = datetime.fromtimestamp(ts_sec + (ts_frac / timestamp_scale), tz=timezone.utc)
+        yield PacketRecord(timestamp, captured_len, original_len, linktype, payload)
+
+
+def _iter_pcap_records_stream(stream: BinaryIO) -> Iterator[PacketRecord]:
+    header = _read_exact_or_eof(stream, 24)
+    if header is None:
+        raise ValueError("truncated PCAP global header")
+    if header[:4] not in PCAP_MAGIC_ENDIAN:
+        raise ValueError("unsupported PCAP magic")
+    endian, timestamp_scale = PCAP_MAGIC_ENDIAN[header[:4]]
+    linktype = struct.unpack(f"{endian}I", header[20:24])[0]
+    while True:
+        record_header = _read_exact_or_eof(stream, 16)
+        if record_header is None:
+            break
+        ts_sec, ts_frac, captured_len, original_len = struct.unpack(f"{endian}IIII", record_header)
+        if captured_len > MAX_CAPTURED_PACKET_BYTES:
+            raise ValueError(f"PCAP packet payload is too large: {captured_len} bytes")
+        payload = _read_exact(stream, captured_len, "truncated PCAP packet payload")
         timestamp = datetime.fromtimestamp(ts_sec + (ts_frac / timestamp_scale), tz=timezone.utc)
         yield PacketRecord(timestamp, captured_len, original_len, linktype, payload)
 
@@ -242,6 +331,66 @@ def _iter_pcapng_records(data: bytes) -> Iterator[PacketRecord]:
                     payload=body[payload_start:payload_end],
                 )
         offset += block_total_length
+
+
+def _iter_pcapng_records_stream(stream: BinaryIO) -> Iterator[PacketRecord]:
+    endian = "<"
+    linktypes: dict[int, int] = {}
+    while True:
+        header = stream.read(8)
+        if not header:
+            break
+        if len(header) != 8:
+            raise ValueError("truncated PCAPNG block header")
+        little_type, little_length = struct.unpack("<II", header)
+        if little_type == PCAPNG_SECTION_HEADER:
+            byte_order_magic = _read_exact(stream, 4, "truncated PCAPNG section header")
+            if byte_order_magic == b"\x4d\x3c\x2b\x1a":
+                endian = "<"
+                block_type = little_type
+                block_total_length = little_length
+            elif byte_order_magic == b"\x1a\x2b\x3c\x4d":
+                endian = ">"
+                block_type, block_total_length = struct.unpack(">II", header)
+            else:
+                raise ValueError("unsupported PCAPNG byte order magic")
+            if block_total_length < 12:
+                raise ValueError("invalid PCAPNG block length")
+            rest = _read_exact(
+                stream,
+                block_total_length - 12,
+                "truncated PCAPNG section block",
+            )
+            body = byte_order_magic + rest[:-4]
+        else:
+            block_type, block_total_length = struct.unpack(f"{endian}II", header)
+            if block_total_length < 12:
+                raise ValueError("invalid PCAPNG block length")
+            rest = _read_exact(stream, block_total_length - 8, "truncated PCAPNG block")
+            body = rest[:-4]
+
+        if block_type == PCAPNG_INTERFACE_DESCRIPTION and len(body) >= 8:
+            interface_id = len(linktypes)
+            linktypes[interface_id] = struct.unpack(f"{endian}H", body[:2])[0]
+        elif block_type == PCAPNG_ENHANCED_PACKET and len(body) >= 20:
+            interface_id, ts_high, ts_low, captured_len, original_len = struct.unpack(
+                f"{endian}IIIII",
+                body[:20],
+            )
+            if captured_len > MAX_CAPTURED_PACKET_BYTES:
+                raise ValueError(f"PCAPNG packet payload is too large: {captured_len} bytes")
+            payload_start = 20
+            payload_end = payload_start + captured_len
+            if payload_end <= len(body):
+                timestamp_us = (ts_high << 32) | ts_low
+                timestamp = datetime.fromtimestamp(timestamp_us / 1_000_000.0, tz=timezone.utc)
+                yield PacketRecord(
+                    timestamp=timestamp,
+                    captured_len=captured_len,
+                    original_len=original_len,
+                    linktype=linktypes.get(interface_id, LINKTYPE_ETHERNET),
+                    payload=body[payload_start:payload_end],
+                )
 
 
 def _pcapng_block_header(data: bytes, offset: int, current_endian: str) -> tuple[int, int, str]:
@@ -503,3 +652,24 @@ def _is_dns_summary(summary: PacketSummary) -> bool:
 def _event_uid(context: ParserContext, index: int, entity_id: Any) -> str:
     raw = f"{context.source_file_path}:{index}:{entity_id or ''}".encode("utf-8", errors="replace")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _read_exact(stream: BinaryIO, size: int, error_message: str) -> bytes:
+    data = stream.read(size)
+    if len(data) != size:
+        raise ValueError(error_message)
+    return data
+
+
+def _read_exact_or_eof(stream: BinaryIO, size: int) -> bytes | None:
+    data = stream.read(size)
+    if not data:
+        return None
+    if len(data) != size:
+        raise ValueError("truncated packet capture record header")
+    return data
+
+
+def _exception_message(exc: BaseException) -> str:
+    message = str(exc).strip()
+    return message or type(exc).__name__
