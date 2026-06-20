@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
@@ -137,6 +137,7 @@ class NormalizeAllResult:
 
 
 ServiceFactory = Callable[[Session], BranchNormalizationService]
+ProgressCallback = Callable[[str, dict[str, Any]], None]
 
 
 class NormalizeFormatRunner:
@@ -147,11 +148,13 @@ class NormalizeFormatRunner:
         session: Session,
         *,
         service_factories: Mapping[str, ServiceFactory] | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         """Initialize the runner with an externally managed transaction."""
         self.session = session
         self.file_repository = DatasetFileRepository(session)
         self.resolver = ParserResolver(session)
+        self.progress_callback = progress_callback
         self.service_factories: Mapping[str, ServiceFactory] = service_factories or {
             "dns": DnsNormalizationService,
             "host": HostNormalizationService,
@@ -171,6 +174,13 @@ class NormalizeFormatRunner:
         else:
             file_filters["source_group"] = ACTIVE_CATALOG_SOURCE_GROUP
         files = self.file_repository.get_files_ready_for_parsing(**file_filters)
+        self._emit(
+            "batch_started",
+            branch=request.branch,
+            role=request.role,
+            source_format=request.source_format,
+            total=len(files),
+        )
         resolution = self.resolver.resolve_with_diagnostics(
             branch=request.branch,
             role=request.role,
@@ -178,7 +188,10 @@ class NormalizeFormatRunner:
         )
         parser = resolution.parser
         if parser is None:
-            file_results = tuple(self._mark_unsupported(file) for file in files)
+            file_results = tuple(
+                self._mark_unsupported(file, index=index, total=len(files))
+                for index, file in enumerate(files, start=1)
+            )
             return _build_result(
                 request=request,
                 status="UNSUPPORTED_FORMAT",
@@ -193,7 +206,10 @@ class NormalizeFormatRunner:
             raise ValueError("normalize-format supports only dns and host branches")
 
         service = service_factory(self.session)
-        file_results = tuple(self._normalize_one(service, file) for file in files)
+        file_results = tuple(
+            self._normalize_one(service, file, index=index, total=len(files))
+            for index, file in enumerate(files, start=1)
+        )
         return _build_result(
             request=request,
             status="SUCCESS" if not _has_failed_file(file_results) else "PARTIAL_SUCCESS",
@@ -207,37 +223,48 @@ class NormalizeFormatRunner:
         self,
         service: BranchNormalizationService,
         file: DatasetFile,
+        *,
+        index: int,
+        total: int,
     ) -> NormalizeFileResult:
         try:
             with self.session.begin_nested():
                 artifact = service.normalize_file(file)
-                return NormalizeFileResult(
+                result = NormalizeFileResult(
                     file_id=file.id,
                     file_path=file.file_path,
                     status=file.status,
                     artifact_id=getattr(artifact, "id", None),
                     error=file.error_message,
                 )
+                self._emit_file_processed(result, index=index, total=total)
+                return result
         except Exception as exc:
-            return self._mark_failed(file, str(exc))
+            result = self._mark_failed(file, str(exc))
+            self._emit_file_processed(result, index=index, total=total)
+            return result
 
-    def _mark_unsupported(self, file: DatasetFile) -> NormalizeFileResult:
+    def _mark_unsupported(self, file: DatasetFile, *, index: int, total: int) -> NormalizeFileResult:
         try:
             with self.session.begin_nested():
                 self.file_repository.mark_file_status(file, "UNSUPPORTED_FORMAT")
-                return NormalizeFileResult(
+                result = NormalizeFileResult(
                     file_id=file.id,
                     file_path=file.file_path,
                     status=file.status,
                     error=file.error_message,
                 )
+                self._emit_file_processed(result, index=index, total=total)
+                return result
         except Exception as exc:
-            return NormalizeFileResult(
+            result = NormalizeFileResult(
                 file_id=getattr(file, "id", None),
                 file_path=getattr(file, "file_path", ""),
                 status="FAILED",
                 error=str(exc),
             )
+            self._emit_file_processed(result, index=index, total=total)
+            return result
 
     def _mark_failed(self, file: DatasetFile, error_message: str) -> NormalizeFileResult:
         try:
@@ -256,6 +283,28 @@ class NormalizeFormatRunner:
                 status="FAILED",
                 error=f"{error_message}; failed to mark status: {exc}",
             )
+
+    def _emit_file_processed(
+        self,
+        result: NormalizeFileResult,
+        *,
+        index: int,
+        total: int,
+    ) -> None:
+        self._emit(
+            "file_processed",
+            current=index,
+            total=total,
+            file_id=result.file_id,
+            file_path=result.file_path,
+            status=result.status,
+            artifact_id=result.artifact_id,
+            error=result.error,
+        )
+
+    def _emit(self, event: str, **payload: Any) -> None:
+        if self.progress_callback is not None:
+            self.progress_callback(event, payload)
 
 
 def _validate_request(request: NormalizeFormatRequest) -> None:
@@ -337,13 +386,16 @@ class NormalizeAllRunner:
         session: Session,
         *,
         service_factories: Mapping[str, ServiceFactory] | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         """Initialize the runner with an externally managed transaction."""
         self.session = session
         self.file_repository = DatasetFileRepository(session)
+        self.progress_callback = progress_callback
         self.format_runner = NormalizeFormatRunner(
             session,
             service_factories=service_factories,
+            progress_callback=progress_callback,
         )
         self.format_runner.file_repository = self.file_repository
 
@@ -368,12 +420,35 @@ class NormalizeAllRunner:
                 source_format=group["source_format"],
                 limit=group_limit,
             )
+            self._emit(
+                "group_started",
+                branch=request.branch,
+                role=group["role"],
+                source_format=group["source_format"],
+                files_count=group["files_count"],
+                group_limit=group_limit,
+            )
             format_result = self.format_runner.normalize_format(format_request)
             group_result = _format_to_group_result(format_result)
             group_results.append(group_result)
+            self._emit(
+                "group_finished",
+                branch=request.branch,
+                role=group_result.role,
+                source_format=group_result.source_format,
+                selected=group_result.selected,
+                parsed=group_result.parsed,
+                partially_parsed=group_result.partially_parsed,
+                failed=group_result.failed,
+                skipped=group_result.skipped,
+            )
             if remaining is not None:
                 remaining -= group_result.selected
         return _build_all_result(request=request, groups=tuple(group_results))
+
+    def _emit(self, event: str, **payload: Any) -> None:
+        if self.progress_callback is not None:
+            self.progress_callback(event, payload)
 
 
 def _validate_all_request(request: NormalizeAllRequest) -> None:

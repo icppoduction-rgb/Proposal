@@ -151,7 +151,22 @@ python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
 REGISTERED, CHANGED, DISCOVERED
 ```
 
-Эти statuses не меняются:
+Для повторного запуска файлов после исправления parser/writer используйте явный recovery-режим:
+
+```powershell
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --apply
+```
+
+Recovery-режим переводит обратно в `READY_FOR_PARSING` только:
+
+```text
+FAILED, SKIPPED, PARTIALLY_PARSED
+```
+
+`PARSED` файлы не изменяются. Команда пишет EN/RU отчеты в `reports/{en,ru}/stage-two/status/`.
+
+Эти statuses не меняются в default mark-ready mode:
 
 ```text
 EMPTY_FILE, FAILED, PARSED, PARTIALLY_PARSED, SKIPPED
@@ -172,6 +187,8 @@ python manage.py stage-two normalize-format host:TRAIN:auth.log:100
 
 Output содержит selected/processed/normalized counts, parser name/class, per-file status и artifact id, если artifact создан.
 
+`PARTIAL_SUCCESS` означает, что batch завершился, но часть выбранных файлов failed/skipped/unsupported. Успешные файлы сохраняют `PARSED` и `normalized_artifacts`; проблемные файлы после исправления причины можно вернуть через `mark-ready --retry-failed`.
+
 ### 8. Normalize branch
 
 ```powershell
@@ -186,6 +203,8 @@ python manage.py stage-two normalize-all host:1000
 ```
 
 `normalize-all` выбирает только `READY_FOR_PARSING` files и группирует работу по `role` и `source_format`.
+
+`normalize-format`, `normalize-all` и большие `mark-ready` запуски показывают Rich progress bar, если `rich` доступен. В non-interactive режиме финальный summary и traceback сохраняются.
 
 ### 9. Checks
 
@@ -236,6 +255,7 @@ Catalog smoke и CLI smoke используют synthetic files и откаты�
 ## Production safety notes
 
 - Не редактировать raw datasets, чтобы parser "заработал".
+- Mixed `raw_fields_json`, `metadata_json`, `features_json` и другие `*_json` payloads сериализуются перед Parquet write, чтобы PyArrow не выводил нестабильные nested types.
 - Не использовать `EXPERIMENTS` в Stage Two командах; рабочие роли: `TRAIN`, `VALIDATION`, `TEST`.
 - Не хранить raw packet payloads, BSON streams или full raw logs в PostgreSQL metadata.
 - Не переводить целые branches в ready без просмотра `parser-coverage`.

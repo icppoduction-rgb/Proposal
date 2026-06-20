@@ -40,7 +40,7 @@ from scripts.stage_two.normalization.runner import (
     NormalizeFormatRunner,
 )
 from scripts.stage_two.parser_coverage import ParserCoverageResult, run_parser_coverage
-from scripts.stage_two.status_tools import MarkReadyRequest, MarkReadyService
+from scripts.stage_two.status_tools import MarkReadyRequest, MarkReadyService, save_mark_ready_reports
 
 
 console = Console()
@@ -309,8 +309,22 @@ def _parser_coverage(args: Sequence[str]) -> None:
 
 def _mark_ready(args: Sequence[str]) -> None:
     request = _parse_mark_ready_args(args)
-    with session_scope() as session:
-        result = MarkReadyService(session).mark_ready(request)
+    if Progress is None:
+        with session_scope() as session:
+            result = MarkReadyService(session).mark_ready(request)
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            callback = _mark_ready_progress_callback(progress, request)
+            with session_scope() as session:
+                result = MarkReadyService(session, progress_callback=callback).mark_ready(request)
+    result = save_mark_ready_reports(result)
     console.print(
         {
             "service": "stage-two mark-ready",
@@ -321,8 +335,21 @@ def _mark_ready(args: Sequence[str]) -> None:
 
 def _normalize_format(args: Sequence[str]) -> None:
     request = _parse_normalize_format_args(args)
-    with session_scope() as session:
-        result = NormalizeFormatRunner(session).normalize_format(request)
+    if Progress is None:
+        with session_scope() as session:
+            result = NormalizeFormatRunner(session).normalize_format(request)
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            callback = _normalize_progress_callback(progress)
+            with session_scope() as session:
+                result = NormalizeFormatRunner(session, progress_callback=callback).normalize_format(request)
     console.print(
         {
             "service": "stage-two normalize-format",
@@ -333,8 +360,21 @@ def _normalize_format(args: Sequence[str]) -> None:
 
 def _normalize_all(args: Sequence[str]) -> None:
     request = _parse_normalize_all_args(args)
-    with session_scope() as session:
-        result = NormalizeAllRunner(session).normalize_all(request)
+    if Progress is None:
+        with session_scope() as session:
+            result = NormalizeAllRunner(session).normalize_all(request)
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            callback = _normalize_progress_callback(progress)
+            with session_scope() as session:
+                result = NormalizeAllRunner(session, progress_callback=callback).normalize_all(request)
     console.print(
         {
             "service": "stage-two normalize-all",
@@ -462,6 +502,74 @@ def _command_args(action: str | None, extra_args: Sequence[str] | None) -> list[
     return args
 
 
+def _mark_ready_progress_callback(progress: Any, request: MarkReadyRequest) -> Callable[[str, dict[str, Any]], None]:
+    task_id: int | None = None
+
+    def callback(event: str, payload: dict[str, Any]) -> None:
+        nonlocal task_id
+        if event not in {"file_seen", "file_marked_ready"}:
+            return
+        total = max(int(payload.get("total") or 1), 1)
+        if task_id is None:
+            mode = "retry failed" if request.retry_failed else "mark ready"
+            task_id = progress.add_task(
+                f"{mode}: {request.branch}/{request.role}/{request.source_format}",
+                total=total,
+            )
+        progress.update(task_id, completed=int(payload.get("current") or 0), total=total)
+
+    return callback
+
+
+def _normalize_progress_callback(progress: Any) -> Callable[[str, dict[str, Any]], None]:
+    task_id: int | None = None
+    counters = {"parsed": 0, "partial": 0, "failed": 0, "skipped": 0}
+
+    def callback(event: str, payload: dict[str, Any]) -> None:
+        nonlocal task_id
+        if event == "group_started":
+            description = (
+                f"group: {payload.get('branch')}/{payload.get('role')}/"
+                f"{payload.get('source_format')}"
+            )
+            progress.add_task(description, total=1, completed=1)
+            return
+        if event == "batch_started":
+            total = max(int(payload.get("total") or 1), 1)
+            task_id = progress.add_task(
+                (
+                    f"normalize: {payload.get('branch')}/{payload.get('role')}/"
+                    f"{payload.get('source_format')}"
+                ),
+                total=total,
+            )
+            counters.update({"parsed": 0, "partial": 0, "failed": 0, "skipped": 0})
+            return
+        if event != "file_processed" or task_id is None:
+            return
+        status = str(payload.get("status") or "")
+        if status == "PARSED":
+            counters["parsed"] += 1
+        elif status == "PARTIALLY_PARSED":
+            counters["partial"] += 1
+        elif status == "FAILED":
+            counters["failed"] += 1
+        elif status in {"SKIPPED", "UNSUPPORTED_FORMAT"}:
+            counters["skipped"] += 1
+        description = (
+            f"normalize parsed={counters['parsed']} partial={counters['partial']} "
+            f"failed={counters['failed']} skipped={counters['skipped']}"
+        )
+        progress.update(
+            task_id,
+            description=description,
+            completed=int(payload.get("current") or 0),
+            total=max(int(payload.get("total") or 1), 1),
+        )
+
+    return callback
+
+
 def _run_no_arg(service: str, args: Sequence[str], handler: Callable[[], None]) -> None:
     _require_no_args(service, args)
     handler()
@@ -502,6 +610,7 @@ def _parse_mark_ready_args(args: Sequence[str]) -> MarkReadyRequest:
     values: dict[str, str] = {}
     apply_changes = False
     explicit_dry_run = False
+    retry_failed = False
     index = 0
     while index < len(args):
         arg = args[index]
@@ -513,6 +622,10 @@ def _parse_mark_ready_args(args: Sequence[str]) -> MarkReadyRequest:
             explicit_dry_run = True
             index += 1
             continue
+        if arg == "--retry-failed":
+            retry_failed = True
+            index += 1
+            continue
         if arg in {"--branch", "--role", "--format"}:
             if index + 1 >= len(args) or args[index + 1].startswith("--"):
                 raise ValueError(f"mark-ready requires a value for {arg}")
@@ -520,7 +633,7 @@ def _parse_mark_ready_args(args: Sequence[str]) -> MarkReadyRequest:
             index += 2
             continue
         raise ValueError(
-            "mark-ready accepts --branch, --role, --format, --dry-run, --apply "
+            "mark-ready accepts --branch, --role, --format, --dry-run, --apply, --retry-failed "
             "or fallback action:branch:role:format"
         )
 
@@ -536,6 +649,7 @@ def _parse_mark_ready_args(args: Sequence[str]) -> MarkReadyRequest:
         role=values["--role"],
         source_format=values["--format"],
         apply_changes=apply_changes,
+        retry_failed=retry_failed,
     )
 
 
@@ -556,6 +670,7 @@ def _parse_mark_ready_fallback(token: str) -> MarkReadyRequest:
         role=role,
         source_format=source_format,
         apply_changes=apply_changes,
+        retry_failed=False,
     )
 
 
@@ -565,6 +680,7 @@ def _build_mark_ready_request(
     role: str,
     source_format: str,
     apply_changes: bool,
+    retry_failed: bool = False,
 ) -> MarkReadyRequest:
     normalized_branch = branch.strip().lower()
     normalized_role = role.strip().upper()
@@ -582,6 +698,7 @@ def _build_mark_ready_request(
         role=normalized_role,
         source_format=normalized_format,
         apply_changes=apply_changes,
+        retry_failed=retry_failed,
     )
 
 

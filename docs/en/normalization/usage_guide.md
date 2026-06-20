@@ -151,7 +151,22 @@ Only these statuses are promoted to `READY_FOR_PARSING`:
 REGISTERED, CHANGED, DISCOVERED
 ```
 
-These statuses are not changed without explicit future force logic:
+To retry files that failed after a parser or writer fix, use the explicit recovery mode:
+
+```powershell
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --apply
+```
+
+Recovery mode only moves these statuses back to `READY_FOR_PARSING`:
+
+```text
+FAILED, SKIPPED, PARTIALLY_PARSED
+```
+
+It does not touch `PARSED` files. `mark-ready` writes EN/RU reports under `reports/{en,ru}/stage-two/status/`.
+
+These statuses are not changed by the default mark-ready mode:
 
 ```text
 EMPTY_FILE, FAILED, PARSED, PARTIALLY_PARSED, SKIPPED
@@ -172,6 +187,8 @@ python manage.py stage-two normalize-format host:TRAIN:auth.log:100
 
 Expected output includes selected/processed/normalized counts, parser name/class, per-file status, and artifact id when an artifact is created.
 
+`PARTIAL_SUCCESS` means the batch completed but at least one selected file failed, was skipped, or had no active parser. Successfully parsed files keep their `PARSED` status and `normalized_artifacts`; failed files can be retried with `mark-ready --retry-failed` after the underlying parser/writer issue is fixed.
+
 ### 8. Normalize A Branch
 
 ```powershell
@@ -186,6 +203,8 @@ python manage.py stage-two normalize-all host:1000
 ```
 
 `normalize-all` queries only `READY_FOR_PARSING` files and groups work by `role` and `source_format`.
+
+`normalize-format`, `normalize-all`, and large `mark-ready` runs display a Rich progress bar when Rich is available. Non-interactive runs still print the final JSON-like summary and preserve normal exception output.
 
 ### 9. Run Checks
 
@@ -236,6 +255,7 @@ Do not run these smoke scripts with `python scripts/stage_two/*.py`; use the mod
 ## Production Safety Notes
 
 - Do not edit raw datasets to make parsing easier.
+- Mixed `raw_fields_json`, `metadata_json`, `features_json`, and other `*_json` payloads are serialized before Parquet writes so PyArrow does not infer unstable nested types.
 - Do not use `EXPERIMENTS` in Stage Two commands; supported processing roles are `TRAIN`, `VALIDATION`, and `TEST`.
 - Do not store raw packet payloads, BSON streams, or full raw logs in PostgreSQL metadata.
 - Do not mark whole branches ready without reviewing `parser-coverage`.

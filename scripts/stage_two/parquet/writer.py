@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,9 @@ from config import (
 )
 from scripts.db.models import FeatureArtifact, ModelReadyArtifact, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository
+
+
+JSON_FIELD_SUFFIX = "_json"
 
 
 @dataclass(frozen=True)
@@ -184,9 +188,16 @@ class ParquetArtifactWriter:
         rows: list[dict[str, Any]],
         columns: list[str] | None,
     ) -> list[dict[str, Any]]:
-        if columns is None:
-            return rows
-        return [{column: row.get(column) for column in columns} for row in rows]
+        selected_rows = rows if columns is None else [
+            {column: row.get(column) for column in columns} for row in rows
+        ]
+        return [
+            {
+                column: _normalize_parquet_value(column, value)
+                for column, value in row.items()
+            }
+            for row in selected_rows
+        ]
 
     @staticmethod
     def _part_file_name(run_id: str | int | None) -> str:
@@ -202,3 +213,36 @@ class ParquetArtifactWriter:
             for chunk in iter(lambda: file.read(1024 * 1024), b""):
                 digest.update(chunk)
         return digest.hexdigest()
+
+
+def _normalize_parquet_value(column: str, value: Any) -> Any:
+    """Return a PyArrow-safe scalar for values with potentially mixed nested types."""
+    if value is None:
+        return None
+    if column.endswith(JSON_FIELD_SUFFIX):
+        return _json_string(value)
+    return value
+
+
+def _json_string(value: Any) -> str:
+    """Serialize JSON-like values deterministically before Arrow type inference."""
+    if isinstance(value, str):
+        return value
+    return json.dumps(_json_safe_value(value), ensure_ascii=False, sort_keys=True)
+
+
+def _json_safe_value(value: Any) -> Any:
+    """Convert nested values to JSON-serializable data without dropping raw content."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, bytes):
+        return value.hex()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)

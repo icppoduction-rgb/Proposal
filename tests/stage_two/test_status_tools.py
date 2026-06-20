@@ -66,6 +66,26 @@ class MarkReadyCliTest(unittest.TestCase):
 
         self.assertTrue(request.apply_changes)
 
+    def test_parse_mark_ready_retry_failed_flag(self) -> None:
+        request = _parse_mark_ready_args(
+            [
+                "--branch",
+                "dns",
+                "--role",
+                "TRAIN",
+                "--format",
+                "csv",
+                "--retry-failed",
+                "--dry-run",
+            ]
+        )
+
+        self.assertEqual(request.branch, "dns")
+        self.assertEqual(request.role, "TRAIN")
+        self.assertEqual(request.source_format, "csv")
+        self.assertTrue(request.retry_failed)
+        self.assertFalse(request.apply_changes)
+
     def test_parse_mark_ready_fallback(self) -> None:
         request = _parse_mark_ready_args(["apply:host:TRAIN:auth.log"])
 
@@ -170,6 +190,41 @@ class MarkReadyServiceTest(unittest.TestCase):
         self.assertEqual(result.eligible, 0)
         self.assertEqual(result.updated, 0)
         self.assertEqual(result.skipped_by_status, {"FAILED": 1})
+
+    def test_retry_failed_updates_only_failed_skipped_and_partial_files(self) -> None:
+        session = _FakeSession()
+        files = [
+            _file("FAILED"),
+            _file("SKIPPED"),
+            _file("PARTIALLY_PARSED"),
+            _file("PARSED"),
+            _file("REGISTERED"),
+        ]
+        service = _service(session, files, parser=_FakeParser())
+
+        result = service.mark_ready(
+            MarkReadyRequest(
+                branch="host",
+                role="TRAIN",
+                source_format="auth.log",
+                apply_changes=True,
+                retry_failed=True,
+            )
+        )
+
+        self.assertEqual(
+            [file.status for file in files],
+            [
+                "READY_FOR_PARSING",
+                "READY_FOR_PARSING",
+                "READY_FOR_PARSING",
+                "PARSED",
+                "REGISTERED",
+            ],
+        )
+        self.assertEqual(result.updated, 3)
+        self.assertTrue(result.retry_failed)
+        self.assertEqual(session.flush_count, 1)
 
 
 def _request(*, apply_changes: bool) -> MarkReadyRequest:
