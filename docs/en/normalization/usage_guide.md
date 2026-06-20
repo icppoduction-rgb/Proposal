@@ -118,6 +118,31 @@ Important `action` values:
 | --- | --- |
 | `ready_for_normalization` | Catalog files exist and an active parser is available. |
 | `parser_available_empty_bucket` | No files currently exist, but registry coverage exists. |
+
+## Large-File Normalization Options
+
+Use these options for large PCAP/PCAPNG/CAP, CSV, JSONL, log, NetFlow, XML, and BSON batches:
+
+```powershell
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
+python manage.py stage-two normalize-all --branch host --limit 1000 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --resume
+```
+
+Supported tuning flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--workers` | Number of file-level worker processes. Use processes, not threads, for CPU-bound parsing. |
+| `--batch-size` | Parser batch size before the service writes rows to Parquet. |
+| `--max-output-part-rows` | Maximum rows in one normalized Parquet part. |
+| `--resume` | Reuse the latest resumable `parser_run` and skip already registered part indexes. |
+| `--packet-mode` | Packet capture parsing mode: `packet-summary`, `dns-only`, or `sample`. |
+| `--sample-size` | Packet limit for `--packet-mode sample`. |
+| `--hash-output-artifacts` | Re-enable output Parquet SHA-256 hashing. It is off by default to avoid rereading large outputs. |
+
+The runner never mixes `TRAIN`, `VALIDATION`, and `TEST`: `normalize-format` handles exactly one `branch/role/source_format`, and `normalize-all` processes one branch grouped by role and source format.
+
+Performance counters are stored in `parser_runs.metadata_json.performance`: input size MB, rows/packets read, emitted events, parse/write/catalog time, throughput rates, peak memory, and output part count. Each normalized part stores `metadata_json.part_index` and a checkpoint snapshot so lineage remains `raw -> normalized -> features -> model-ready`.
 | `add_parser_registry_entry` | Catalog has a format not represented in registry. |
 | `implement_parser_class` | Registry points to a class that cannot be imported. |
 | `activate_parser_registry_entry` | Registry row exists but is inactive. |

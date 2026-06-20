@@ -66,6 +66,42 @@ class ParserRepository(BaseRepository[ParserRegistry]):
         self.session.flush()
         return run
 
+    def get_latest_resumable_parser_run(
+        self,
+        *,
+        file: DatasetFile,
+        parser_name: str,
+        parser_version: str,
+        schema_version: SchemaVersion | None = None,
+    ) -> ParserRun | None:
+        """Return the latest non-success parser run that can be resumed."""
+        statement = (
+            select(ParserRun)
+            .where(
+                ParserRun.file_id == file.id,
+                ParserRun.parser_name == parser_name,
+                ParserRun.parser_version == parser_version,
+                ParserRun.status.in_(("RUNNING", "FAILED", "PARTIAL_SUCCESS")),
+            )
+            .order_by(ParserRun.id.desc())
+            .limit(1)
+        )
+        if schema_version is not None:
+            statement = statement.where(ParserRun.schema_version_id == schema_version.id)
+        return self.session.execute(statement).scalar_one_or_none()
+
+    def resume_parser_run(self, run: ParserRun, metadata_json: dict[str, Any] | None = None) -> ParserRun:
+        """Mark an existing parser run as RUNNING before appending missing parts."""
+        run.status = "RUNNING"
+        run.finished_at = None
+        run.error_message = None
+        if metadata_json is not None:
+            current_metadata = dict(run.metadata_json or {})
+            current_metadata.update(metadata_json)
+            run.metadata_json = current_metadata
+        self.session.flush()
+        return run
+
     def finish_parser_run(
         self,
         run: ParserRun,
@@ -79,6 +115,7 @@ class ParserRepository(BaseRepository[ParserRegistry]):
         warning_count: int | None = None,
         error_message: str | None = None,
         report_path: str | None = None,
+        metadata_json: dict[str, Any] | None = None,
     ) -> ParserRun:
         """Mark a parser run as finished without committing."""
         run.status = status
@@ -92,6 +129,10 @@ class ParserRepository(BaseRepository[ParserRegistry]):
             run.warning_count = warning_count
         run.error_message = error_message
         run.report_path = report_path
+        if metadata_json is not None:
+            current_metadata = dict(run.metadata_json or {})
+            current_metadata.update(metadata_json)
+            run.metadata_json = current_metadata
         self.session.flush()
         return run
 

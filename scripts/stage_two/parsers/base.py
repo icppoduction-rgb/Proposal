@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from config import STAGE_TWO_MAX_ERROR_SAMPLES
+from config import STAGE_TWO_DEFAULT_BATCH_SIZE, STAGE_TWO_MAX_ERROR_SAMPLES
 from scripts.stage_two.parsers.common import build_normalized_event
 
 
@@ -320,6 +321,35 @@ class BaseParser(ABC):
     @abstractmethod
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse one raw file and return normalized events."""
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Return bounded output batches for parsers without a streaming implementation."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        result = self.parse(path, context)
+        if not result.events:
+            yield result
+            return
+        for start in range(0, len(result.events), batch_size):
+            events = result.events[start : start + batch_size]
+            yield ParserResult(
+                rows_read=result.rows_read if start == 0 else 0,
+                rows_parsed=len(events),
+                rows_failed=result.rows_failed if start == 0 else 0,
+                events=events,
+                warnings=result.warnings if start == 0 else [],
+                bytes_read=result.bytes_read,
+                files_read=result.files_read if start == 0 else 0,
+                error_samples=result.error_samples if start == 0 else [],
+                parse_errors_count=result.parse_errors_count if start == 0 else 0,
+            )
 
     def validate_result(self, result: ParserResult) -> None:
         """Validate that emitted events contain required normalized fields."""

@@ -45,6 +45,7 @@ python manage.py stage-two normalize-host 10
 - [Normalized event schema](normalized_event_schema.md): canonical normalized event contract.
 - [Storage architecture](storage_architecture.md): storage roots and generated artifact paths.
 - [Parquet and DuckDB artifacts](parquet_duckdb_artifacts.md): Parquet writer and DuckDB checks.
+- [Performance tuning](performance_tuning.md): workers, batch size, part artifacts, resume, and metrics.
 - [Data quality checks](data_quality_checks.md): quality/readiness checks and reports.
 - [Data leakage prevention](data_leakage_prevention.md): label and split safety rules.
 - [Final Codex summary template](final_summary_template.md): final task summary format and staged validation commands.

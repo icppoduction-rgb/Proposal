@@ -19,6 +19,7 @@ Stage One produces analysis and sorted-path JSON artifacts and prepares the filt
 - [Router architecture](router-architecture.md): `manage.py`, module/service/action routing, and CLI argument behavior.
 - [Stage One architecture](stage-one-architecture.md): handler pipeline, sorted JSON outputs, and Stage One boundaries.
 - [Stage Two architecture](stage-two-architecture.md): catalog, parser registry, normalization, reports, and checks.
+- [Stage Two performance](stage-two-performance.md): process workers, bounded parts, resume, and metrics.
 - [DB architecture](db-architecture.md): SQLAlchemy, Alembic, repositories, and catalog tables.
 - [Pipeline artifacts and contracts](pipeline-artifacts-and-contracts.md): JSON, schema, Parquet, report, and catalog artifacts.
 - [Extension points and risks](extension-points-and-risks.md): safe ways to extend parsers and known technical debt.

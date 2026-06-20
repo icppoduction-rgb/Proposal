@@ -81,6 +81,19 @@ DNS and Host services follow the same pattern:
 8. Update parser run/file statuses.
 9. Save parser reports in RU/EN paths.
 
+Large-file execution adds these constraints:
+
+- parser output is consumed through `parse_batches`;
+- Parquet output is split into bounded parts controlled by `max_output_part_rows`;
+- packet captures use streaming PCAP/PCAPNG readers and do not concatenate packet bytes into memory;
+- output artifact hashing is disabled by default because rereading multi-GB Parquet parts is a separate bottleneck;
+- per-file performance metrics are stored in `parser_runs.metadata_json.performance`;
+- normalized part metadata stores `part_index`, `batch_index`, row counts, and checkpoint counters.
+
+`--workers` uses `ProcessPoolExecutor` at file granularity. Each worker opens its own database session, normalizes one cataloged file, and commits independently. This avoids threads for CPU-bound parsing and preserves branch/role/source_format scoping.
+
+`--resume` reuses the latest non-success parser run for the same file/parser/schema, then skips normalized artifact parts whose `metadata_json.part_index` is already registered. Existing parts remain linked to the same parser run, so traceability is preserved.
+
 ## Batch Runners
 
 `NormalizeFormatRunner`:
@@ -90,6 +103,7 @@ DNS and Host services follow the same pattern:
 - selects catalog rows from `PATH_FOLDER_DATASETS_FILTER` unless exact file ids are supplied;
 - wraps each file in a nested transaction;
 - continues on file-level errors.
+- can process files in parallel with `--workers`.
 
 `NormalizeAllRunner`:
 
@@ -98,6 +112,7 @@ DNS and Host services follow the same pattern:
 - uses only active roles: TRAIN, VALIDATION, TEST;
 - respects an overall limit;
 - delegates each group to `NormalizeFormatRunner`.
+- forwards `--workers`, `--batch-size`, `--max-output-part-rows`, `--resume`, and packet parsing options to each group.
 
 ## Reports
 

@@ -18,6 +18,7 @@ from config import (
     PARQUET_MODEL_READY_RELATIVE,
     PARQUET_NORMALIZED_RELATIVE,
     PATH_DATA_STORAGE,
+    STAGE_TWO_HASH_OUTPUT_ARTIFACTS,
 )
 from scripts.db.models import FeatureArtifact, ModelReadyArtifact, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository
@@ -40,13 +41,20 @@ class ParquetWriteResult:
 class ParquetArtifactWriter:
     """Write Stage Two generated artifacts to partitioned Parquet paths."""
 
-    def __init__(self, storage_root: str | Path | None = None, *, compression: str = "zstd") -> None:
+    def __init__(
+        self,
+        storage_root: str | Path | None = None,
+        *,
+        compression: str = "zstd",
+        hash_outputs: bool = STAGE_TWO_HASH_OUTPUT_ARTIFACTS,
+    ) -> None:
         """Initialize the writer with PATH_DATA_STORAGE or an explicit storage root."""
         root = Path(storage_root or PATH_DATA_STORAGE).expanduser()
         if not str(root).strip():
             raise ValueError("PATH_DATA_STORAGE must be configured for Parquet writes.")
         self.storage_root = root
         self.compression = compression
+        self.hash_outputs = hash_outputs
 
     def write_normalized(
         self,
@@ -180,7 +188,7 @@ class ParquetArtifactWriter:
             relative_path=relative_path.as_posix(),
             row_count=len(normalized_rows),
             file_size_bytes=absolute_path.stat().st_size,
-            content_hash_sha256=self._sha256(absolute_path),
+            content_hash_sha256=self._sha256(absolute_path) if self.hash_outputs else "",
         )
 
     @staticmethod

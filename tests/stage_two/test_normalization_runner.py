@@ -142,6 +142,17 @@ class NormalizeFormatCliTest(unittest.TestCase):
                 "auth.log",
                 "--limit",
                 "100",
+                "--workers",
+                "4",
+                "--batch-size",
+                "1000",
+                "--max-output-part-rows",
+                "2500",
+                "--packet-mode",
+                "dns-only",
+                "--sample-size",
+                "50",
+                "--resume",
             ]
         )
 
@@ -152,6 +163,12 @@ class NormalizeFormatCliTest(unittest.TestCase):
                 role="TRAIN",
                 source_format="auth.log",
                 limit=100,
+                workers=4,
+                batch_size=1000,
+                max_output_part_rows=2500,
+                resume=True,
+                packet_mode="dns-only",
+                sample_size=50,
             ),
         )
 
@@ -166,9 +183,39 @@ class NormalizeFormatCliTest(unittest.TestCase):
 
 class NormalizeAllCliTest(unittest.TestCase):
     def test_parse_normalize_all_flags(self) -> None:
-        request = _parse_normalize_all_args(["--branch", "HOST", "--limit", "10"])
+        request = _parse_normalize_all_args(
+            [
+                "--branch",
+                "HOST",
+                "--limit",
+                "10",
+                "--workers",
+                "2",
+                "--batch-size",
+                "500",
+                "--max-output-part-rows",
+                "1000",
+                "--packet-mode",
+                "sample",
+                "--sample-size",
+                "25",
+                "--resume",
+            ]
+        )
 
-        self.assertEqual(request, NormalizeAllRequest(branch="host", limit=10))
+        self.assertEqual(
+            request,
+            NormalizeAllRequest(
+                branch="host",
+                limit=10,
+                workers=2,
+                batch_size=500,
+                max_output_part_rows=1000,
+                resume=True,
+                packet_mode="sample",
+                sample_size=25,
+            ),
+        )
 
     def test_parse_normalize_all_fallback(self) -> None:
         request = _parse_normalize_all_args(["dns:1000"])

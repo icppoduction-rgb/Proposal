@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Iterator
 
-from config import STAGE_TWO_PACKET_BATCH_SIZE
+from config import STAGE_TWO_PACKET_BATCH_SIZE, STAGE_TWO_PACKET_PARSE_MODE
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
 from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
 from scripts.stage_two.parsers.input_reader import InputReaderError, UniversalInputReader
@@ -116,10 +116,14 @@ class PacketCaptureParser(BaseParser):
         context: ParserContext,
         *,
         batch_size: int = STAGE_TWO_PACKET_BATCH_SIZE,
+        packet_mode: str = STAGE_TWO_PACKET_PARSE_MODE,
+        sample_size: int | None = None,
+        **_: Any,
     ) -> Iterator[ParserResult]:
         """Parse packet capture records as bounded batches of normalized events."""
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
+        normalized_mode = _normalize_packet_mode(packet_mode)
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
@@ -131,6 +135,8 @@ class PacketCaptureParser(BaseParser):
                 rows_read += 1
                 try:
                     summary = _summarize_packet(record)
+                    if normalized_mode == "dns-only" and not _is_dns_summary(summary):
+                        continue
                     events.append(self._record_to_event(record, summary, index, context))
                 except Exception as exc:
                     rows_failed += 1
@@ -154,6 +160,9 @@ class PacketCaptureParser(BaseParser):
                     rows_failed = 0
                     warnings = []
                     error_samples = []
+                if normalized_mode == "sample" and sample_size is not None and rows_read >= sample_size:
+                    warnings.append(f"sample_mode_limit_reached={sample_size}")
+                    break
         except (InputReaderError, ValueError) as exc:
             raise ValueError(f"failed to read packet capture: {_exception_message(exc)}") from exc
 
@@ -652,6 +661,13 @@ def _is_dns_summary(summary: PacketSummary) -> bool:
 def _event_uid(context: ParserContext, index: int, entity_id: Any) -> str:
     raw = f"{context.source_file_path}:{index}:{entity_id or ''}".encode("utf-8", errors="replace")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _normalize_packet_mode(value: str | None) -> str:
+    mode = (value or "packet-summary").strip().lower()
+    if mode not in {"packet-summary", "dns-only", "sample"}:
+        raise ValueError("packet_mode must be one of: packet-summary, dns-only, sample")
+    return mode
 
 
 def _read_exact(stream: BinaryIO, size: int, error_message: str) -> bytes:

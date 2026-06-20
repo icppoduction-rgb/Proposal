@@ -25,7 +25,13 @@ except ModuleNotFoundError:
         def print(self, value: object) -> None:
             print(value)
 
-from config import manage_commands
+from config import (
+    STAGE_TWO_DEFAULT_BATCH_SIZE,
+    STAGE_TWO_DEFAULT_WORKERS,
+    STAGE_TWO_MAX_OUTPUT_PART_ROWS,
+    STAGE_TWO_PACKET_PARSE_MODE,
+    manage_commands,
+)
 from scripts.db import session_scope
 from scripts.db.models.constants import (
     ACTIVE_CATALOG_SOURCE_GROUP,
@@ -707,17 +713,34 @@ def _parse_normalize_format_args(args: Sequence[str]) -> NormalizeFormatRequest:
         return _parse_normalize_format_fallback(args[0])
 
     values: dict[str, str] = {}
+    flags: set[str] = set()
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg in {"--branch", "--role", "--format", "--limit"}:
+        if arg in {
+            "--branch",
+            "--role",
+            "--format",
+            "--limit",
+            "--workers",
+            "--batch-size",
+            "--max-output-part-rows",
+            "--packet-mode",
+            "--sample-size",
+        }:
             if index + 1 >= len(args) or args[index + 1].startswith("--"):
                 raise ValueError(f"normalize-format requires a value for {arg}")
             values[arg] = args[index + 1]
             index += 2
             continue
+        if arg in {"--resume", "--hash-output-artifacts"}:
+            flags.add(arg)
+            index += 1
+            continue
         raise ValueError(
-            "normalize-format accepts --branch, --role, --format, --limit "
+            "normalize-format accepts --branch, --role, --format, --limit, --workers, "
+            "--batch-size, --max-output-part-rows, --resume, --packet-mode, --sample-size, "
+            "--hash-output-artifacts "
             "or fallback branch:role:format:limit"
         )
 
@@ -730,6 +753,13 @@ def _parse_normalize_format_args(args: Sequence[str]) -> NormalizeFormatRequest:
         role=values["--role"],
         source_format=values["--format"],
         limit=values.get("--limit"),
+        workers=values.get("--workers"),
+        batch_size=values.get("--batch-size"),
+        max_output_part_rows=values.get("--max-output-part-rows"),
+        resume="--resume" in flags,
+        packet_mode=values.get("--packet-mode"),
+        sample_size=values.get("--sample-size"),
+        hash_outputs="--hash-output-artifacts" in flags,
     )
 
 
@@ -753,6 +783,13 @@ def _build_normalize_format_request(
     role: str,
     source_format: str,
     limit: str | None,
+    workers: str | None = None,
+    batch_size: str | None = None,
+    max_output_part_rows: str | None = None,
+    resume: bool = False,
+    packet_mode: str | None = None,
+    sample_size: str | None = None,
+    hash_outputs: bool = False,
 ) -> NormalizeFormatRequest:
     normalized_branch = branch.strip().lower()
     normalized_role = role.strip().upper()
@@ -770,6 +807,26 @@ def _build_normalize_format_request(
         role=normalized_role,
         source_format=normalized_format,
         limit=parsed_limit,
+        workers=(
+            _parse_positive_int(workers, field_name="workers", service="normalize-format")
+            or STAGE_TWO_DEFAULT_WORKERS
+        ),
+        batch_size=(
+            _parse_positive_int(batch_size, field_name="batch-size", service="normalize-format")
+            or STAGE_TWO_DEFAULT_BATCH_SIZE
+        ),
+        max_output_part_rows=(
+            _parse_positive_int(
+                max_output_part_rows,
+                field_name="max-output-part-rows",
+                service="normalize-format",
+            )
+            or STAGE_TWO_MAX_OUTPUT_PART_ROWS
+        ),
+        resume=resume,
+        packet_mode=(packet_mode.strip() if packet_mode else STAGE_TWO_PACKET_PARSE_MODE),
+        sample_size=_parse_positive_int(sample_size, field_name="sample-size", service="normalize-format"),
+        hash_outputs=hash_outputs,
     )
 
 
@@ -782,21 +839,47 @@ def _parse_normalize_format_limit(limit: str | None) -> int | None:
     raise ValueError("normalize-format limit must be a non-negative integer")
 
 
+def _parse_positive_int(value: str | None, *, field_name: str, service: str) -> int | None:
+    if value is None or not value.strip():
+        return None
+    normalized_value = value.strip()
+    if normalized_value.isdecimal() and int(normalized_value) > 0:
+        return int(normalized_value)
+    raise ValueError(f"{service} {field_name} must be a positive integer")
+
+
 def _parse_normalize_all_args(args: Sequence[str]) -> NormalizeAllRequest:
     if len(args) == 1 and ":" in args[0] and not args[0].startswith("--"):
         return _parse_normalize_all_fallback(args[0])
 
     values: dict[str, str] = {}
+    flags: set[str] = set()
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg in {"--branch", "--limit"}:
+        if arg in {
+            "--branch",
+            "--limit",
+            "--workers",
+            "--batch-size",
+            "--max-output-part-rows",
+            "--packet-mode",
+            "--sample-size",
+        }:
             if index + 1 >= len(args) or args[index + 1].startswith("--"):
                 raise ValueError(f"normalize-all requires a value for {arg}")
             values[arg] = args[index + 1]
             index += 2
             continue
-        raise ValueError("normalize-all accepts --branch, --limit or fallback branch:limit")
+        if arg in {"--resume", "--hash-output-artifacts"}:
+            flags.add(arg)
+            index += 1
+            continue
+        raise ValueError(
+            "normalize-all accepts --branch, --limit, --workers, --batch-size, "
+            "--max-output-part-rows, --resume, --packet-mode, --sample-size, "
+            "--hash-output-artifacts or fallback branch:limit"
+        )
 
     if "--branch" not in values:
         raise ValueError("normalize-all missing required argument: --branch")
@@ -804,6 +887,13 @@ def _parse_normalize_all_args(args: Sequence[str]) -> NormalizeAllRequest:
     return _build_normalize_all_request(
         branch=values["--branch"],
         limit=values.get("--limit"),
+        workers=values.get("--workers"),
+        batch_size=values.get("--batch-size"),
+        max_output_part_rows=values.get("--max-output-part-rows"),
+        resume="--resume" in flags,
+        packet_mode=values.get("--packet-mode"),
+        sample_size=values.get("--sample-size"),
+        hash_outputs="--hash-output-artifacts" in flags,
     )
 
 
@@ -816,12 +906,46 @@ def _parse_normalize_all_fallback(token: str) -> NormalizeAllRequest:
     return _build_normalize_all_request(branch=branch, limit=limit)
 
 
-def _build_normalize_all_request(*, branch: str, limit: str | None) -> NormalizeAllRequest:
+def _build_normalize_all_request(
+    *,
+    branch: str,
+    limit: str | None,
+    workers: str | None = None,
+    batch_size: str | None = None,
+    max_output_part_rows: str | None = None,
+    resume: bool = False,
+    packet_mode: str | None = None,
+    sample_size: str | None = None,
+    hash_outputs: bool = False,
+) -> NormalizeAllRequest:
     normalized_branch = branch.strip().lower()
     parsed_limit = _parse_normalize_all_limit(limit)
     if normalized_branch not in {"dns", "host"}:
         raise ValueError("normalize-all branch must be one of: dns, host")
-    return NormalizeAllRequest(branch=normalized_branch, limit=parsed_limit)
+    return NormalizeAllRequest(
+        branch=normalized_branch,
+        limit=parsed_limit,
+        workers=(
+            _parse_positive_int(workers, field_name="workers", service="normalize-all")
+            or STAGE_TWO_DEFAULT_WORKERS
+        ),
+        batch_size=(
+            _parse_positive_int(batch_size, field_name="batch-size", service="normalize-all")
+            or STAGE_TWO_DEFAULT_BATCH_SIZE
+        ),
+        max_output_part_rows=(
+            _parse_positive_int(
+                max_output_part_rows,
+                field_name="max-output-part-rows",
+                service="normalize-all",
+            )
+            or STAGE_TWO_MAX_OUTPUT_PART_ROWS
+        ),
+        resume=resume,
+        packet_mode=(packet_mode.strip() if packet_mode else STAGE_TWO_PACKET_PARSE_MODE),
+        sample_size=_parse_positive_int(sample_size, field_name="sample-size", service="normalize-all"),
+        hash_outputs=hash_outputs,
+    )
 
 
 def _parse_normalize_all_limit(limit: str | None) -> int | None:

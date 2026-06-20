@@ -12,6 +12,7 @@ from scripts.stage_two.normalization.runner import (
     NormalizeFormatResult,
     NormalizeFormatRunner,
 )
+from scripts.stage_two.normalization.options import NormalizationOptions
 from scripts.stage_two.normalization.schema_contracts import (
     NormalizedSchemaContract,
     NormalizedSchemaRegistry,
@@ -29,6 +30,7 @@ __all__ = [
     "NormalizeFormatRequest",
     "NormalizeFormatResult",
     "NormalizeFormatRunner",
+    "NormalizationOptions",
     "NormalizedSchemaContract",
     "NormalizedSchemaRegistry",
     "register_default_normalized_schema",

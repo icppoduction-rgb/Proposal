@@ -524,3 +524,14 @@ HOST:
 - TRAIN: cap, netflow_day, pcapng, wls_day
 - VALIDATION: auth.log, cpu.log, diskio.log, filesystem.log, fsstat.log, ghc, info, journal, journal~, json-1, load.log, log, log-1, log-2, log-3, mail-info-1, mail-warn-1, mainlog, mainlog-1, mainlog-2, mainlog-3, memory.log, messages, messages-1, netflow_ids, network.log, process.log, process.summary.log, sc, service.log, socket.summary.log, syslog, syslog-1, syslog-2, syslog-3, syslog-4, syslog.log, uptime.log, xml
 - TEST: auth.log, cpu.log, diskio.log, filesystem.log, fsstat.log, ghc, info, journal, journal~, json-1, load.log, log-1, log-2, log-3, mail-info-1, mail-warn-1, mainlog, mainlog-1, mainlog-2, mainlog-3, memory.log, messages, messages-1, netflow_ids, network.log, process.log, process.summary.log, sc, service.log, socket.summary.log, syslog, syslog-1, syslog-2, syslog-3, syslog-4, syslog.log, uptime.log, xml
+Large-file performance flags (recommended for PCAP/PCAPNG/CAP and large text formats):
+
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
+python manage.py stage-two normalize-all --branch host --limit 1000 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --resume
+
+Notes:
+- --workers uses ProcessPoolExecutor at file level; CPU-bound parsing does not use threads.
+- --batch-size controls parser batches; --max-output-part-rows controls Parquet part size.
+- --packet-mode accepts packet-summary, dns-only, sample; use --sample-size with sample.
+- --resume reuses a resumable parser_run and skips registered part_index values.
+- Output Parquet hashing is disabled by default; use --hash-output-artifacts only when needed.

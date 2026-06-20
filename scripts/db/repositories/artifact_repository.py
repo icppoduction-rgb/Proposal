@@ -20,6 +20,15 @@ class ArtifactRepository(BaseRepository[NormalizedArtifact]):
         artifact = NormalizedArtifact(**values)
         return self.add(artifact)
 
+    def get_normalized_artifacts_for_run(self, parser_run_id: int) -> list[NormalizedArtifact]:
+        """Return normalized artifacts already registered for a parser run."""
+        statement = (
+            select(NormalizedArtifact)
+            .where(NormalizedArtifact.parser_run_id == parser_run_id)
+            .order_by(NormalizedArtifact.id.asc())
+        )
+        return list(self.session.execute(statement).scalars())
+
     def register_feature_artifact(self, **values: Any) -> FeatureArtifact:
         """Register a feature artifact without committing."""
         artifact = FeatureArtifact(**values)
