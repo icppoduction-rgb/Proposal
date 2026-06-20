@@ -1,0 +1,479 @@
+Команды Stage Two для DNS/HOST по parser_active.txt
+=========================================================================
+
+Исходный файл:
+C:\Users\fmark\OneDrive\Desktop\Заметки\parser_active.txt
+
+Что включено в список:
+- Включены только строки, где action = ready_for_normalization и files_count > 0.
+- Строки parser_available_empty_bucket не включены в рабочие команды, потому что сейчас в catalog нет файлов для этой связки branch/role/format.
+- Рабочие роли Stage Two: TRAIN, VALIDATION, TEST.
+- EXPERIMENTS в Stage Two не используется.
+- Все команды нужно выполнять из корня репозитория:
+  C:\Users\Public\PythonProjects\Proposal
+
+Общая последовательность
+------------------------
+
+0. Подготовительные команды выполняются один раз перед нормализацией, если они еще не выполнялись:
+
+python manage.py stage-two bootstrap-storage
+python manage.py stage-two alembic upgrade head
+python manage.py stage-two alembic current
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two catalog-ingest
+
+1. Проверить покрытие parser registry и catalog:
+
+python manage.py stage-two parser-coverage
+
+2. Дальше для каждой связки branch/role/format выполнять строго три команды подряд:
+
+   2.1. mark-ready --dry-run
+        Проверяет, сколько файлов будет выбрано. Ничего не меняет в БД.
+
+   2.2. mark-ready --apply
+        Переводит выбранные файлы в READY_FOR_PARSING.
+        Выполнять только если dry-run показал ожидаемые selected/eligible и нет ошибок.
+
+   2.3. normalize-format
+        Нормализует выбранный формат в Parquet artifacts.
+        --limit 100 означает максимум 100 файлов catalog dataset_files за один запуск, не 100 строк внутри CSV/логов.
+
+3. Рекомендуемый порядок:
+
+   3.1. Сначала DNS: он меньше и проще для проверки.
+   3.2. Затем HOST небольшие форматы.
+   3.3. HOST ghc, txt, bson, json, log запускать ближе к концу, потому что там много файлов.
+   3.4. Не смешивать роли: TRAIN, VALIDATION, TEST выполняются отдельными командами.
+
+4. Массовую нормализацию запускать только после точечной проверки отдельных форматов:
+
+python manage.py stage-two normalize-all --branch dns --limit 1000
+python manage.py stage-two normalize-all --branch host --limit 1000
+
+5. После нормализации выполнить проверки:
+
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+
+DNS: что найдено в parser_active.txt
+------------------------------------
+
+Готовые DNS связки:
+- TRAIN: csv=8, pcap=4, pcap.csv=14
+- VALIDATION: pcap=5, txt=3
+- TEST: csv=1
+
+DNS TRAIN csv
+
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100
+
+DNS TRAIN pcap
+
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap --apply
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100
+
+DNS TRAIN pcap.csv
+
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap.csv --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap.csv --apply
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap.csv --limit 100
+
+DNS VALIDATION pcap
+
+python manage.py stage-two mark-ready --branch dns --role VALIDATION --format pcap --dry-run
+python manage.py stage-two mark-ready --branch dns --role VALIDATION --format pcap --apply
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format pcap --limit 100
+
+DNS VALIDATION txt
+
+python manage.py stage-two mark-ready --branch dns --role VALIDATION --format txt --dry-run
+python manage.py stage-two mark-ready --branch dns --role VALIDATION --format txt --apply
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format txt --limit 100
+
+DNS TEST csv
+
+python manage.py stage-two mark-ready --branch dns --role TEST --format csv --dry-run
+python manage.py stage-two mark-ready --branch dns --role TEST --format csv --apply
+python manage.py stage-two normalize-format --branch dns --role TEST --format csv --limit 100
+
+
+HOST: что найдено в parser_active.txt
+-------------------------------------
+
+Готовые HOST связки:
+- TRAIN: auth.log=23, cpu.log=13, csv=101, diskio.log=12, filesystem.log=12, fsstat.log=12, ghc=56158, info=3, journal=17, journal~=1, json=219, json-1=1, load.log=12, log=98, log-1=32, log-2=9, log-3=8, mail-info-1=3, mail-warn-1=2, mainlog=3, mainlog-1=3, mainlog-2=3, mainlog-3=3, memory.log=12, messages=3, messages-1=3, netflow_ids=50, network.log=12, pcap=15, process.log=2, process.summary.log=12, sc=210, service.log=12, socket.summary.log=12, syslog=9, syslog-1=10, syslog-2=10, syslog-3=10, syslog-4=1, syslog.log=12, txt=3170, uptime.log=12, xml=40
+- VALIDATION: cap=42, csv=6, json=112, netflow_day=2, pcap=1, pcapng=5, txt=6495, wls_day=3
+- TEST: bson=9005, csv=3, json=7069, log=4086, netflow_day=2, txt=274419, wls_day=3
+
+HOST TRAIN auth.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+
+HOST TRAIN cpu.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format cpu.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format cpu.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format cpu.log --limit 100
+
+HOST TRAIN csv
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format csv --limit 100
+
+HOST TRAIN diskio.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format diskio.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format diskio.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format diskio.log --limit 100
+
+HOST TRAIN filesystem.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format filesystem.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format filesystem.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format filesystem.log --limit 100
+
+HOST TRAIN fsstat.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format fsstat.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format fsstat.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format fsstat.log --limit 100
+
+HOST TRAIN ghc
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format ghc --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format ghc --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format ghc --limit 100
+
+HOST TRAIN info
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format info --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format info --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format info --limit 100
+
+HOST TRAIN journal
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format journal --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format journal --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format journal --limit 100
+
+HOST TRAIN journal~
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format journal~ --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format journal~ --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format journal~ --limit 100
+
+HOST TRAIN json
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format json --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format json --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format json --limit 100
+
+HOST TRAIN json-1
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format json-1 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format json-1 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format json-1 --limit 100
+
+HOST TRAIN load.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format load.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format load.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format load.log --limit 100
+
+HOST TRAIN log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log --limit 100
+
+HOST TRAIN log-1
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log-1 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log-1 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log-1 --limit 100
+
+HOST TRAIN log-2
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log-2 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log-2 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log-2 --limit 100
+
+HOST TRAIN log-3
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log-3 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format log-3 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log-3 --limit 100
+
+HOST TRAIN mail-info-1
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-info-1 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-info-1 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mail-info-1 --limit 100
+
+HOST TRAIN mail-warn-1
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-warn-1 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-warn-1 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mail-warn-1 --limit 100
+
+HOST TRAIN mainlog
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog --limit 100
+
+HOST TRAIN mainlog-1
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-1 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-1 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-1 --limit 100
+
+HOST TRAIN mainlog-2
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-2 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-2 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-2 --limit 100
+
+HOST TRAIN mainlog-3
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-3 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-3 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-3 --limit 100
+
+HOST TRAIN memory.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format memory.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format memory.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format memory.log --limit 100
+
+HOST TRAIN messages
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format messages --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format messages --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format messages --limit 100
+
+HOST TRAIN messages-1
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format messages-1 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format messages-1 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format messages-1 --limit 100
+
+HOST TRAIN netflow_ids
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format netflow_ids --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format netflow_ids --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format netflow_ids --limit 100
+
+HOST TRAIN network.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format network.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format network.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format network.log --limit 100
+
+HOST TRAIN pcap
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format pcap --limit 100
+
+HOST TRAIN process.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format process.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format process.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format process.log --limit 100
+
+HOST TRAIN process.summary.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format process.summary.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format process.summary.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format process.summary.log --limit 100
+
+HOST TRAIN sc
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format sc --limit 100
+
+HOST TRAIN service.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format service.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format service.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format service.log --limit 100
+
+HOST TRAIN socket.summary.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format socket.summary.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format socket.summary.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format socket.summary.log --limit 100
+
+HOST TRAIN syslog
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog --limit 100
+
+HOST TRAIN syslog-1
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-1 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-1 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-1 --limit 100
+
+HOST TRAIN syslog-2
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-2 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-2 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-2 --limit 100
+
+HOST TRAIN syslog-3
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-3 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-3 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-3 --limit 100
+
+HOST TRAIN syslog-4
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-4 --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-4 --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-4 --limit 100
+
+HOST TRAIN syslog.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog.log --limit 100
+
+HOST TRAIN txt
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format txt --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format txt --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format txt --limit 100
+
+HOST TRAIN uptime.log
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format uptime.log --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format uptime.log --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format uptime.log --limit 100
+
+HOST TRAIN xml
+
+python manage.py stage-two mark-ready --branch host --role TRAIN --format xml --dry-run
+python manage.py stage-two mark-ready --branch host --role TRAIN --format xml --apply
+python manage.py stage-two normalize-format --branch host --role TRAIN --format xml --limit 100
+
+
+HOST VALIDATION cap
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format cap --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format cap --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format cap --limit 100
+
+HOST VALIDATION csv
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format csv --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format csv --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format csv --limit 100
+
+HOST VALIDATION json
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format json --limit 100
+
+HOST VALIDATION netflow_day
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 100
+
+HOST VALIDATION pcap
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcap --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcap --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcap --limit 100
+
+HOST VALIDATION pcapng
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcapng --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcapng --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcapng --limit 100
+
+HOST VALIDATION txt
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format txt --limit 100
+
+HOST VALIDATION wls_day
+
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --apply
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 100
+
+
+HOST TEST bson
+
+python manage.py stage-two mark-ready --branch host --role TEST --format bson --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format bson --apply
+python manage.py stage-two normalize-format --branch host --role TEST --format bson --limit 100
+
+HOST TEST csv
+
+python manage.py stage-two mark-ready --branch host --role TEST --format csv --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format csv --apply
+python manage.py stage-two normalize-format --branch host --role TEST --format csv --limit 100
+
+HOST TEST json
+
+python manage.py stage-two mark-ready --branch host --role TEST --format json --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format json --apply
+python manage.py stage-two normalize-format --branch host --role TEST --format json --limit 100
+
+HOST TEST log
+
+python manage.py stage-two mark-ready --branch host --role TEST --format log --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format log --apply
+python manage.py stage-two normalize-format --branch host --role TEST --format log --limit 100
+
+HOST TEST netflow_day
+
+python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --apply
+python manage.py stage-two normalize-format --branch host --role TEST --format netflow_day --limit 100
+
+HOST TEST txt
+
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --apply
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 100
+
+HOST TEST wls_day
+
+python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --apply
+python manage.py stage-two normalize-format --branch host --role TEST --format wls_day --limit 100
+
+
+Пустые связки, которые не включены в рабочие команды
+---------------------------------------------------
+
+У этих строк parser_active=yes, но files_count=0 в parser_active.txt, поэтому команды для них специально не сгенерированы:
+
+DNS:
+- TRAIN: cap, pcapng
+- VALIDATION: cap, csv, pcap.csv, pcapng
+- TEST: cap, pcap, pcap.csv, pcapng
+
+HOST:
+- TRAIN: cap, netflow_day, pcapng, wls_day
+- VALIDATION: auth.log, cpu.log, diskio.log, filesystem.log, fsstat.log, ghc, info, journal, journal~, json-1, load.log, log, log-1, log-2, log-3, mail-info-1, mail-warn-1, mainlog, mainlog-1, mainlog-2, mainlog-3, memory.log, messages, messages-1, netflow_ids, network.log, process.log, process.summary.log, sc, service.log, socket.summary.log, syslog, syslog-1, syslog-2, syslog-3, syslog-4, syslog.log, uptime.log, xml
+- TEST: auth.log, cpu.log, diskio.log, filesystem.log, fsstat.log, ghc, info, journal, journal~, json-1, load.log, log-1, log-2, log-3, mail-info-1, mail-warn-1, mainlog, mainlog-1, mainlog-2, mainlog-3, memory.log, messages, messages-1, netflow_ids, network.log, process.log, process.summary.log, sc, service.log, socket.summary.log, syslog, syslog-1, syslog-2, syslog-3, syslog-4, syslog.log, uptime.log, xml
