@@ -217,6 +217,31 @@ class DnsCsvParserTest(unittest.TestCase):
         self.assertEqual(event["metadata_json"]["FQDN_count"], 24)
         self.assertEqual(event["metadata_json"]["entropy"], 2.054028744215725)
 
+    def test_pcap_csv_longest_word_inf_values_are_preserved_as_text(self) -> None:
+        path = _write_temp_csv(
+            self,
+            "timestamp,FQDN_count,subdomain_length,upper,lower,numeric,entropy,special,"
+            "labels,labels_max,labels_average,longest_word,sld,len,subdomain\n"
+            "2020-11-21 15:21:53.137447,11,0,0,10,0,2.8177111123931664,1,"
+            "2,8,5,inf,stroyinf,9,0\n"
+            "2020-11-21 16:01:20.561322,20,0,0,17,0,2.8791128889461546,3,"
+            "3,14,6,infinity,infinity-agent,15,0\n",
+            file_name="stateless_features-light_benign.pcap.csv",
+        )
+
+        result = DnsPcapCsvParser(UnlabeledResolver()).parse(
+            path,
+            _context(path, source_format="pcap.csv"),
+        )
+
+        self.assertEqual(result.rows_read, 2)
+        self.assertEqual(result.rows_parsed, 2)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.events[0]["metadata_json"]["longest_word"], "inf")
+        self.assertEqual(result.events[1]["metadata_json"]["longest_word"], "infinity")
+        self.assertEqual(result.events[0]["metadata_json"]["len"], 9)
+        self.assertEqual(result.events[1]["metadata_json"]["len"], 15)
+
     def test_pcap_csv_whole_file_base64_is_read_through_universal_reader(self) -> None:
         csv_text = (
             "frame.time_epoch,ip.src,ip.dst,udp.srcport,udp.dstport,_ws.col.Protocol,dns.qry.name,dns.qry.type\n"

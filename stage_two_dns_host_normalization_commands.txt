@@ -62,7 +62,7 @@ python -m scripts.db.smoke_check
 
 python manage.py stage-two mark-ready --branch <branch> --role <role> --format <format> --retry-failed --dry-run
 python manage.py stage-two mark-ready --branch <branch> --role <role> --format <format> --retry-failed --apply
-python manage.py stage-two normalize-format --branch <branch> --role <role> --format <format> --limit 100
+python manage.py stage-two normalize-format --branch <branch> --role <role> --format <format> --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
    В retry-режиме mark-ready выбирает только FAILED, SKIPPED и PARTIALLY_PARSED.
    Это штатный сценарий восстановления после частичной нормализации.
@@ -83,8 +83,8 @@ reports/ru/stage-two/status/mark_ready_<branch>_<role>_<format>_<initial|retry_f
 
 4. Массовую нормализацию запускать только после точечной проверки отдельных форматов:
 
-python manage.py stage-two normalize-all --branch dns --limit 1000
-python manage.py stage-two normalize-all --branch host --limit 1000
+python manage.py stage-two normalize-all --branch dns --limit 1000 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
+python manage.py stage-two normalize-all --branch host --limit 1000 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 5. После нормализации выполнить проверки:
 
@@ -101,20 +101,21 @@ DNS: что найдено в parser_active.txt
 - VALIDATION: pcap=5, txt=3
 - TEST: csv=1
 
+# ============================= Выполнено 
 DNS TRAIN csv
 
 Если это первый запуск или файлы еще в REGISTERED/CHANGED/DISCOVERED:
 
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 Если ранее был результат PARTIAL_SUCCESS с failed=4 для файлов CSV_benign.csv,
 CSV_malware.csv, CSV_phishing.csv, CSV_spam.csv, использовать retry-поток:
 
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --apply
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 Ожидаемо после исправления writer/parquet: 8 selected, 8 processed, 8 normalized,
 0 failed. Если снова будет PARTIAL_SUCCESS, смотреть error по каждому file_id
@@ -124,31 +125,32 @@ DNS TRAIN pcap
 
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap --apply
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
 
 DNS TRAIN pcap.csv
 
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap.csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format pcap.csv --apply
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap.csv --limit 100
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap.csv --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 DNS VALIDATION pcap
 
 python manage.py stage-two mark-ready --branch dns --role VALIDATION --format pcap --dry-run
 python manage.py stage-two mark-ready --branch dns --role VALIDATION --format pcap --apply
-python manage.py stage-two normalize-format --branch dns --role VALIDATION --format pcap --limit 100
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format pcap --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
 
 DNS VALIDATION txt
 
 python manage.py stage-two mark-ready --branch dns --role VALIDATION --format txt --dry-run
 python manage.py stage-two mark-ready --branch dns --role VALIDATION --format txt --apply
-python manage.py stage-two normalize-format --branch dns --role VALIDATION --format txt --limit 100
+python manage.py stage-two normalize-format --branch dns --role VALIDATION --format txt --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
+# ============================= Выполнено до
 
 DNS TEST csv
 
 python manage.py stage-two mark-ready --branch dns --role TEST --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TEST --format csv --apply
-python manage.py stage-two normalize-format --branch dns --role TEST --format csv --limit 100
+python manage.py stage-two normalize-format --branch dns --role TEST --format csv --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 
 HOST: что найдено в parser_active.txt
@@ -163,351 +165,351 @@ HOST TRAIN auth.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN cpu.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format cpu.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format cpu.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format cpu.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format cpu.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN csv
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format csv --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format csv --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN diskio.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format diskio.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format diskio.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format diskio.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format diskio.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN filesystem.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format filesystem.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format filesystem.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format filesystem.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format filesystem.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN fsstat.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format fsstat.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format fsstat.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format fsstat.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format fsstat.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN ghc
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format ghc --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format ghc --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format ghc --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format ghc --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN info
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format info --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format info --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format info --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format info --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN journal
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format journal --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format journal --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format journal --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format journal --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN journal~
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format journal~ --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format journal~ --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format journal~ --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format journal~ --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN json
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format json --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format json --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format json --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format json --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN json-1
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format json-1 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format json-1 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format json-1 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format json-1 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN load.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format load.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format load.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format load.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format load.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN log-1
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log-1 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log-1 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format log-1 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log-1 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN log-2
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log-2 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log-2 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format log-2 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log-2 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN log-3
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log-3 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format log-3 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format log-3 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format log-3 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN mail-info-1
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-info-1 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-info-1 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format mail-info-1 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mail-info-1 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN mail-warn-1
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-warn-1 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mail-warn-1 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format mail-warn-1 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mail-warn-1 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN mainlog
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN mainlog-1
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-1 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-1 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-1 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-1 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN mainlog-2
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-2 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-2 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-2 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-2 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN mainlog-3
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-3 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format mainlog-3 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-3 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format mainlog-3 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN memory.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format memory.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format memory.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format memory.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format memory.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN messages
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format messages --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format messages --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format messages --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format messages --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN messages-1
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format messages-1 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format messages-1 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format messages-1 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format messages-1 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN netflow_ids
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format netflow_ids --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format netflow_ids --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format netflow_ids --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format netflow_ids --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN network.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format network.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format network.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format network.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format network.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN pcap
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format pcap --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format pcap --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN process.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format process.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format process.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format process.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format process.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN process.summary.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format process.summary.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format process.summary.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format process.summary.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format process.summary.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN sc
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format sc --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format sc --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN service.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format service.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format service.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format service.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format service.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN socket.summary.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format socket.summary.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format socket.summary.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format socket.summary.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format socket.summary.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN syslog
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN syslog-1
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-1 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-1 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-1 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-1 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN syslog-2
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-2 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-2 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-2 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-2 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN syslog-3
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-3 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-3 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-3 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-3 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN syslog-4
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-4 --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog-4 --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-4 --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog-4 --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN syslog.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format syslog.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format syslog.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN txt
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format txt --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format txt --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format txt --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format txt --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN uptime.log
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format uptime.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format uptime.log --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format uptime.log --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format uptime.log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN xml
 
 python manage.py stage-two mark-ready --branch host --role TRAIN --format xml --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format xml --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format xml --limit 100
+python manage.py stage-two normalize-format --branch host --role TRAIN --format xml --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 
 HOST VALIDATION cap
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format cap --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format cap --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format cap --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format cap --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION csv
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format csv --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format csv --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format csv --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format csv --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION json
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format json --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format json --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION netflow_day
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION pcap
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcap --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcap --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcap --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcap --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION pcapng
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcapng --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcapng --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcapng --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcapng --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION txt
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format txt --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format txt --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION wls_day
 
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 100
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 
 HOST TEST bson
 
 python manage.py stage-two mark-ready --branch host --role TEST --format bson --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format bson --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format bson --limit 100
+python manage.py stage-two normalize-format --branch host --role TEST --format bson --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TEST csv
 
 python manage.py stage-two mark-ready --branch host --role TEST --format csv --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format csv --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format csv --limit 100
+python manage.py stage-two normalize-format --branch host --role TEST --format csv --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TEST json
 
 python manage.py stage-two mark-ready --branch host --role TEST --format json --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format json --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format json --limit 100
+python manage.py stage-two normalize-format --branch host --role TEST --format json --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TEST log
 
 python manage.py stage-two mark-ready --branch host --role TEST --format log --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format log --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format log --limit 100
+python manage.py stage-two normalize-format --branch host --role TEST --format log --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TEST netflow_day
 
 python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format netflow_day --limit 100
+python manage.py stage-two normalize-format --branch host --role TEST --format netflow_day --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TEST txt
 
 python manage.py stage-two mark-ready --branch host --role TEST --format txt --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format txt --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 100
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TEST wls_day
 
 python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format wls_day --limit 100
+python manage.py stage-two normalize-format --branch host --role TEST --format wls_day --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 
 Пустые связки, которые не включены в рабочие команды
@@ -526,8 +528,8 @@ HOST:
 - TEST: auth.log, cpu.log, diskio.log, filesystem.log, fsstat.log, ghc, info, journal, journal~, json-1, load.log, log-1, log-2, log-3, mail-info-1, mail-warn-1, mainlog, mainlog-1, mainlog-2, mainlog-3, memory.log, messages, messages-1, netflow_ids, network.log, process.log, process.summary.log, sc, service.log, socket.summary.log, syslog, syslog-1, syslog-2, syslog-3, syslog-4, syslog.log, uptime.log, xml
 Large-file performance flags (recommended for PCAP/PCAPNG/CAP and large text formats):
 
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
-python manage.py stage-two normalize-all --branch host --limit 1000 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --resume
+python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
+python manage.py stage-two normalize-all --branch host --limit 1000 --workers 2 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 Notes:
 - --workers uses ProcessPoolExecutor at file level; CPU-bound parsing does not use threads.

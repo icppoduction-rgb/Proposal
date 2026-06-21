@@ -788,7 +788,6 @@ def _metadata_value(field: str, value: Any) -> Any:
         "special",
         "labels",
         "labels_max",
-        "longest_word",
         "len",
         "subdomain",
         "rr_count",
