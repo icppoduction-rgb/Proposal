@@ -5,13 +5,14 @@ from __future__ import annotations
 import hashlib
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import STAGE_TWO_MAX_RAW_PREVIEW_BYTES
+from config import STAGE_TWO_DEFAULT_BATCH_SIZE, STAGE_TWO_MAX_RAW_PREVIEW_BYTES
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
-from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult, collect_parser_batches
 from scripts.stage_two.parsers.common import merge_json_objects
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.parsers.json_utils import compact_json_row
@@ -134,6 +135,27 @@ class HostXmlParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse one XML file into normalized host events."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse event-like XML nodes as bounded batches."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if not _may_contain_event_nodes(path):
+            yield from _chunk_xml_result(self._parse_materialized_xml(path, context), batch_size=batch_size)
+            return
+
+        yield from self._parse_event_nodes_streaming(path, context, batch_size=batch_size)
+
+    def _parse_materialized_xml(self, path: str | Path, context: ParserContext) -> ParserResult:
+        """Parse XML with the original DOM-based strategy for fallback compatibility."""
         reader = UniversalInputReader(path)
         xml_parser = ET.XMLParser(target=ET.TreeBuilder())
         lines_seen = 0
@@ -238,6 +260,155 @@ class HostXmlParser(BaseParser):
         self.validate_result(result)
         return result
 
+    def _parse_event_nodes_streaming(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int,
+    ) -> Iterator[ParserResult]:
+        reader = UniversalInputReader(path)
+        xml_parser = ET.XMLPullParser(events=("start", "end"))
+        lines_seen = 0
+        unsafe_error: str | None = None
+        parse_error: str | None = None
+        unsafe_probe_tail = ""
+        root: ET.Element | None = None
+        root_tag: str | None = None
+        emitted_event_nodes = False
+        events: list[dict[str, Any]] = []
+        rows_read = 0
+        rows_failed = 0
+        error_samples: list[str] = []
+        event_index = 0
+
+        with reader.iter_lines(keepends=True, skip_empty=False) as lines:
+            for line_number, line in enumerate(lines, start=1):
+                if not line.strip():
+                    continue
+                lines_seen += 1
+                unsafe_probe = f"{unsafe_probe_tail}{line}"
+                if UNSAFE_XML_DECLARATION_RE.search(unsafe_probe):
+                    unsafe_error = f"line {line_number}: unsafe XML DTD/entity declaration rejected"
+                    break
+                unsafe_probe_tail = unsafe_probe[-128:]
+                try:
+                    xml_parser.feed(line)
+                except ET.ParseError as exc:
+                    parse_error = f"line {line_number}: XML parse error: {exc}"
+                    break
+                for event, node in xml_parser.read_events():
+                    if event == "start" and root is None:
+                        root = node
+                        root_tag = _local_name(node.tag)
+                        continue
+                    if event != "end" or _local_name(node.tag).lower() not in EVENT_NODE_NAMES:
+                        continue
+                    if node is root and emitted_event_nodes:
+                        node.clear()
+                        continue
+                    row = _flatten_event_node(node)
+                    row["_xml_root_tag"] = root_tag or _local_name(node.tag)
+                    row["_xml_event_tag"] = _local_name(node.tag)
+                    row["_xml_event_index"] = event_index
+                    rows_read += 1
+                    try:
+                        events.append(_xml_row_to_event(self, row, event_index, context))
+                    except Exception as exc:
+                        rows_failed += 1
+                        error_samples.append(_error_sample(row, exc))
+                    event_index += 1
+                    emitted_event_nodes = True
+                    if len(events) >= batch_size:
+                        result = ParserResult(
+                            rows_read=rows_read,
+                            rows_parsed=len(events),
+                            rows_failed=rows_failed,
+                            events=events,
+                            error_samples=error_samples,
+                        )
+                        self.validate_result(result)
+                        yield result
+                        events = []
+                        rows_read = 0
+                        rows_failed = 0
+                        error_samples = []
+                    node.clear()
+
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+        ]
+        if reader_metadata.base64_detected:
+            warnings.append("base64_detected=True")
+        if reader_metadata.compression_hint:
+            warnings.append(f"compression_hint={reader_metadata.compression_hint}")
+
+        if unsafe_error is not None:
+            warnings.append("unsafe_xml_rejected=True")
+            yield ParserResult(
+                rows_read=1,
+                rows_parsed=0,
+                rows_failed=1,
+                events=[],
+                warnings=warnings,
+                bytes_read=reader_metadata.bytes_read,
+                error_samples=[unsafe_error],
+            )
+            return
+        if parse_error is not None:
+            yield ParserResult(
+                rows_read=1,
+                rows_parsed=0,
+                rows_failed=1,
+                events=[],
+                warnings=warnings,
+                bytes_read=reader_metadata.bytes_read,
+                error_samples=[parse_error],
+            )
+            return
+        if lines_seen == 0:
+            yield ParserResult(
+                rows_read=0,
+                rows_parsed=0,
+                rows_failed=0,
+                events=[],
+                warnings=warnings,
+                bytes_read=reader_metadata.bytes_read,
+            )
+            return
+
+        try:
+            xml_parser.close()
+        except ET.ParseError as exc:
+            yield ParserResult(
+                rows_read=1,
+                rows_parsed=0,
+                rows_failed=1,
+                events=[],
+                warnings=warnings,
+                bytes_read=reader_metadata.bytes_read,
+                error_samples=[f"XML parse error: {exc}"],
+            )
+            return
+
+        if not emitted_event_nodes:
+            yield from _chunk_xml_result(self._parse_materialized_xml(path, context), batch_size=batch_size)
+            return
+
+        result = ParserResult(
+            rows_read=rows_read,
+            rows_parsed=len(events),
+            rows_failed=rows_failed,
+            events=events,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
+        )
+        self.validate_result(result)
+        yield result
+
 
 def _xml_row_to_event(
     parser: BaseParser,
@@ -299,6 +470,34 @@ def _event_nodes(root: ET.Element) -> list[ET.Element]:
     if len(structured_children) > 1:
         return structured_children
     return [root]
+
+
+def _may_contain_event_nodes(path: str | Path) -> bool:
+    try:
+        with Path(path).open("r", encoding="utf-8", errors="replace") as file:
+            preview = file.read(1024 * 1024).lower()
+    except OSError:
+        return False
+    return any(f"<{name}" in preview for name in EVENT_NODE_NAMES)
+
+
+def _chunk_xml_result(result: ParserResult, *, batch_size: int) -> Iterator[ParserResult]:
+    if not result.events:
+        yield result
+        return
+    for start in range(0, len(result.events), batch_size):
+        events = result.events[start : start + batch_size]
+        yield ParserResult(
+            rows_read=result.rows_read if start == 0 else 0,
+            rows_parsed=len(events),
+            rows_failed=result.rows_failed if start == 0 else 0,
+            events=events,
+            warnings=result.warnings if start == 0 else [],
+            bytes_read=result.bytes_read,
+            files_read=result.files_read if start == 0 else 0,
+            error_samples=result.error_samples if start == 0 else [],
+            parse_errors_count=result.parse_errors_count if start == 0 else 0,
+        )
 
 
 def _flatten_event_node(node: ET.Element) -> dict[str, Any]:

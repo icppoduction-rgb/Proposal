@@ -206,6 +206,51 @@ def limit_error_samples(
     return [str(sample) for sample in samples[:max_samples]]
 
 
+def collect_parser_batches(batches: Iterator[ParserResult]) -> ParserResult:
+    """Materialize parser batches for compatibility with the legacy parse() API."""
+    rows_read = 0
+    rows_parsed = 0
+    rows_failed = 0
+    events: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    error_samples: list[str] = []
+    bytes_read: int | None = None
+    files_read = 0
+    status_override: str | None = None
+    status_reason: str | None = None
+
+    for batch in batches:
+        rows_read += batch.rows_read
+        rows_parsed += batch.rows_parsed
+        rows_failed += batch.rows_failed
+        events.extend(batch.events)
+        warnings.extend(batch.warnings)
+        error_samples.extend(batch.error_samples)
+        files_read = max(files_read, batch.files_read)
+        if batch.bytes_read is not None:
+            bytes_read = batch.bytes_read
+        if batch.status_override is not None:
+            status_override = batch.status_override
+            status_reason = batch.status_reason
+
+    if events or rows_read > 0 or rows_failed > 0:
+        status_override = None
+        status_reason = None
+
+    return ParserResult(
+        rows_read=rows_read,
+        rows_parsed=rows_parsed,
+        rows_failed=rows_failed,
+        events=events,
+        warnings=warnings,
+        bytes_read=bytes_read,
+        files_read=max(files_read, 1),
+        error_samples=error_samples,
+        status_override=status_override,
+        status_reason=status_reason,
+    )
+
+
 def build_parser_counters(
     *,
     rows_read: int = 0,

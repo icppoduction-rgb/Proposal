@@ -6,13 +6,14 @@ import csv
 import hashlib
 import json
 import re
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import STAGE_TWO_MAX_RAW_PREVIEW_BYTES
+from config import STAGE_TWO_DEFAULT_BATCH_SIZE, STAGE_TWO_MAX_RAW_PREVIEW_BYTES
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, unlabeled
-from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult, collect_parser_batches
 from scripts.stage_two.parsers.common import (
     classify_helper_file,
     merge_json_objects,
@@ -158,6 +159,19 @@ class HostCsvParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse host CSV rows into normalized host events."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse host CSV rows as bounded batches."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         file_path = Path(path)
         helper_decision = classify_helper_file(file_path, source_format=context.source_format)
         events: list[dict[str, Any]] = []
@@ -176,6 +190,20 @@ class HostCsvParser(BaseParser):
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(row, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
 
         reader_metadata = reader.metadata_snapshot()
         warnings = [
@@ -213,7 +241,7 @@ class HostCsvParser(BaseParser):
             status_reason=status_reason,
         )
         self.validate_result(result)
-        return result
+        yield result
 
 
 class HostJsonLinesParser(BaseParser):
@@ -227,6 +255,98 @@ class HostJsonLinesParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse JSON-lines, JSON arrays, and single JSON host telemetry objects."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse JSON-lines as bounded batches; fallback for JSON arrays/objects."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if _looks_like_materialized_json_document(path):
+            yield from _chunk_materialized_result(
+                self._parse_materialized_json(path, context),
+                batch_size=batch_size,
+            )
+            return
+
+        events: list[dict[str, Any]] = []
+        rows_read = 0
+        rows_failed = 0
+        error_samples: list[str] = []
+        reader = UniversalInputReader(path)
+        with reader.iter_lines(keepends=True, skip_empty=False) as lines:
+            for line_number, line in enumerate(lines, start=1):
+                if not line.strip():
+                    continue
+                rows_read += 1
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    rows_failed += 1
+                    error_samples.append(f"json line {line_number}: {exc.msg}")
+                    continue
+                try:
+                    events.append(
+                        _host_json_record_to_event(
+                            self,
+                            record,
+                            line_number - 1,
+                            context,
+                            source_type="json_lines",
+                        )
+                    )
+                except Exception as exc:
+                    row = flatten_json_object(record)
+                    rows_failed += 1
+                    error_samples.append(_error_sample(row, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
+
+        reader_metadata = reader.metadata_snapshot()
+        warnings = [
+            *reader_metadata.warnings,
+            *(f"reader error: {error}" for error in reader_metadata.errors),
+        ]
+        if reader_metadata.base64_detected:
+            warnings.append("base64_detected=True")
+        status_override = None
+        status_reason = None
+        if rows_read == 0 and rows_failed == 0 and not events:
+            status_override = "EMPTY_FILE"
+            status_reason = "host JSON file has no readable JSON records"
+        result = ParserResult(
+            rows_read=rows_read,
+            rows_parsed=len(events),
+            rows_failed=rows_failed,
+            events=events,
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
+            status_override=status_override,
+            status_reason=status_reason,
+        )
+        self.validate_result(result)
+        yield result
+
+    def _parse_materialized_json(self, path: str | Path, context: ParserContext) -> ParserResult:
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
@@ -305,6 +425,46 @@ def _iter_host_json_records(content: str):
     yield 0, payload, "json_scalar", None
 
 
+def _looks_like_materialized_json_document(path: str | Path) -> bool:
+    non_empty_lines = 0
+    first_char: str | None = None
+    try:
+        with Path(path).open("r", encoding="utf-8", errors="replace") as file:
+            for line in file:
+                stripped = line.lstrip()
+                if not stripped:
+                    continue
+                non_empty_lines += 1
+                first_char = first_char or stripped[0]
+                if first_char == "[":
+                    return True
+                if non_empty_lines > 1:
+                    return False
+    except OSError:
+        return False
+    return first_char == "{" and non_empty_lines == 1
+
+
+def _chunk_materialized_result(result: ParserResult, *, batch_size: int) -> Iterator[ParserResult]:
+    if not result.events:
+        yield result
+        return
+    for start in range(0, len(result.events), batch_size):
+        events = result.events[start : start + batch_size]
+        batch = ParserResult(
+            rows_read=result.rows_read if start == 0 else 0,
+            rows_parsed=len(events),
+            rows_failed=result.rows_failed if start == 0 else 0,
+            events=events,
+            warnings=result.warnings if start == 0 else [],
+            bytes_read=result.bytes_read,
+            files_read=result.files_read if start == 0 else 0,
+            error_samples=result.error_samples if start == 0 else [],
+            parse_errors_count=result.parse_errors_count if start == 0 else 0,
+        )
+        yield batch
+
+
 def _host_json_record_to_event(
     parser: BaseParser,
     record: Any,
@@ -338,11 +498,31 @@ class HostLineLogParser(BaseParser):
         """Parse raw log lines into normalized host log events."""
         if context.source_format in HOST_METRIC_SOURCE_FORMATS:
             return HostMetricbeatParser(label_resolver=self.label_resolver).parse(path, context)
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse host log lines as bounded batches."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if context.source_format in HOST_METRIC_SOURCE_FORMATS:
+            yield from HostMetricbeatParser(label_resolver=self.label_resolver).parse_batches(
+                path,
+                context,
+                batch_size=batch_size,
+            )
+            return
 
         helper_decision = classify_helper_file(path, source_format=context.source_format)
         if helper_decision.is_helper and not helper_decision.emit_metadata_event:
             reason = helper_decision.reason or "helper file"
-            return ParserResult(
+            yield ParserResult(
                 rows_read=0,
                 rows_parsed=0,
                 rows_failed=0,
@@ -358,6 +538,7 @@ class HostLineLogParser(BaseParser):
                 status_override="SKIPPED",
                 status_reason=reason,
             )
+            return
 
         events: list[dict[str, Any]] = []
         rows_read = 0
@@ -383,6 +564,20 @@ class HostLineLogParser(BaseParser):
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(parsed.row, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
 
         reader_metadata = reader.metadata_snapshot()
         warnings = [
@@ -406,7 +601,7 @@ class HostLineLogParser(BaseParser):
             status_reason=status_reason,
         )
         self.validate_result(result)
-        return result
+        yield result
 
 
 def _host_line_record_to_event(
@@ -455,10 +650,23 @@ class HostSyscallTraceParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse syscall trace lines and preserve event_order through event_index."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse syscall/API trace lines as bounded batches."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         helper_decision = classify_helper_file(path, source_format=context.source_format)
         if helper_decision.is_helper and not helper_decision.emit_metadata_event:
             reason = helper_decision.reason or "helper file"
-            return ParserResult(
+            yield ParserResult(
                 rows_read=0,
                 rows_parsed=0,
                 rows_failed=0,
@@ -474,6 +682,7 @@ class HostSyscallTraceParser(BaseParser):
                 status_override="SKIPPED",
                 status_reason=reason,
             )
+            return
 
         events: list[dict[str, Any]] = []
         rows_read = 0
@@ -499,6 +708,20 @@ class HostSyscallTraceParser(BaseParser):
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(row, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
 
         reader_metadata = reader.metadata_snapshot()
         warnings = [
@@ -524,7 +747,7 @@ class HostSyscallTraceParser(BaseParser):
             status_reason=status_reason,
         )
         self.validate_result(result)
-        return result
+        yield result
 
 
 def _parse_syscall_trace_line(

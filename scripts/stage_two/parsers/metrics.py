@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from config import STAGE_TWO_DEFAULT_BATCH_SIZE
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
-from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult, collect_parser_batches
 from scripts.stage_two.parsers.common import merge_json_objects
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object
@@ -174,6 +176,19 @@ class HostMetricbeatParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse Metricbeat-like JSON-lines into normalized host metric events."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse Metricbeat-like JSON-lines as bounded batches."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
@@ -227,6 +242,20 @@ class HostMetricbeatParser(BaseParser):
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(row, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
 
         reader_metadata = reader.metadata_snapshot()
         warnings = [
@@ -248,7 +277,7 @@ class HostMetricbeatParser(BaseParser):
             error_samples=error_samples,
         )
         self.validate_result(result)
-        return result
+        yield result
 
 
 def _metric_event_from_point(

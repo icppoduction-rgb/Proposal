@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import csv
 import hashlib
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from config import STAGE_TWO_DEFAULT_BATCH_SIZE
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol, UnlabeledLabelResolver
-from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult, collect_parser_batches
 from scripts.stage_two.parsers.common import classify_helper_file, merge_json_objects, parser_report_warning
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
 
@@ -252,11 +254,24 @@ class DnsCsvParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse DNS CSV rows into normalized DNS events."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse DNS CSV rows as bounded batches of normalized DNS events."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         file_path = Path(path)
         helper_decision = classify_helper_file(file_path, source_format=context.source_format)
         if helper_decision.is_helper and not helper_decision.emit_metadata_event:
             reason = helper_decision.reason or "helper file"
-            return ParserResult(
+            yield ParserResult(
                 rows_read=0,
                 rows_parsed=0,
                 rows_failed=0,
@@ -272,8 +287,10 @@ class DnsCsvParser(BaseParser):
                 status_override="SKIPPED",
                 status_reason=reason,
             )
+            return
 
         events: list[dict[str, Any]] = []
+        rows_read = 0
         rows_failed = 0
         error_samples: list[str] = []
         reader = UniversalInputReader(file_path)
@@ -281,11 +298,27 @@ class DnsCsvParser(BaseParser):
             sample = file.read(4096)
             file.seek(0)
             for index, row in enumerate(_iter_dns_csv_rows(file, sample, context)):
+                rows_read += 1
                 try:
                     events.append(self._row_to_event(row, index, context, event_type="dns_query"))
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(row, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
+
         reader_metadata = reader.metadata_snapshot()
         warnings = [
             *reader_metadata.warnings,
@@ -303,7 +336,7 @@ class DnsCsvParser(BaseParser):
                 status_override = "EMPTY_FILE"
                 status_reason = "DNS CSV file has no readable data rows"
         result = ParserResult(
-            rows_read=len(events) + rows_failed,
+            rows_read=rows_read,
             rows_parsed=len(events),
             rows_failed=rows_failed,
             events=events,
@@ -314,7 +347,7 @@ class DnsCsvParser(BaseParser):
             status_reason=status_reason,
         )
         self.validate_result(result)
-        return result
+        yield result
 
     def _row_to_event(
         self,
@@ -389,13 +422,28 @@ class DnsPcapCsvParser(DnsCsvParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse pcap.csv packet summary rows into normalized DNS events."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse pcap.csv packet summary rows as bounded batches."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         events: list[dict[str, Any]] = []
+        rows_read = 0
         rows_failed = 0
         error_samples: list[str] = []
         reader = UniversalInputReader(path)
         with reader.iter_lines(keepends=True, skip_empty=False) as lines:
             csv_reader = csv.DictReader(lines)
             for index, row in enumerate(csv_reader):
+                rows_read += 1
                 normalized_row = _normalize_dict_row(row)
                 try:
                     events.append(
@@ -410,6 +458,20 @@ class DnsPcapCsvParser(DnsCsvParser):
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(normalized_row, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
 
         reader_metadata = reader.metadata_snapshot()
         warnings = [
@@ -417,7 +479,7 @@ class DnsPcapCsvParser(DnsCsvParser):
             *(f"reader error: {error}" for error in reader_metadata.errors),
         ]
         result = ParserResult(
-            rows_read=len(events) + rows_failed,
+            rows_read=rows_read,
             rows_parsed=len(events),
             rows_failed=rows_failed,
             events=events,
@@ -432,7 +494,7 @@ class DnsPcapCsvParser(DnsCsvParser):
             ),
         )
         self.validate_result(result)
-        return result
+        yield result
 
 
 class DnsTxtDomainListParser(BaseParser):
@@ -446,10 +508,23 @@ class DnsTxtDomainListParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse a domain-list TXT file into normalized DNS events."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse domain-list TXT files as bounded batches."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         helper_decision = classify_helper_file(path, source_format=context.source_format)
         if helper_decision.is_helper and not helper_decision.emit_metadata_event:
             reason = helper_decision.reason or "helper file"
-            return ParserResult(
+            yield ParserResult(
                 rows_read=0,
                 rows_parsed=0,
                 rows_failed=0,
@@ -465,6 +540,7 @@ class DnsTxtDomainListParser(BaseParser):
                 status_override="SKIPPED",
                 status_reason=reason,
             )
+            return
 
         events: list[dict[str, Any]] = []
         rows_failed = 0
@@ -518,6 +594,20 @@ class DnsTxtDomainListParser(BaseParser):
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample({"line_number": index + 1, "raw_line": item}, exc))
+                if len(events) >= batch_size:
+                    result = ParserResult(
+                        rows_read=rows_read,
+                        rows_parsed=len(events),
+                        rows_failed=rows_failed,
+                        events=events,
+                        error_samples=error_samples,
+                    )
+                    self.validate_result(result)
+                    yield result
+                    events = []
+                    rows_read = 0
+                    rows_failed = 0
+                    error_samples = []
         reader_metadata = reader.metadata_snapshot()
         warnings = [
             *reader_metadata.warnings,
@@ -541,7 +631,7 @@ class DnsTxtDomainListParser(BaseParser):
             ),
         )
         self.validate_result(result)
-        return result
+        yield result
 
 
 def _iter_dns_csv_rows(file: Any, sample: str, context: ParserContext):

@@ -46,6 +46,7 @@ from scripts.stage_two.normalization.runner import (
     NormalizeFormatRunner,
 )
 from scripts.stage_two.parser_coverage import ParserCoverageResult, run_parser_coverage
+from scripts.stage_two.splitting import SplitLargeFilesRequest, SplitLargeFilesService
 from scripts.stage_two.status_tools import MarkReadyRequest, MarkReadyService, save_mark_ready_reports
 
 
@@ -74,6 +75,7 @@ def router_stage_two(
         "mark-ready": _mark_ready,
         "normalize-format": _normalize_format,
         "normalize-all": _normalize_all,
+        "split-large-files": _split_large_files,
         "normalize-dns": lambda args: _normalize_branch("dns", args),
         "normalize-host": lambda args: _normalize_branch("host", args),
         "run-duckdb-checks": lambda args: _run_no_arg(
@@ -384,6 +386,18 @@ def _normalize_all(args: Sequence[str]) -> None:
     console.print(
         {
             "service": "stage-two normalize-all",
+            **asdict(result),
+        }
+    )
+
+
+def _split_large_files(args: Sequence[str]) -> None:
+    request = _parse_split_large_files_args(args)
+    with session_scope() as session:
+        result = SplitLargeFilesService(session).split_large_files(request)
+    console.print(
+        {
+            "service": "stage-two split-large-files",
             **asdict(result),
         }
     )
@@ -846,6 +860,112 @@ def _parse_positive_int(value: str | None, *, field_name: str, service: str) -> 
     if normalized_value.isdecimal() and int(normalized_value) > 0:
         return int(normalized_value)
     raise ValueError(f"{service} {field_name} must be a positive integer")
+
+
+def _parse_split_large_files_args(args: Sequence[str]) -> SplitLargeFilesRequest:
+    values: dict[str, str] = {}
+    flags: set[str] = set()
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in {
+            "--branch",
+            "--role",
+            "--format",
+            "--limit",
+            "--max-part-size-gb",
+            "--max-part-size-mb",
+            "--min-size-gb",
+            "--min-size-mb",
+            "--header",
+        }:
+            if index + 1 >= len(args) or args[index + 1].startswith("--"):
+                raise ValueError(f"split-large-files requires a value for {arg}")
+            values[arg] = args[index + 1]
+            index += 2
+            continue
+        if arg in {"--apply", "--register", "--overwrite", "--keep-source-ready"}:
+            flags.add(arg)
+            index += 1
+            continue
+        raise ValueError(
+            "split-large-files accepts --branch, --role, --format, --limit, "
+            "--max-part-size-gb/mb, --min-size-gb/mb, --header auto|yes|no, "
+            "--apply, --register, --overwrite, --keep-source-ready"
+        )
+
+    missing = [flag for flag in ("--branch", "--role", "--format") if flag not in values]
+    if missing:
+        raise ValueError(f"split-large-files missing required arguments: {', '.join(missing)}")
+
+    max_part_size_bytes = _parse_size_bytes(
+        gb=values.get("--max-part-size-gb"),
+        mb=values.get("--max-part-size-mb"),
+        default_gb=2.0,
+        field_name="max-part-size",
+    )
+    min_file_size_bytes = _parse_size_bytes(
+        gb=values.get("--min-size-gb"),
+        mb=values.get("--min-size-mb"),
+        default_gb=1.0,
+        field_name="min-size",
+        allow_zero=True,
+    )
+    header = values.get("--header", "auto").strip().lower()
+    if header not in {"auto", "yes", "no"}:
+        raise ValueError("split-large-files header must be one of: auto, yes, no")
+
+    normalized_branch = values["--branch"].strip().lower()
+    normalized_role = values["--role"].strip().upper()
+    normalized_format = values["--format"].strip()
+    if normalized_branch not in BRANCH_VALUES:
+        allowed = ", ".join(BRANCH_VALUES)
+        raise ValueError(f"split-large-files branch must be one of: {allowed}")
+    if normalized_role not in ACTIVE_DATASET_ROLE_VALUES:
+        allowed = ", ".join(ACTIVE_DATASET_ROLE_VALUES)
+        raise ValueError(f"split-large-files role must be one of: {allowed}")
+    if not normalized_format:
+        raise ValueError("split-large-files format must not be empty")
+
+    return SplitLargeFilesRequest(
+        branch=normalized_branch,
+        role=normalized_role,
+        source_format=normalized_format,
+        limit=_parse_positive_int(values.get("--limit"), field_name="limit", service="split-large-files"),
+        max_part_size_bytes=max_part_size_bytes,
+        min_file_size_bytes=min_file_size_bytes,
+        apply_changes="--apply" in flags,
+        register="--register" in flags,
+        overwrite="--overwrite" in flags,
+        keep_source_ready="--keep-source-ready" in flags,
+        header_mode=header,  # type: ignore[arg-type]
+    )
+
+
+def _parse_size_bytes(
+    *,
+    gb: str | None,
+    mb: str | None,
+    default_gb: float,
+    field_name: str,
+    allow_zero: bool = False,
+) -> int:
+    if gb is not None and mb is not None:
+        raise ValueError(f"split-large-files accepts only one of --{field_name}-gb or --{field_name}-mb")
+    multiplier = 1024 * 1024 * 1024
+    value = gb
+    if mb is not None:
+        multiplier = 1024 * 1024
+        value = mb
+    if value is None:
+        return int(default_gb * 1024 * 1024 * 1024)
+    try:
+        number = float(value)
+    except ValueError as exc:
+        raise ValueError(f"split-large-files {field_name} must be a number") from exc
+    if number < 0 or (number == 0 and not allow_zero):
+        raise ValueError(f"split-large-files {field_name} must be positive")
+    return int(number * multiplier)
 
 
 def _parse_normalize_all_args(args: Sequence[str]) -> NormalizeAllRequest:

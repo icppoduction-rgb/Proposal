@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from config import STAGE_TWO_MAX_RAW_PREVIEW_BYTES
+from config import STAGE_TWO_DEFAULT_BATCH_SIZE, STAGE_TWO_MAX_RAW_PREVIEW_BYTES
 from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
-from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult, collect_parser_batches
 from scripts.stage_two.parsers.common import merge_json_objects
 from scripts.stage_two.parsers.input_reader import InputReaderError, UniversalInputReader
 
@@ -110,6 +110,19 @@ class HostBsonSandboxParser(BaseParser):
 
     def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
         """Parse BSON documents into normalized sandbox behaviour events."""
+        return collect_parser_batches(self.parse_batches(path, context))
+
+    def parse_batches(
+        self,
+        path: str | Path,
+        context: ParserContext,
+        *,
+        batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
+        **_: Any,
+    ) -> Iterator[ParserResult]:
+        """Parse BSON documents as bounded batches while retaining descriptor state."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         reader = UniversalInputReader(path)
         events: list[dict[str, Any]] = []
         warnings: list[str] = []
@@ -135,7 +148,8 @@ class HostBsonSandboxParser(BaseParser):
                     error_samples=[message],
                 )
                 self.validate_result(result)
-                return result
+                yield result
+                return
 
             with reader.open("bson_stream") as bson_documents:
                 for document_index, document_bytes in enumerate(bson_documents):
@@ -176,6 +190,22 @@ class HostBsonSandboxParser(BaseParser):
                             )
                             event_index += 1
                             emitted = True
+                            if len(events) >= batch_size:
+                                result = ParserResult(
+                                    rows_read=rows_read,
+                                    rows_parsed=len(events),
+                                    rows_failed=rows_failed,
+                                    events=events,
+                                    warnings=warnings,
+                                    error_samples=error_samples,
+                                )
+                                self.validate_result(result)
+                                yield result
+                                events = []
+                                warnings = []
+                                error_samples = []
+                                rows_read = 0
+                                rows_failed = 0
                         if not emitted:
                             warnings.append(f"document {document_index}: no event rows emitted")
                     except Exception as exc:
@@ -212,7 +242,7 @@ class HostBsonSandboxParser(BaseParser):
             error_samples=error_samples,
         )
         self.validate_result(result)
-        return result
+        yield result
 
     def _row_to_event(
         self,
