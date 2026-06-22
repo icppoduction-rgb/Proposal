@@ -1,40 +1,97 @@
-# Оптимизация производительности Stage Two normalization
+# Настройка производительности normalization
 
-Для больших файлов используйте ограниченные batch/part и process workers:
+Документ описывает только реализованные runtime options из `scripts/stage_two/normalization/options.py` и `scripts/stage_two/cli.py`.
 
-```powershell
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
-python manage.py stage-two normalize-all --branch host --limit 1000 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --resume
+## Опции нормализации
+
+| CLI option | Default | Назначение |
+| --- | --- | --- |
+| `--workers` | `STAGE_TWO_DEFAULT_WORKERS` (`1`) | Количество parallel worker processes для `normalize-format`/`normalize-all`. |
+| `--batch-size` | `STAGE_TWO_DEFAULT_BATCH_SIZE` (`50000`) | Размер batch при parser batch processing. |
+| `--max-output-part-rows` | `STAGE_TWO_MAX_OUTPUT_PART_ROWS` (`50000`) | Максимум rows в output part, если service делит output. |
+| `--resume` | `false` | Пропускать уже успешно нормализованные files. |
+| `--hash-output-artifacts` | `false` | Считать SHA-256 для output Parquet artifacts. |
+| `--packet-mode` | `packet-summary` | Режим packet parsing: `packet-summary`, `dns-only`, `sample`. |
+| `--sample-size` | unset | Обязателен для `--packet-mode sample`. |
+
+Пример:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --limit 10000 \
+  --workers 4 \
+  --batch-size 50000 \
+  --max-output-part-rows 50000 \
+  --resume
 ```
 
-## Флаги
+## Выбор `--workers`
 
-| Флаг | Назначение |
+`--workers > 1` включает `ProcessPoolExecutor` в normalization runner. Это полезно для независимых файлов, но увеличивает:
+
+- количество открытых DB connections;
+- конкуренцию за диск;
+- memory pressure при больших parser outputs;
+- сложность диагностики parser errors.
+
+Практический порядок:
+
+1. Начать с `--workers 1 --limit 10`.
+2. Проверить parser status, Parquet output и DuckDB checks.
+3. Увеличивать workers постепенно.
+4. Для binary PCAP/PCAPNG не повышать workers без контроля RAM/IO.
+
+## Packet modes
+
+| Mode | Когда использовать |
 | --- | --- |
-| `--workers` | Количество процессов для обработки файлов. Используется `ProcessPoolExecutor`, не threads. |
-| `--batch-size` | Размер parser batch перед записью normalized rows. |
-| `--max-output-part-rows` | Максимальное число строк в одном Parquet part. |
-| `--resume` | Повторно использовать последний resumable parser run и пропускать уже зарегистрированные part indexes. |
-| `--packet-mode` | Режим packet parsing: `packet-summary`, `dns-only`, `sample`. |
-| `--sample-size` | Лимит пакетов для `--packet-mode sample`. |
-| `--hash-output-artifacts` | Включить SHA-256 hash output Parquet. По умолчанию выключено для больших output. |
+| `packet-summary` | Default для безопасного summary parsing packet captures. |
+| `dns-only` | Когда нужен DNS extraction из packet captures и parser это поддерживает. |
+| `sample` | Для первичной оценки больших PCAP/PCAPNG; требует `--sample-size`. |
 
-## Метрики
+Если `packet-mode = sample` и `sample-size` не задан, validation options выбросит ошибку.
 
-Метрики одного файла сохраняются в `parser_runs.metadata_json.performance`:
+## Разделение больших файлов
 
-- input size MB;
-- rows или packets read;
-- emitted events;
-- parse, Parquet write, catalog и total time;
-- rows/sec, packets/sec, events/sec, MB/sec;
-- peak Python allocation memory;
-- output part count.
+Для больших line-based files используйте:
 
-Каждый `normalized_artifacts.metadata_json` содержит `part_index`, `batch_index`, `rows_in_part` и checkpoint counters. Это сохраняет traceability от raw file к normalized parts и downstream features/model-ready artifacts.
+```bash
+python manage.py stage-two split-large-files \
+  --branch host \
+  --role TRAIN \
+  --format csv \
+  --max-part-size-mb 512 \
+  --apply \
+  --register
+```
 
-## Эксплуатационные замечания
+Splitter поддерживает text/line formats и не предназначен для `cap`, `pcap`, `pcapng`, `bson`.
 
-`normalize-format` остается ограниченным одним `branch/role/source_format`. `normalize-all` группирует файлы по role и source format внутри одной branch, поэтому `TRAIN`, `VALIDATION` и `TEST` не смешиваются.
+Риски:
 
-Для packet captures в DNS-датасетах используйте `--packet-mode dns-only`, если non-DNS packet summaries не нужны. Режим `sample` с `--sample-size` удобен для smoke/performance проверки перед запуском multi-GB файлов.
+- JSON arrays/objects могут быть небезопасны для line split;
+- header handling нужно проверять через `--header auto|yes|no`;
+- без `--register` chunks не появятся в catalog.
+
+## Хеширование output artifacts
+
+`--hash-output-artifacts` повышает проверяемость, но добавляет IO cost, потому что файл нужно прочитать после записи. Для smoke/iteration можно оставить выключенным; для финальных artifacts лучше включать.
+
+## Resume
+
+`--resume` пропускает файлы, для которых уже есть успешный normalized artifact. Это не заменяет data quality checks: после resume все равно нужно запускать:
+
+```bash
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+```
+
+## Ограничения
+
+- Performance options не должны менять contracts и labels.
+- Нельзя объединять роли ради ускорения.
+- Нельзя использовать `TEST` для подбора batch/feature/preprocessing решений, если это влияет на training pipeline.
+- Для mixed CSV/JSON schemas лучше уменьшить batch size и сначала прогнать `--limit`.

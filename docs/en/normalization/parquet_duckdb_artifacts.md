@@ -1,74 +1,136 @@
-# Parquet And DuckDB Artifacts
+# Parquet and DuckDB Artifacts
 
-Stage Two writes large normalized data to Parquet and uses DuckDB to run SQL checks over Parquet outputs.
+Stage Two stores large tables in Parquet and uses DuckDB for analytical SQL checks over those files. PostgreSQL Catalog stores metadata only: paths, row counts, hashes, schema versions, statuses, and relationships.
 
 ## Parquet Writer
 
-Implementation:
+Code:
 
 ```text
 scripts/stage_two/parquet/writer.py
 ```
 
-Main methods:
+`ParquetArtifactWriter`:
 
-| Method | Purpose |
-| --- | --- |
-| `write_normalized()` | Writes normalized event rows to a partitioned Parquet file. |
-| `register_normalized_artifact()` | Registers the Parquet output in PostgreSQL `normalized_artifacts`. |
+- writes rows to Parquet;
+- serializes fields ending in `_json` to deterministic JSON strings;
+- uses `zstd` compression by default;
+- computes `row_count`, `file_size_bytes`, and optional `content_hash_sha256`;
+- registers artifacts through `ArtifactRepository`.
 
-Parquet path template:
+Output hashing is controlled by the normalization option `--hash-output-artifacts`. If hashing is disabled, `content_hash_sha256` may be an empty string.
+
+## Normalized Artifact Paths
 
 ```text
 parquet/normalized/{branch}/{role}/{modality}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet
 ```
 
-The writer computes artifact metadata such as row count, relative path, and content hash.
+Example:
 
-## DuckDB Analytics
+```text
+parquet/normalized/dns/TRAIN/dns_query/dns-train/schema=v1/part-42.parquet
+```
 
-Implementation:
+Writers:
+
+- `DnsNormalizationService`;
+- `HostNormalizationService`;
+- `NormalizeFormatRunner`;
+- legacy `normalize-dns`/`normalize-host`.
+
+Catalog entry: `normalized_artifacts.normalized_path`.
+
+## Feature Artifact Paths
+
+```text
+parquet/features/{feature_group}/{role}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet
+```
+
+Feature groups from the contract:
+
+```text
+dns_features
+host_syscall_features
+host_eventlog_features
+host_metrics_features
+network_flow_features
+hybrid_features
+sequence_features
+```
+
+Catalog entry: `feature_artifacts.feature_path`.
+
+The current CLI does not provide a dedicated feature artifact build command. Contract helpers and the writer service are implemented in `scripts/stage_two/features/contracts.py` and `scripts/stage_two/features/writer.py`.
+
+## Model-Ready Artifact Paths
+
+```text
+parquet/model_ready/{artifact_type}/{branch}/{role}/schema={schema_version}/{file_name}
+```
+
+Supported `data_type` values:
+
+```text
+X
+y
+sequence
+split_index
+preprocessing_metadata
+```
+
+Catalog entry: `model_ready_artifacts.artifact_path`.
+
+`ModelReadyRegistryService` verifies:
+
+- `data_type` is part of the contract;
+- `X` rows do not contain forbidden leakage columns;
+- preprocessing artifacts are fitted only on `TRAIN`.
+
+## DuckDB Service
+
+Code:
 
 ```text
 scripts/stage_two/duckdb/service.py
-scripts/stage_two/duckdb/sql/create_views.sql
 ```
+
+DuckDB creates views over Parquet:
+
+| View | Path pattern | Required columns |
+| --- | --- | --- |
+| `normalized_all` | `parquet/normalized/**/*.parquet` | `event_uid`, `dataset_role`, `branch`, `source_file_path` |
+| `features_all` | `parquet/features/**/*.parquet` | `role`, `branch`, `feature_group` |
+| `model_ready_all` | `parquet/model_ready/**/*.parquet` | `filename` |
+
+If no matching Parquet files exist, the service creates a placeholder view with required columns so checks return controlled results instead of failing because the view is missing.
+
+## DuckDB Checks
 
 Command:
 
-```powershell
+```bash
 python manage.py stage-two run-duckdb-checks
 ```
 
-The service creates or refreshes views over normalized, feature, and model-ready Parquet locations. Empty views are created with required columns so downstream checks can run even when a bucket has no rows.
+Checks:
 
-## Quality Report Registration
+- row counts by view;
+- required columns;
+- split contamination (`TRAIN`, `VALIDATION`, and `TEST` must not mix);
+- schema mismatch diagnostics.
 
-DuckDB check output is registered through `DataQualityRepository` into `data_quality_reports` and written under:
-
-```text
-PATH_DATA_STORAGE/reports/en/stage-two/quality/
-```
-
-Current command output includes:
+Report path:
 
 ```text
-service: stage-two run-duckdb-checks
-status: SUCCESS | FAILED
-report_path: reports/en/stage-two/quality/duckdb_analytics_report.json
-check_count: <number>
-catalog_report_id: <id>
+reports/en/stage-two/quality/duckdb_analytics_report.json
 ```
 
-## Feature And Model-Ready Contracts
+Through `register_report()`, the result is registered in `data_quality_reports`.
 
-The repository contains contracts for later pipeline stages:
+## Limitations
 
-```text
-schemas/features/feature_artifact_v1.json
-schemas/model_ready/model_ready_v1.json
-scripts/stage_two/features/
-scripts/stage_two/model_ready/
-```
-
-These contracts define traceability, forbidden leakage columns, and expected artifact paths. The current Stage Two operational CLI focuses on catalog ingestion, parser normalization, and checks; it does not expose a full-corpus production feature/model-ready build command.
+- DuckDB reads already written Parquet files; it does not replace PostgreSQL Catalog.
+- Feature/model-ready paths exist only after the corresponding writer/registry services are called; there is no CLI build step for them yet.
+- Moving Parquet files without updating the catalog breaks traceability.
+- `TRAIN`, `VALIDATION`, and `TEST` must remain separated in paths, catalog metadata, and downstream artifacts.

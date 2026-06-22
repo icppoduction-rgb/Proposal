@@ -1,287 +1,212 @@
-# Stage Two Usage Guide
+# Stage Two Normalization Usage Guide
 
-This runbook describes the implemented operational path from the filtered dataset root to normalized Parquet artifacts.
+This document describes the implemented CLI layer: `manage.py` receives `module`, `service`, `action`, and `extra_args`; routes `stage-two` through `scripts.router_script.router_commands()`; and dispatches concrete Stage Two services through `scripts.stage_two.cli.router_stage_two()`.
 
 ## Prerequisites
 
-1. Configure `.env` or the process environment:
+Configure the environment:
 
-```text
-PATH_DATA_STORAGE=<absolute storage root>
-PATH_FOLDER_DATASETS=<absolute raw dataset root retained for Stage One/audit>
-PATH_FOLDER_DATASETS_FILTER=<absolute filtered dataset root used by Stage Two>
-DATABASE_URL=<PostgreSQL SQLAlchemy URL>
+```bash
+export PATH_DATA_STORAGE=/absolute/path/to/stage-two-storage
+export PATH_FOLDER_DATASETS_FILTER=/absolute/path/to/stage-one-filtered-or-sorted-tree
+export DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/database
 ```
 
-2. PostgreSQL must be reachable from `DATABASE_URL`.
-3. Python 3.11.x is the supported runtime. On the local Windows dev machine, use `C:\Users\fmark\.conda\envs\proposal2\python.exe` or activate `conda activate proposal2`.
-4. Python dependencies from `requirements-dev.txt` must be installed for development and CI checks; production/runtime installs may use `requirements.txt`.
-5. Run commands from the repository root.
-6. Run Stage Two smoke scripts as modules with `python -m scripts.stage_two.<module>`.
-   Direct file-path execution such as `python scripts/stage_two/parser_smoke.py` is not supported because it can remove the repository root from `sys.path` and break `scripts.*` imports.
+`DATABASE_URL` is loaded by `scripts/db/config.py`. If it is not present in the process environment, the code tries to load `.env` from the repository root.
 
-## Recommended Order
+## Base Run Order
 
-### 1. Bootstrap Storage
-
-```powershell
+```bash
 python manage.py stage-two bootstrap-storage
-```
-
-Expected output:
-
-```text
-{
-  "service": "stage-two bootstrap-storage",
-  "root": "...",
-  "created_count": <number>,
-  "existing_count": <number>
-}
-```
-
-This command is idempotent. It creates directories under `PATH_DATA_STORAGE` for Parquet, reports, DuckDB, logs, config, schemas, and temp data.
-
-### 2. Apply Database Migrations
-
-```powershell
-python -m alembic -c scripts/db/migrations/alembic.ini upgrade head
-python -m alembic -c scripts/db/migrations/alembic.ini current
-```
-
-Expected state:
-
-```text
-5a38996dff5f (head)
-```
-
-### 3. Seed Parser Registry And Schema Version
-
-```powershell
-python manage.py stage-two seed-parser-registry
-```
-
-Expected output includes:
-
-```text
-"service": "stage-two seed-parser-registry"
-"schema_name": "normalized_event"
-"schema_version": "v1"
-"inserted": <number>
-"updated": <number>
-```
-
-The command is idempotent and loads `scripts/stage_two/parser_registry/parser_registry_seed.json`.
-
-### 4. Ingest Catalog
-
-```powershell
+alembic -c scripts/db/migrations/alembic.ini upgrade head
 python manage.py stage-two catalog-ingest
-```
-
-What happens:
-
-- `DatasetFileScanner` scans `PATH_FOLDER_DATASETS_FILTER` only.
-- `branch`, `role`, `source_format`, dataset name, file size, and SHA-256 hash are inferred.
-- `datasets`, `ingestion_runs`, and `dataset_files` are inserted or updated.
-- Raw files are not modified.
-- Only `TRAIN`, `VALIDATION`, and `TEST` are cataloged for Stage Two. `EXPERIMENTS` is ignored.
-
-Typical statuses after ingestion:
-
-| Status | Meaning |
-| --- | --- |
-| `REGISTERED` | New file was cataloged. |
-| `CHANGED` | Existing file hash/metadata changed. |
-| `DISCOVERED` | File was seen and can be promoted. |
-| `EMPTY_FILE` | File exists but has no usable bytes. |
-| `UNSUPPORTED_FORMAT` | Scanner found a format without active parser coverage. |
-
-`PATH_FOLDER_DATASETS` is intentionally not ingested by this command. It remains the immutable raw source location and may contain extra datasets that are not part of the current processing corpus.
-
-### 5. Check Parser Coverage
-
-```powershell
+python manage.py stage-two seed-parser-registry
 python manage.py stage-two parser-coverage
-python manage.py stage-two parser-coverage host
-python manage.py stage-two parser-coverage dns
-```
-
-Expected output columns:
-
-```text
-branch | role | source_format | files_count | parser_active | parser_class | parser_name | action
-```
-
-Important `action` values:
-
-| Action | Meaning |
-| --- | --- |
-| `ready_for_normalization` | Catalog files exist and an active parser is available. |
-| `parser_available_empty_bucket` | No files currently exist, but registry coverage exists. |
-
-## Large-File Normalization Options
-
-Use these options for large PCAP/PCAPNG/CAP, CSV, JSONL, log, NetFlow, XML, and BSON batches:
-
-```powershell
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
-python manage.py stage-two normalize-all --branch host --limit 1000 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --resume
-```
-
-Supported tuning flags:
-
-| Flag | Meaning |
-| --- | --- |
-| `--workers` | Number of file-level worker processes. Use processes, not threads, for CPU-bound parsing. |
-| `--batch-size` | Parser batch size before the service writes rows to Parquet. |
-| `--max-output-part-rows` | Maximum rows in one normalized Parquet part. |
-| `--resume` | Reuse the latest resumable `parser_run` and skip already registered part indexes. |
-| `--packet-mode` | Packet capture parsing mode: `packet-summary`, `dns-only`, or `sample`. |
-| `--sample-size` | Packet limit for `--packet-mode sample`. |
-| `--hash-output-artifacts` | Re-enable output Parquet SHA-256 hashing. It is off by default to avoid rereading large outputs. |
-
-The runner never mixes `TRAIN`, `VALIDATION`, and `TEST`: `normalize-format` handles exactly one `branch/role/source_format`, and `normalize-all` processes one branch grouped by role and source format.
-
-Performance counters are stored in `parser_runs.metadata_json.performance`: input size MB, rows/packets read, emitted events, parse/write/catalog time, throughput rates, peak memory, and output part count. Each normalized part stores `metadata_json.part_index` and a checkpoint snapshot so lineage remains `raw -> normalized -> features -> model-ready`.
-| `add_parser_registry_entry` | Catalog has a format not represented in registry. |
-| `implement_parser_class` | Registry points to a class that cannot be imported. |
-| `activate_parser_registry_entry` | Registry row exists but is inactive. |
-
-Do not run broad normalization if `catalog_gap_rows` or `missing_parser_rows` is nonzero.
-
-### 6. Mark Files Ready
-
-Dry-run first:
-
-```powershell
-python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
-```
-
-Apply only after reviewing counts:
-
-```powershell
-python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
-```
-
-Fallback syntax:
-
-```powershell
-python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
-python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
-```
-
-Only these statuses are promoted to `READY_FOR_PARSING`:
-
-```text
-REGISTERED, CHANGED, DISCOVERED
-```
-
-To retry files that failed after a parser or writer fix, use the explicit recovery mode:
-
-```powershell
-python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --dry-run
-python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --apply
-```
-
-Recovery mode only moves these statuses back to `READY_FOR_PARSING`:
-
-```text
-FAILED, SKIPPED, PARTIALLY_PARSED
-```
-
-It does not touch `PARSED` files. `mark-ready` writes EN/RU reports under `reports/{en,ru}/stage-two/status/`.
-
-These statuses are not changed by the default mark-ready mode:
-
-```text
-EMPTY_FILE, FAILED, PARSED, PARTIALLY_PARSED, SKIPPED
-```
-
-### 7. Normalize One Format
-
-```powershell
-python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
 python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 ```
 
-Fallback syntax:
+This order preserves split separation. Normalization for `TRAIN`, `VALIDATION`, and `TEST` is run as separate commands or through `normalize-all`, which groups files by `branch/role/source_format` and does not merge roles into one output artifact.
 
-```powershell
+## Stage Two Commands
+
+| Command | Purpose | Main output |
+| --- | --- | --- |
+| `bootstrap-storage` | Creates required directories under `PATH_DATA_STORAGE`. | Storage tree, schema/report/temp/log directories. |
+| `catalog-ingest` | Scans `PATH_FOLDER_DATASETS_FILTER` and registers datasets/files. | `datasets`, `ingestion_runs`, `dataset_files`. |
+| `seed-parser-registry` | Loads `parser_registry_seed.json` into catalog. | `parser_registry`, `schema_versions`. |
+| `parser-coverage [branch]` | Checks parser coverage for registered `branch/role/source_format` combinations. | Console report, parser coverage diagnostics. |
+| `mark-ready` | Promotes a selected bucket to `READY_FOR_PARSING`. | Updated `dataset_files.status`. |
+| `normalize-format` | Normalizes one `branch/role/source_format`. | `parser_runs`, normalized Parquet, `normalized_artifacts`. |
+| `normalize-all` | Normalizes all ready buckets in one branch. | Same outputs, grouped by role/format. |
+| `split-large-files` | Splits large line-based files into chunks. | Chunk files, optional catalog registration. |
+| `normalize-dns [limit]` | Legacy shortcut for DNS ready files. | Normalized DNS artifacts. |
+| `normalize-host [limit]` | Legacy shortcut for Host ready files. | Normalized Host artifacts. |
+| `run-duckdb-checks` | Creates DuckDB views over Parquet and runs analytics checks. | DuckDB report, `data_quality_reports`. |
+| `run-leakage-checks` | Checks model-ready/feature contracts for leakage. | Leakage reports, `data_quality_reports`. |
+| `trace-artifact` | Reconstructs lineage for a model-ready artifact. | Console JSON trace chain. |
+
+## `mark-ready`
+
+Flags:
+
+```bash
+python manage.py stage-two mark-ready \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --dry-run
+
+python manage.py stage-two mark-ready \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --apply
+```
+
+Compact form:
+
+```bash
+python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
+python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
+```
+
+Constraints:
+
+- `--dry-run` and `--apply` are mutually exclusive.
+- `role` must be one of `TRAIN`, `VALIDATION`, `TEST`.
+- The command updates catalog metadata only; it does not modify raw files.
+
+## `normalize-format`
+
+Flags:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --limit 100 \
+  --workers 2 \
+  --batch-size 50000 \
+  --max-output-part-rows 50000 \
+  --packet-mode packet-summary \
+  --resume \
+  --hash-output-artifacts
+```
+
+Compact form:
+
+```bash
 python manage.py stage-two normalize-format host:TRAIN:auth.log:100
 ```
 
-Expected output includes selected/processed/normalized counts, parser name/class, per-file status, and artifact id when an artifact is created.
+Behavior:
 
-`PARTIAL_SUCCESS` means the batch completed but at least one selected file failed, was skipped, or had no active parser. Successfully parsed files keep their `PARSED` status and `normalized_artifacts`; failed files can be retried with `mark-ready --retry-failed` after the underlying parser/writer issue is fixed.
+- selects `dataset_files` with status `READY_FOR_PARSING` for the exact `branch/role/source_format`;
+- uses `ParserResolver` to select an active parser from `parser_registry`;
+- marks selected files as `UNSUPPORTED_FORMAT` when no parser is available;
+- writes normalized Parquet and registers `parser_runs`/`normalized_artifacts`;
+- uses `ProcessPoolExecutor` when `--workers > 1`;
+- skips files with existing successful normalized artifacts when `--resume` is enabled.
 
-### 8. Normalize A Branch
+`--packet-mode` supports:
 
-```powershell
-python manage.py stage-two normalize-all --branch host --limit 1000
-python manage.py stage-two normalize-all --branch dns --limit 1000
+| Value | Purpose |
+| --- | --- |
+| `packet-summary` | Safe mode for packet captures: summary-level parsing. |
+| `dns-only` | Extract DNS events from packet captures where the parser supports it. |
+| `sample` | Process a sample of packets; requires `--sample-size`. |
+
+## `normalize-all`
+
+```bash
+python manage.py stage-two normalize-all \
+  --branch dns \
+  --limit 1000 \
+  --workers 2 \
+  --resume
 ```
 
-Fallback syntax:
+Compact form:
 
-```powershell
-python manage.py stage-two normalize-all host:1000
+```bash
+python manage.py stage-two normalize-all dns:1000
 ```
 
-`normalize-all` queries only `READY_FOR_PARSING` files and groups work by `role` and `source_format`.
+The command selects ready groups inside one branch and invokes `NormalizeFormatRunner` per group. Grouping is by `role` and `source_format`, which prevents `TRAIN`, `VALIDATION`, and `TEST` from being mixed.
 
-`normalize-format`, `normalize-all`, and large `mark-ready` runs display a Rich progress bar when Rich is available. Non-interactive runs still print the final JSON-like summary and preserve normal exception output.
+## Legacy Commands
 
-### 9. Run Checks
+```bash
+python manage.py stage-two normalize-dns 10
+python manage.py stage-two normalize-host 10
+```
 
-```powershell
+These commands remain for compatibility. For reproducible runs, prefer `normalize-format` or `normalize-all` because they explicitly define branch/role/format and performance options.
+
+## Large-File Splitting
+
+```bash
+python manage.py stage-two split-large-files \
+  --branch host \
+  --role TRAIN \
+  --format csv \
+  --max-part-size-mb 512 \
+  --apply \
+  --register
+```
+
+Purpose: prepare large line-based files for normalization. The command supports `csv`, `pcap.csv`, `txt`, `json`, `json-1`, log formats, `sc`, `ghc`, `netflow_day`, `netflow_ids`, `wls_day`, and metricbeat-like logs. Binary formats (`cap`, `pcap`, `pcapng`, `bson`) are not split by this splitter.
+
+Rules:
+
+- `--register` is valid only together with `--apply`;
+- without `--apply`, the command is a dry run;
+- chunks are written under `PATH_FOLDER_DATASETS_FILTER/chunked/...`;
+- registered chunks receive status `READY_FOR_PARSING`;
+- the source file may be marked `SKIPPED` unless `--keep-source-ready` is used.
+
+## Checks
+
+```bash
 python manage.py stage-two run-duckdb-checks
 python manage.py stage-two run-leakage-checks
-python -m scripts.stage_two.readiness_check
 ```
 
-Expected result:
+`run-duckdb-checks` creates `normalized_all`, `features_all`, and `model_ready_all` views over Parquet and checks row counts, required columns, split contamination, and schema mismatch. `run-leakage-checks` checks forbidden X columns, absence of `TEST` from training/preprocessing fit, and registers CRITICAL violations.
 
-```text
-status: SUCCESS
+## Trace Artifact
+
+```bash
+python manage.py stage-two trace-artifact 123
+python manage.py stage-two trace-artifact parquet/model_ready/tabular/dns/TRAIN/schema=v1/X_train.parquet
 ```
 
-Reports are written under `PATH_DATA_STORAGE/reports/en/stage-two/` and `PATH_DATA_STORAGE/reports/ru/stage-two/`.
+A numeric argument is interpreted as `model_ready_artifacts.id`; a string path is interpreted as `model_ready_artifacts.artifact_path`. The command requires a `feature_artifact_id` on the model-ready artifact and a `normalized_artifact_id` on the feature artifact; otherwise the traceability chain is considered broken.
 
-## Verifying Success
+## Module Checks
 
-Use these checks for a normal parser workflow:
+These checks are not registered as `manage.py stage-two` commands, but they are implemented as Python modules:
 
-```powershell
-python -m compileall manage.py config.py scripts tests
-git diff --check
+```bash
 python -m scripts.db.smoke_check
-python manage.py stage-two parser-coverage
-python -m scripts.stage_two.parser_smoke
-python -m scripts.stage_two.parser_input_smoke
-python -m scripts.stage_two.parser_catalog_smoke
-python -m scripts.stage_two.cli_operational_smoke
+python -m scripts.stage_two.readiness_check
+python -m scripts.stage_two.e2e_dry_run
 ```
 
-Catalog smoke and CLI smoke use synthetic files and roll back database changes.
-Do not run these smoke scripts with `python scripts/stage_two/*.py`; use the module form above.
+`readiness_check` verifies migrations, storage paths, catalog table counts, parser coverage, normalized/feature/model-ready registration, quality/leakage reports, traceability, and raw file hashes. `e2e_dry_run` creates synthetic DNS/Host samples under `temp_data`, runs ingestion, seed, normalization, feature/model-ready registry services, DuckDB/leakage checks, and traceability.
 
-## Troubleshooting
+## Typical Errors
 
-| Symptom | Likely cause | Fix |
+| Symptom | Cause | Action |
 | --- | --- | --- |
-| `DATABASE_URL` connection error | PostgreSQL is not running or URL is wrong. | Start PostgreSQL and verify `.env`. |
-| `PATH_DATA_STORAGE must be configured` | Storage root is empty. | Set `PATH_DATA_STORAGE` and rerun `bootstrap-storage`. |
-| `parser_active=no` in coverage | Missing or invalid registry/class mapping. | Update seed, implement class, run `seed-parser-registry`. |
-| `selected=0` in `mark-ready` | No matching catalog rows or statuses are not eligible. | Check `parser-coverage` and `dataset_files.status`. |
-| `selected=0` in `normalize-format` | Matching files are not `READY_FOR_PARSING`. | Run `mark-ready --apply` for that exact branch/role/format. |
-| `PARTIAL_SUCCESS` | Some rows failed while others parsed. | Check parser run reports under `reports/*/stage-two/parser/`. |
-| DuckDB report fails on missing Parquet | No normalized artifacts exist for the expected scope. | Normalize a small batch first. |
-
-## Production Safety Notes
-
-- Do not edit raw datasets to make parsing easier.
-- Mixed `raw_fields_json`, `metadata_json`, `features_json`, and other `*_json` payloads are serialized before Parquet writes so PyArrow does not infer unstable nested types.
-- Do not use `EXPERIMENTS` in Stage Two commands; supported processing roles are `TRAIN`, `VALIDATION`, and `TEST`.
-- Do not store raw packet payloads, BSON streams, or full raw logs in PostgreSQL metadata.
-- Do not mark whole branches ready without reviewing `parser-coverage`.
-- Do not interpret full-corpus readiness from synthetic smoke tests alone.
+| `DATABASE_URL must be configured` | `DATABASE_URL` is not set in environment or `.env`. | Configure `DATABASE_URL`. |
+| `PATH_DATA_STORAGE must be configured` | Storage root is not set. | Set `PATH_DATA_STORAGE`, then run `bootstrap-storage`. |
+| `No parser available` / `UNSUPPORTED_FORMAT` | No active parser in `parser_registry` for `branch/role/source_format`. | Check `parser-coverage`, add a parser or registry entry. |
+| Empty DuckDB views | Parquet layer is empty or paths were not created. | Check `normalized_artifacts` and storage paths. |
+| Leakage CRITICAL | X artifact contains label/source fields or TEST participates in fit/training. | Rebuild the artifact with the correct contract. |

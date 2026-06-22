@@ -1,98 +1,110 @@
-# Stage Two: Data Normalization
+# Stage Two / Data Normalization
 
-Stage Two is the data normalization and catalog control plane for the project. Its authoritative input is the filtered dataset tree configured by `PATH_FOLDER_DATASETS_FILTER`. It registers those files in PostgreSQL, resolves parsers through the parser registry, writes normalized event data to Parquet, and keeps traceability in catalog tables.
+This section documents the implemented Stage Two pipeline: catalog ingestion, parser registry, DNS/Host normalization into normalized events, Parquet artifact writing, PostgreSQL Catalog, DuckDB/data quality/leakage checks, and traceability. It is intended for developers who need to run the pipeline, add parser implementations, and verify that roles are not mixed and leakage is not introduced.
 
-Current implemented CLI scope:
+## Stage Two Scope
 
-```text
-PATH_FOLDER_DATASETS_FILTER -> catalog ingestion -> parser registry -> parser run -> normalized Parquet -> catalog artifact registration -> quality/leakage/readiness checks
-```
+Stage Two starts after Stage One has sorted or filtered the source files into the input tree. Raw files are not modified: Stage Two reads them, registers metadata in PostgreSQL, and creates new artifacts under `PATH_DATA_STORAGE`.
 
-Feature and model-ready schemas, catalog tables, and artifact contracts exist in `schemas/features/feature_artifact_v1.json`, `schemas/model_ready/model_ready_v1.json`, `scripts/stage_two/features/`, and `scripts/stage_two/model_ready/`. A production CLI that builds every feature/model-ready artifact for the full corpus is not part of the current parser workflow.
+Implemented areas:
+
+| Area | Implementation | Document |
+| --- | --- | --- |
+| CLI/routing | `manage.py`, `scripts/router_script.py`, `scripts/stage_two/cli.py` | [usage_guide.md](usage_guide.md) |
+| Storage bootstrap | `scripts/stage_two/storage/bootstrap.py` | [storage_architecture.md](storage_architecture.md) |
+| Catalog ingestion | `scripts/stage_two/ingestion/*` | [postgresql_catalog_schema.md](postgresql_catalog_schema.md) |
+| Parser registry/resolver | `scripts/stage_two/parser_registry/*` | [parser_strategy.md](parser_strategy.md) |
+| Parser development | `scripts/stage_two/parsers/*` | [parser_development_guide.md](parser_development_guide.md) |
+| Label resolver | `scripts/stage_two/labels/resolver.py` | [label_resolver.md](label_resolver.md) |
+| Normalized schema | `schemas/normalized/normalized_event_v1.json` | [normalized_event_schema.md](normalized_event_schema.md) |
+| Parquet/DuckDB | `scripts/stage_two/parquet/*`, `scripts/stage_two/duckdb/*` | [parquet_duckdb_artifacts.md](parquet_duckdb_artifacts.md) |
+| Quality checks | `scripts/stage_two/quality/checkers.py` | [data_quality_checks.md](data_quality_checks.md) |
+| Leakage prevention | feature/model-ready contracts, `LeakageChecker` | [data_leakage_prevention.md](data_leakage_prevention.md) |
+| Traceability | `scripts/stage_two/traceability/service.py` | [traceability.md](traceability.md) |
+| Performance/runbooks | normalization options, large-file split, recovery steps | [performance_tuning.md](performance_tuning.md), [runtime_resource_runbook.md](runtime_resource_runbook.md) |
+
+Not implemented as a dedicated CLI command in the current router: a full feature artifact and model-ready artifact build step. The contracts, writers/registry services, and e2e dry run exist, but the operational CLI currently covers catalog, parser readiness, normalization, DuckDB checks, leakage checks, and traceability.
+
+## Recommended Reading Order
+
+1. [usage_guide.md](usage_guide.md) - how to run Stage Two and which commands the CLI actually supports.
+2. [storage_architecture.md](storage_architecture.md) - what must exist in `PATH_DATA_STORAGE`.
+3. [postgresql_catalog_schema.md](postgresql_catalog_schema.md) - which metadata and relationships are stored in PostgreSQL.
+4. [parser_strategy.md](parser_strategy.md) and [parser_development_guide.md](parser_development_guide.md) - how parsers are selected and how to add a new one.
+5. [normalized_event_schema.md](normalized_event_schema.md) and [label_resolver.md](label_resolver.md) - normalized event contract and label rules.
+6. [parquet_duckdb_artifacts.md](parquet_duckdb_artifacts.md), [data_quality_checks.md](data_quality_checks.md), [data_leakage_prevention.md](data_leakage_prevention.md), [traceability.md](traceability.md) - artifacts, checks, and lineage.
+7. [performance_tuning.md](performance_tuning.md), [runtime_resource_runbook.md](runtime_resource_runbook.md), [final_summary_template.md](final_summary_template.md) - operations, recovery, and final reporting.
+
+## Core Invariants
+
+1. Raw dataset files are never modified.
+2. `TRAIN`, `VALIDATION`, and `TEST` are not mixed in one normalized/feature/model-ready artifact.
+3. `TEST` is not used for training, preprocessing fit, scaler fit, encoder fit, threshold tuning, or feature selection.
+4. PostgreSQL stores metadata, statuses, relationships, paths, hashes, and reports; large normalized/features/model-ready tables are stored in Parquet.
+5. DuckDB is used for analytical SQL checks over Parquet.
+6. Labels are stored separately from X features.
+7. Leakage/source/label fields must not enter model-ready `X` artifacts.
+8. All artifacts must preserve traceability: `raw -> normalized -> features -> model-ready`.
+9. Missing labels do not mean benign.
+10. Filename heuristics for `TEST` labels are disabled.
+11. Missing timestamps must not be replaced with current time; store `timestamp = null` and `timestamp_type = "missing"` or `event_order` when event order is available.
 
 ## Main Commands
 
-```powershell
+All commands go through `manage.py`:
+
+```bash
 python manage.py stage-two bootstrap-storage
-python -m alembic -c scripts/db/migrations/alembic.ini upgrade head
-python manage.py stage-two seed-parser-registry
 python manage.py stage-two catalog-ingest
-python manage.py stage-two parser-coverage
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two parser-coverage [dns|host|network|hybrid]
 python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
 python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
 python manage.py stage-two normalize-all --branch host --limit 1000
-python manage.py stage-two run-duckdb-checks
-python manage.py stage-two run-leakage-checks
-python -m scripts.stage_two.readiness_check
-```
-
-Stage Two smoke scripts are supported only in module form, for example `python -m scripts.stage_two.parser_smoke`. Do not run them as file paths such as `python scripts/stage_two/parser_smoke.py`, because that execution mode can break package imports.
-
-Backward-compatible normalization aliases remain available:
-
-```powershell
+python manage.py stage-two split-large-files --branch host --role TRAIN --format csv --max-part-size-mb 512 --apply --register
 python manage.py stage-two normalize-dns 10
 python manage.py stage-two normalize-host 10
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 ```
 
-## Documentation Map
+Migrations and module-level checks are run separately:
 
-- [Stage Two usage guide](usage_guide.md): operational runbook from filtered datasets to normalized artifacts.
-- [Parser strategy](parser_strategy.md): source formats, parser classes, statuses, and registry behavior.
-- [Parser development guide](parser_development_guide.md): how to add a new parser safely.
-- [PostgreSQL catalog schema](postgresql_catalog_schema.md): catalog tables and relationships.
-- [Normalized event schema](normalized_event_schema.md): canonical normalized event contract.
-- [Storage architecture](storage_architecture.md): storage roots and generated artifact paths.
-- [Parquet and DuckDB artifacts](parquet_duckdb_artifacts.md): Parquet writer and DuckDB checks.
-- [Performance tuning](performance_tuning.md): workers, batch size, part artifacts, resume, and metrics.
-- [Data quality checks](data_quality_checks.md): quality/readiness checks and reports.
-- [Data leakage prevention](data_leakage_prevention.md): label and split safety rules.
-- [Final Codex summary template](final_summary_template.md): final task summary format and staged validation commands.
-
-## Core Invariants
-
-- `PATH_FOLDER_DATASETS_FILTER` is the authoritative Stage Two input.
-- `PATH_FOLDER_DATASETS` is retained for immutable raw source storage, Stage One discovery, and audit/backtracking; it is not ingested by default into the Stage Two catalog.
-- Raw datasets are never modified by Stage Two.
-- PostgreSQL stores metadata, statuses, relationships, parser runs, and artifact records; large normalized data is stored in Parquet.
-- Only TRAIN, VALIDATION, and TEST are active processing roles. `EXPERIMENTS` is a legacy DB-compatible value and is not used by catalog ingestion, mark-ready, normalization, reports, or downstream checks.
-- TRAIN, VALIDATION, and TEST remain logically separated in catalog rows and physically separated in Parquet paths.
-- `catalog-ingest` does not automatically mark files as `READY_FOR_PARSING`; `mark-ready` is the explicit operational gate.
-- `normalize-format` processes exactly one `branch`/`role`/`source_format` slice.
-- `normalize-all` processes one branch in role/source_format groups, not one uncontrolled mixed transaction.
-- Missing source values are represented as `None`/SQL `NULL`/Parquet null.
-- Unknown source fields are preserved in `raw_fields_json`, `features_json`, or `metadata_json`.
-- Labels must not enter X/model input columns. TEST filename heuristics are disabled.
-- Parser failures must be visible through `parser_runs`, `dataset_files.status`, reports, and counters.
-
-## Current Parser Groups
-
-| Branch | Parser class | Source formats |
-| --- | --- | --- |
-| dns | `DnsCsvParser` | `csv` |
-| dns | `DnsPcapCsvParser` | `pcap.csv` |
-| dns | `DnsTxtDomainListParser` | `txt` for DNS VALIDATION |
-| dns | `DnsPacketCaptureParser` | `cap`, `pcap`, `pcapng` |
-| host | `HostCsvParser` | `csv` |
-| host | `HostJsonLinesParser` | `json`, `json-1` |
-| host | `HostLineLogParser` | host line-log formats and metric log buckets |
-| host | `HostMetricbeatParser` | metric formats delegated from `HostLineLogParser` |
-| host | `HostSyscallTraceParser` | `ghc`, `sc`, `txt` |
-| host | `HostBsonSandboxParser` | `bson` for host TEST |
-| host | `HostNetflowParser` | `netflow_day`, `netflow_ids`, `wls_day` |
-| host | `HostXmlParser` | `xml` |
-| host | `HostPacketCaptureParser` | `cap`, `pcap`, `pcapng` for host TRAIN/VALIDATION |
-
-Run the authoritative coverage command before large normalization batches:
-
-```powershell
-python manage.py stage-two parser-coverage
+```bash
+alembic -c scripts/db/migrations/alembic.ini upgrade head
+python -m scripts.db.smoke_check
+python -m scripts.stage_two.readiness_check
+python -m scripts.stage_two.e2e_dry_run
 ```
 
-The report is written under:
+## Pipeline
 
-```text
-PATH_DATA_STORAGE/reports/en/stage-two/parser/parser_coverage_matrix.md
-PATH_DATA_STORAGE/reports/ru/stage-two/parser/parser_coverage_matrix.md
+```mermaid
+flowchart TD
+    A["Stage One sorted/filter tree"] --> B["catalog-ingest"]
+    B --> C["datasets, ingestion_runs, dataset_files"]
+    C --> D["seed-parser-registry"]
+    D --> E["parser-coverage / mark-ready"]
+    E --> F["normalize-format / normalize-all / normalize-dns / normalize-host"]
+    F --> G["parser_runs"]
+    F --> H["parquet/normalized/..."]
+    G --> I["normalized_artifacts"]
+    H --> J["DuckDB views and checks"]
+    I --> K["feature/model-ready contracts and registry services"]
+    K --> L["feature_artifacts / model_ready_artifacts"]
+    L --> M["leakage checks"]
+    L --> N["trace-artifact"]
 ```
+
+## Terminology
+
+| Term | Meaning |
+| --- | --- |
+| branch | Data branch/modality: `dns`, `host`, `network`, `hybrid`. Normalization currently supports `dns` and `host`. |
+| role | Dataset split: `TRAIN`, `VALIDATION`, `TEST`. `EXPERIMENTS` exists in DB constraints, but the Stage Two catalog scanner activates only `TRAIN/VALIDATION/TEST`. |
+| source_format | Source file format: `csv`, `pcap`, `pcap.csv`, `json`, `txt`, `bson`, `auth.log`, `netflow_day`, etc. |
+| normalized event | One normalized record following the `normalized_event/v1` contract. |
+| parser run | One parser execution for one `dataset_files.id`. |
+| artifact | A Parquet or external file registered in catalog metadata. |

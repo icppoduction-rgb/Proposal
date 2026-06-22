@@ -1,134 +1,116 @@
-# Parser strategy
+# Стратегия parser registry и выбора parser
 
-Stage Two использует registry-driven parser pipeline:
+Parser strategy состоит из трех частей:
+
+1. `parser_registry_seed.json` описывает поддерживаемые parser groups.
+2. `ParserRegistrySeeder` разворачивает groups в строки `parser_registry`.
+3. `ParserResolver` выбирает активный parser для конкретного `dataset_files` по `branch`, `role`, `source_format`.
+
+## Seed registry
+
+Файл:
 
 ```text
-dataset_files.source_format -> parser_registry -> ParserResolver -> parser class -> ParserResult -> normalized Parquet
+scripts/stage_two/parser_registry/parser_registry_seed.json
 ```
 
-Parser seed: `scripts/stage_two/parser_registry/parser_registry_seed.json`.
+Seed загружается командой:
 
-Загрузка/обновление:
-
-```powershell
+```bash
 python manage.py stage-two seed-parser-registry
 ```
 
-## Source format detection
+Seeder проверяет, что `parser_module` и `parser_class` импортируются. Если класс отсутствует или не наследуется от `BaseParser`, entry может быть сохранен как inactive с diagnostic metadata в `config_json.class_validation`.
 
-`DatasetFileScanner` в `scripts/stage_two/ingestion/scanner.py` определяет:
+## Как выбирается parser
 
-1. `branch` из path/root parts: `dns`, `host`, иначе `hybrid`.
-2. `role` из path parts: `TRAIN`, `VALIDATION`, `TEST`. Файлы вне этих role directories пропускаются Stage Two catalog ingestion.
-3. `source_format` сначала из sorted-tree format buckets, затем file-name heuristics.
-
-`EXPERIMENTS` не является активной рабочей ролью. Значение может оставаться в старых DB constraints для совместимости, но scanner/catalog/normalization/reporting workflows его игнорируют.
-
-Compound names сохраняются:
+`ParserResolver` ищет active entries:
 
 ```text
-pcap.csv -> pcap.csv
-process.summary.log -> process.summary.log
-journal~ -> journal~
-netflow_day -> netflow_day
+branch == dataset_file.branch
+source_format == dataset_file.source_format
+supported_role == dataset_file.role OR supported_role IS NULL
+is_active == true
 ```
 
-## Active parser coverage
+Затем сортирует по `priority`, потом `id`. Role-specific entry имеет преимущество только через порядок/priority; универсальная запись с `supported_role = NULL` подходит для всех ролей.
 
-| Branch | Parser class | Source formats | Role scope |
+Если parser не найден:
+
+- `resolve_or_mark_unsupported()` переводит файл в `UNSUPPORTED_FORMAT`;
+- `normalize-format` возвращает status `UNSUPPORTED_FORMAT` для выбранного bucket;
+- parser run не должен имитировать успешную нормализацию.
+
+## Реализованные parser groups
+
+### DNS
+
+| Parser class | Source formats | Roles | Модуль |
 | --- | --- | --- | --- |
-| dns | `DnsCsvParser` | `csv` | all roles |
-| dns | `DnsPcapCsvParser` | `pcap.csv` | all roles |
-| dns | `DnsTxtDomainListParser` | `txt` | VALIDATION |
-| dns | `DnsPacketCaptureParser` | `cap`, `pcap`, `pcapng` | all roles |
-| host | `HostCsvParser` | `csv` | all roles |
-| host | `HostJsonLinesParser` | `json`, `json-1` | all roles |
-| host | `HostLineLogParser` | `auth.log`, `info`, `journal`, `journal~`, `log`, `log-1`, `log-2`, `log-3`, `mail-info-1`, `mail-warn-1`, `mainlog`, `mainlog-1`, `mainlog-2`, `mainlog-3`, `messages`, `messages-1`, `syslog`, `syslog-1`, `syslog-2`, `syslog-3`, `syslog-4`, `syslog.log` | all roles |
-| host | `HostLineLogParser` -> `HostMetricbeatParser` | `cpu.log`, `diskio.log`, `filesystem.log`, `fsstat.log`, `load.log`, `memory.log`, `network.log`, `process.log`, `process.summary.log`, `service.log`, `socket.summary.log`, `uptime.log` | all roles |
-| host | `HostSyscallTraceParser` | `ghc`, `sc`, `txt` | all roles |
-| host | `HostBsonSandboxParser` | `bson` | TEST |
-| host | `HostNetflowParser` | `netflow_day`, `netflow_ids`, `wls_day` | all roles |
-| host | `HostXmlParser` | `xml` | all roles |
-| host | `HostPacketCaptureParser` | `cap`, `pcap`, `pcapng` | TRAIN, VALIDATION |
+| `DnsCsvParser` | `csv` | all active roles | `scripts.stage_two.parsers.dns` |
+| `DnsPcapCsvParser` | `pcap.csv` | all active roles | `scripts.stage_two.parsers.dns` |
+| `DnsTxtDomainListParser` | `txt` | `VALIDATION` | `scripts.stage_two.parsers.dns` |
+| `DnsPacketCaptureParser` | `cap`, `pcap`, `pcapng` | all active roles | `scripts.stage_two.parsers.dns` |
 
-Authoritative runtime view:
+### Host
 
-```powershell
-python manage.py stage-two parser-coverage
-```
+| Parser class | Source formats | Roles | Модуль |
+| --- | --- | --- | --- |
+| `HostCsvParser` | `csv` | all active roles | `scripts.stage_two.parsers.host` |
+| `HostJsonLinesParser` | `json`, `json-1` | all active roles | `scripts.stage_two.parsers.host` |
+| `HostLineLogParser` | `auth.log`, `cpu.log`, `diskio.log`, `filesystem.log`, `fsstat.log`, `info`, `journal`, `journal~`, `load.log`, `log`, `log-1`, `log-2`, `log-3`, `mail-info-1`, `mail-warn-1`, `mainlog`, `mainlog-1`, `mainlog-2`, `mainlog-3`, `memory.log`, `messages`, `messages-1`, `network.log`, `process.log`, `process.summary.log`, `service.log`, `socket.summary.log`, `syslog`, `syslog-1`, `syslog-2`, `syslog-3`, `syslog-4`, `syslog.log`, `uptime.log` | all active roles | `scripts.stage_two.parsers.host` |
+| `HostSyscallTraceParser` | `txt`, `sc`, `ghc` | all active roles | `scripts.stage_two.parsers.host` |
+| `HostXmlParser` | `xml` | all active roles | `scripts.stage_two.parsers.host` |
+| `HostNetflowParser` | `netflow_day`, `netflow_ids`, `wls_day` | all active roles | `scripts.stage_two.parsers.host` |
+| `HostPacketCaptureParser` | `cap`, `pcap`, `pcapng` | `TRAIN`, `VALIDATION` | `scripts.stage_two.parsers.host` |
+| `HostBsonSandboxParser` | `bson` | `TEST` | `scripts.stage_two.parsers.host` |
 
-## ParserResolver
+Metricbeat-like логи обрабатываются через существующие host parser modules/helpers; отдельной active seed group с именем `HostMetricbeatParser` в текущем registry seed нет.
 
-`ParserResolver`:
+## Lifecycle statuses parser
 
-- выбирает active rows по `branch`, `role`, `source_format`, `priority`;
-- проверяет module/class availability перед выбором parser;
-- загружает parser classes как `BaseParser` subclasses;
-- resolves `schema_version_id` из `schema_versions`;
-- помечает files как `UNSUPPORTED_FORMAT`, если parser нет.
-
-Missing classes показываются в parser coverage, а не скрываются как runtime exceptions.
-
-## Input reader behavior
-
-`UniversalInputReader` поддерживает:
-
-| Mode | Purpose |
-| --- | --- |
-| `text` | Text stream with encoding fallback. |
-| `lines` | Streaming line iteration. |
-| `records` | Generic record iteration. |
-| `json_lines` | JSON Lines. |
-| `csv_rows` | CSV rows. |
-| `binary` | Binary content. |
-| `packet_bytes` | PCAP/CAP/PCAPNG bytes/chunks. |
-| `bson_stream` | BSON document streams. |
-
-Safety behavior:
-
-- UTF-8 BOM detection и fallback через configured text encodings.
-- gzip, bz2, xz/lzma и safe ZIP member handling.
-- conservative whole-file, line-level, JSON payload base64 decoding.
-- raw files не изменяются.
-- нет eval/pickle/subprocess execution.
-- bounded raw previews и bounded error samples.
-
-## Status model
-
-| Parser condition | Parser status | File status |
+| Уровень | Status | Значение |
 | --- | --- | --- |
-| parsed > 0 and failed = 0 | `SUCCESS` | `PARSED` |
-| parsed > 0 and failed > 0 | `PARTIAL_SUCCESS` | `PARTIALLY_PARSED` |
-| no usable content | `EMPTY_FILE` | `EMPTY_FILE` |
-| cannot read/parse safely | `FAILED` | `FAILED` |
-| intentionally skipped helper file | `SKIPPED` | `SKIPPED` |
-| no active parser | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` |
+| parser run | `SUCCESS` | Parser completed and emitted events without failed rows. |
+| parser run | `PARTIAL_SUCCESS` | Parser emitted events, but some rows/records failed. |
+| parser run | `FAILED` | Parser failed for the file. |
+| parser run | `SKIPPED` | File intentionally skipped. |
+| dataset file | `PARSED` | Файл успешно нормализован. |
+| dataset file | `PARTIALLY_PARSED` | Есть normalized events, но были ошибки. |
+| dataset file | `FAILED` | Нормализация не удалась. |
+| dataset file | `SKIPPED` | Файл пропущен по parser/result policy. |
+| dataset file | `UNSUPPORTED_FORMAT` | Для `branch/role/source_format` нет parser. |
 
-## Labels
+Stage One analysis statuses вроде `READY_FOR_FEATURE_EXTRACTION`, `NEEDS_CUSTOM_PARSER`, `PARTIALLY_SUPPORTED`, `BROKEN_OR_EMPTY` используются как input guidance для parser strategy, но Stage Two catalog lifecycle использует DB statuses выше.
 
-Parsers делегируют label decisions в `LabelResolver`.
+## Контракт ParserResult
 
-- Embedded labels и mapping rules разрешены только role-safe.
-- TEST filename heuristics отключены.
-- Отсутствие label дает explicit unlabeled fields.
-- Label/source metadata исключаются из X/model input features schema contracts и leakage checks.
+Parser возвращает `ParserResult`:
 
-## Reports
+- `events`: список normalized event rows;
+- counters: rows read/parsed/failed, events emitted;
+- errors/warnings/metadata;
+- optional `status_override`: `EMPTY_FILE`, `FAILED`, `SKIPPED`, `UNSUPPORTED_FORMAT`.
 
-Parser coverage:
+`ParserResult.status_decision` преобразует результат в parser run/file statuses. Empty output без явной причины не должен маскироваться как успешный benign dataset.
 
-```text
-PATH_DATA_STORAGE/reports/en/stage-two/parser/parser_coverage_matrix.md
-PATH_DATA_STORAGE/reports/ru/stage-two/parser/parser_coverage_matrix.md
+## Ошибки и граничные случаи
+
+| Сценарий | Поведение |
+| --- | --- |
+| Missing parser class | Seed entry становится inactive или получает validation diagnostics. |
+| Parser не найден | `dataset_files.status = UNSUPPORTED_FORMAT`. |
+| Binary PCAP/PCAPNG большой | Использовать `--packet-mode packet-summary` или `sample`; учитывать performance risk. |
+| TEST labels в имени файла | Filename hints отключены для `TEST`. |
+| Mixed schema CSV/JSON | Parser должен сохранять неизвестные поля в JSON payload и фиксировать warnings. |
+| Partially corrupt file | Допустим `PARTIAL_SUCCESS`/`PARTIALLY_PARSED`, counters должны показывать failed rows. |
+
+## Проверка покрытия
+
+```bash
+python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage dns
+python manage.py stage-two parser-coverage host
 ```
 
-Per-run parser diagnostics:
-
-```text
-PATH_DATA_STORAGE/reports/en/stage-two/parser/
-PATH_DATA_STORAGE/reports/ru/stage-two/parser/
-```
-
-## Adding parsers
-
-См. [Parser development guide](parser_development_guide.md).
+Проверка сравнивает зарегистрированные `dataset_files` combinations с `parser_registry`. Ее нужно запускать после `catalog-ingest` и `seed-parser-registry`.

@@ -1,82 +1,108 @@
-# Data quality checks
+# Проверки качества данных
 
-Stage Two quality checks проверяют, что generated artifacts и catalog rows пригодны для downstream stages.
+Stage Two использует два уровня проверок:
 
-## Commands
+1. DuckDB analytics checks поверх Parquet views.
+2. `DataQualityChecker`/`LeakageChecker` с регистрацией результатов в `data_quality_reports`.
 
-```powershell
+## DuckDB analytics
+
+Команда:
+
+```bash
 python manage.py stage-two run-duckdb-checks
-python -m scripts.stage_two.readiness_check
 ```
 
-## DuckDB checks
+Код:
 
-`run-duckdb-checks` реализован в `DuckDBAnalyticsService`.
+```text
+scripts/stage_two/duckdb/service.py
+```
 
 Проверяет:
 
-- DuckDB может создать views поверх Parquet locations.
-- Required normalized/model-ready columns присутствуют там, где применимо.
-- Empty buckets не ломают view creation.
-- Reports регистрируются в PostgreSQL.
+- созданы ли views `normalized_all`, `features_all`, `model_ready_all`;
+- row counts по Parquet layers;
+- наличие required columns;
+- split contamination;
+- schema mismatch.
 
-Expected successful output:
+Report:
 
 ```text
-"service": "stage-two run-duckdb-checks"
-"status": "SUCCESS"
-"check_count": <number>
+reports/en/stage-two/quality/duckdb_analytics_report.json
 ```
+
+После регистрации в catalog создается запись `data_quality_reports` с `check_group` для DuckDB/quality diagnostics.
+
+## DataQualityChecker
+
+Код:
+
+```text
+scripts/stage_two/quality/checkers.py
+```
+
+`DataQualityChecker` читает DuckDB views и проверяет:
+
+| Проверка | Цель |
+| --- | --- |
+| Required columns | Контрактные колонки присутствуют в views. |
+| Null counts | Видимость пустых значений в критичных columns. |
+| Duplicate keys | Дубликаты ключевых event/sample identifiers. |
+| Role domain | Значения role/dataset_role ограничены `TRAIN`, `VALIDATION`, `TEST`. |
+| Branch domain | Значения branch ограничены catalog constants. |
+
+Reports пишутся в RU/EN report roots и могут регистрироваться через `DataQualityRepository`.
+
+## Уровни severity
+
+| Severity | Значение |
+| --- | --- |
+| `INFO` | Диагностическая информация. |
+| `WARNING` | Нежелательное состояние, которое не всегда блокирует pipeline. |
+| `ERROR` | Нарушение контракта или качества данных. |
+| `CRITICAL` | Нарушение, которое может привести к leakage, смешиванию splits или недостоверному model-ready artifact. |
+
+## Связь с leakage checks
+
+`LeakageChecker` находится в том же модуле, но описан отдельно в [data_leakage_prevention.md](data_leakage_prevention.md). Его CRITICAL results также регистрируются в `data_quality_reports`, обычно с `check_group = "leakage"`.
 
 ## Readiness check
 
-`scripts.stage_two.readiness_check` проверяет:
+```bash
+python -m scripts.stage_two.readiness_check
+```
 
-| Check | Purpose |
-| --- | --- |
-| `storage_paths` | Required `PATH_DATA_STORAGE` paths exist. |
-| `migrations` | Alembic head applied. |
-| `catalog_counts` | Required catalog tables not unexpectedly empty. |
-| `schema_versions` | Normalized schema version registered. |
-| `normalized_artifacts` | Normalized artifact statuses valid. |
-| `artifact_registration` | Artifact relationships intact. |
-| `parser_coverage` | Catalog files have parser coverage. |
-| `quality_leakage_reports` | Quality/leakage reports exist and no critical leakage. |
-| `raw_files` | Catalog file hashes still match raw files. |
-| `traceability` | Raw -> parser run -> normalized -> feature -> model-ready chain traversable when rows exist. |
+Readiness проверяет, что:
 
-Readiness reports:
+- миграции применены;
+- storage paths существуют;
+- catalog содержит datasets/files/parser_registry/schema_versions/artifacts/reports;
+- parser coverage не имеет uncovered combinations;
+- normalized artifacts есть и не failed;
+- feature/model-ready artifacts связаны с upstream artifacts;
+- quality/leakage reports существуют;
+- traceability chain восстанавливается;
+- raw file hashes совпадают с catalog.
+
+Readiness report сохраняется в:
 
 ```text
-reports/en/stage-two/stage_two_readiness_report.json
 reports/en/stage-two/stage_two_readiness_report.md
 reports/ru/stage-two/stage_two_readiness_report.md
+reports/en/stage-two/stage_two_readiness_report.json
 ```
 
-## Parser smoke checks
+## Что считается блокирующим
 
-Перед acceptance parser changes:
+Блокирующие сценарии:
 
-```powershell
-python -m scripts.stage_two.parser_smoke
-python -m scripts.stage_two.parser_input_smoke
-python -m scripts.stage_two.parser_catalog_smoke
-python -m scripts.stage_two.cli_operational_smoke
-```
+- `TEST` найден в preprocessing fit/training context;
+- label/source fields присутствуют в model-ready `X`;
+- отсутствует обязательная traceability связь;
+- raw file hash не совпадает с catalog;
+- parser coverage отсутствует для files, которые должны нормализоваться;
+- role contamination между `TRAIN`, `VALIDATION`, `TEST`.
 
-| Smoke | Что проверяет |
-| --- | --- |
-| `parser_smoke` | One direct parser smoke per parser group. |
-| `parser_input_smoke` | Base64, encodings, gzip, negative base64 cases, raw hash preservation. |
-| `parser_catalog_smoke` | Registry -> catalog ingestion -> mark-ready -> normalization -> Parquet -> catalog artifact registration with rollback. |
-| `cli_operational_smoke` | CLI workflow, old aliases, dry-run/apply semantics, normalize-format scope, normalize-all grouping. |
-
-## Typical failures
-
-| Failure | Meaning | Fix |
-| --- | --- | --- |
-| missing storage path | `bootstrap-storage` не запускался или `PATH_DATA_STORAGE` wrong. | Configure path and run bootstrap. |
-| missing schema version | Parser registry seed не запускался. | Run `seed-parser-registry`. |
-| parser coverage gap | Catalog имеет format без active parser. | Add registry/parser or fix scanner inference. |
-| raw hash mismatch | Raw file changed after catalog ingestion. | Re-ingest catalog and review `CHANGED` status. |
-| traceability failure | Artifact relationships incomplete. | Inspect parser run and artifact registration code. |
+Такие нарушения нужно исправлять до использования artifacts в ML experiments.

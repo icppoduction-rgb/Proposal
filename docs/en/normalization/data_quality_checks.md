@@ -1,82 +1,108 @@
 # Data Quality Checks
 
-Stage Two quality checks validate that generated artifacts and catalog rows are usable by downstream stages.
+Stage Two uses two check layers:
 
-## Commands
+1. DuckDB analytics checks over Parquet views.
+2. `DataQualityChecker`/`LeakageChecker` with registration in `data_quality_reports`.
 
-```powershell
+## DuckDB Analytics
+
+Command:
+
+```bash
 python manage.py stage-two run-duckdb-checks
-python -m scripts.stage_two.readiness_check
 ```
 
-## DuckDB Checks
-
-`run-duckdb-checks` is implemented by `DuckDBAnalyticsService`.
-
-It verifies that:
-
-- DuckDB can create views over Parquet locations.
-- Required normalized/model-ready columns are present where applicable.
-- Empty buckets do not crash view creation.
-- Reports can be registered in PostgreSQL.
-
-Expected successful output:
+Code:
 
 ```text
-"service": "stage-two run-duckdb-checks"
-"status": "SUCCESS"
-"check_count": <number>
+scripts/stage_two/duckdb/service.py
 ```
 
-## Readiness Check
+Checks:
 
-`scripts.stage_two.readiness_check` validates:
+- views `normalized_all`, `features_all`, `model_ready_all` can be created;
+- row counts by Parquet layer;
+- required columns;
+- split contamination;
+- schema mismatch.
+
+Report:
+
+```text
+reports/en/stage-two/quality/duckdb_analytics_report.json
+```
+
+After registration in catalog, a `data_quality_reports` row is created for DuckDB/quality diagnostics.
+
+## DataQualityChecker
+
+Code:
+
+```text
+scripts/stage_two/quality/checkers.py
+```
+
+`DataQualityChecker` reads DuckDB views and checks:
 
 | Check | Purpose |
 | --- | --- |
-| `storage_paths` | Required `PATH_DATA_STORAGE` paths exist. |
-| `migrations` | Alembic head is applied. |
-| `catalog_counts` | Required catalog tables are not unexpectedly empty. |
-| `schema_versions` | Normalized schema version is registered. |
-| `normalized_artifacts` | Normalized artifact statuses are valid. |
-| `artifact_registration` | Artifact relationships are intact. |
-| `parser_coverage` | Catalog files have parser coverage. |
-| `quality_leakage_reports` | Quality/leakage reports exist and no critical leakage is present. |
-| `raw_files` | Catalog file hashes still match raw files. |
-| `traceability` | Raw -> parser run -> normalized -> feature -> model-ready chain can be traversed when rows exist. |
+| Required columns | Contract columns exist in views. |
+| Null counts | Visibility into null values in critical columns. |
+| Duplicate keys | Duplicate key event/sample identifiers. |
+| Role domain | `role`/`dataset_role` values are restricted to `TRAIN`, `VALIDATION`, `TEST`. |
+| Branch domain | `branch` values are restricted to catalog constants. |
 
-Readiness reports:
+Reports are written to EN/RU report roots and can be registered through `DataQualityRepository`.
+
+## Severity Levels
+
+| Severity | Meaning |
+| --- | --- |
+| `INFO` | Diagnostic information. |
+| `WARNING` | Undesirable state that does not always block the pipeline. |
+| `ERROR` | Contract or data quality violation. |
+| `CRITICAL` | Violation that can cause leakage, split mixing, or unreliable model-ready artifacts. |
+
+## Relationship to Leakage Checks
+
+`LeakageChecker` is implemented in the same module but documented separately in [data_leakage_prevention.md](data_leakage_prevention.md). Its CRITICAL results are also registered in `data_quality_reports`, usually with `check_group = "leakage"`.
+
+## Readiness Check
+
+```bash
+python -m scripts.stage_two.readiness_check
+```
+
+Readiness verifies that:
+
+- migrations are applied;
+- storage paths exist;
+- catalog contains datasets/files/parser_registry/schema_versions/artifacts/reports;
+- parser coverage has no uncovered combinations;
+- normalized artifacts exist and are not failed;
+- feature/model-ready artifacts are linked to upstream artifacts;
+- quality/leakage reports exist;
+- traceability chain can be reconstructed;
+- raw file hashes match the catalog.
+
+Readiness reports are saved to:
 
 ```text
-reports/en/stage-two/stage_two_readiness_report.json
 reports/en/stage-two/stage_two_readiness_report.md
 reports/ru/stage-two/stage_two_readiness_report.md
+reports/en/stage-two/stage_two_readiness_report.json
 ```
 
-## Parser Smoke Checks
+## Blocking Conditions
 
-Use these before accepting parser changes:
+Blocking scenarios:
 
-```powershell
-python -m scripts.stage_two.parser_smoke
-python -m scripts.stage_two.parser_input_smoke
-python -m scripts.stage_two.parser_catalog_smoke
-python -m scripts.stage_two.cli_operational_smoke
-```
+- `TEST` appears in preprocessing fit/training context;
+- label/source fields appear in model-ready `X`;
+- a required traceability link is missing;
+- raw file hash does not match the catalog;
+- parser coverage is missing for files that should be normalized;
+- role contamination between `TRAIN`, `VALIDATION`, and `TEST`.
 
-| Smoke | What it validates |
-| --- | --- |
-| `parser_smoke` | One direct parser smoke per parser group. |
-| `parser_input_smoke` | Base64, encodings, gzip, negative base64 cases, raw hash preservation. |
-| `parser_catalog_smoke` | Registry -> catalog ingestion -> mark-ready -> normalization -> Parquet -> catalog artifact registration with rollback. |
-| `cli_operational_smoke` | CLI workflow, old aliases, dry-run/apply semantics, normalize-format scope, normalize-all grouping. |
-
-## Typical Failures
-
-| Failure | Meaning | Fix |
-| --- | --- | --- |
-| missing storage path | `bootstrap-storage` has not been run or `PATH_DATA_STORAGE` is wrong. | Configure path and run bootstrap. |
-| missing schema version | Parser registry seed was not run. | Run `seed-parser-registry`. |
-| parser coverage gap | Catalog has format without active parser. | Add registry/parser or fix scanner inference. |
-| raw hash mismatch | Raw file changed after catalog ingestion. | Re-ingest catalog and review `CHANGED` status. |
-| traceability failure | Artifact relationships are incomplete. | Inspect parser run and artifact registration code. |
+These violations must be fixed before artifacts are used in ML experiments.

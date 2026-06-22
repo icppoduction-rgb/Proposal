@@ -1,134 +1,169 @@
-# Parser development guide
+# Руководство добавления parser implementation
 
-Это руководство описывает поддерживаемый способ добавления или изменения Stage Two parser implementations.
+Этот документ описывает минимальный контракт нового parser в Stage Two. Новый parser должен быть безопасен для raw data, не смешивать роли и сохранять traceability.
 
-## Parser contract
+## Где менять код
 
-Каждый parser наследуется от `BaseParser` из `scripts/stage_two/parsers/base.py` и возвращает `ParserResult`.
-
-Core classes:
-
-| Class | Назначение |
+| Задача | Файл/директория |
 | --- | --- |
-| `ParserContext` | Traceability input: dataset/file ids, role, branch, source format, source path/hash, parser run id, metadata. |
-| `ParsedEvent` | Typed event wrapper для parser helpers. |
-| `ParserResult` | Parser output: events, counters, warnings, error samples, parser/file statuses. |
-| `BaseParser` | Abstract parser base с parser name/version/schema metadata. |
+| Parser class | `scripts/stage_two/parsers/*.py` |
+| Shared helpers | `scripts/stage_two/parsers/common.py`, `csv_utils.py`, `json_utils.py`, `input_reader.py` |
+| Registry entry | `scripts/stage_two/parser_registry/parser_registry_seed.json` |
+| Schema contract | `schemas/normalized/normalized_event_v1.json` или новая schema version |
+| Parser tests/smoke | `scripts/stage_two/parser_smoke.py`, `parser_input_smoke.py`, project tests if present |
+| Документация | `docs/ru/normalization/parser_strategy.md`, этот файл, при необходимости schema docs |
 
-Required normalized fields определены в `REQUIRED_NORMALIZED_FIELDS` в `base.py` и в `schemas/normalized/normalized_event_v1.json`.
+## Минимальный контракт parser
 
-## Используйте shared helpers
+Parser class должен:
 
-| Utility | File | Use |
-| --- | --- | --- |
-| `UniversalInputReader` | `scripts/stage_two/parsers/input_reader.py` | Streaming text/CSV/JSON-lines, binary streams, encoding, compression, safe base64. |
-| Event builder helpers | `scripts/stage_two/parsers/common.py` | Stable event UID, traceability fields, labels, timestamps, metadata merge. |
-| CSV helpers | `scripts/stage_two/parsers/csv_utils.py` | Headered/headerless CSV rows. |
-| JSON helpers | `scripts/stage_two/parsers/json_utils.py` | JSON-line/array/object handling and flattening. |
-| Log helpers | `scripts/stage_two/parsers/logs.py` | Syslog/auth/mail/journal line parsing. |
-| `LabelResolver` | `scripts/stage_two/labels/resolver.py` | Safe label extraction и label mapping rules. |
+1. наследоваться от `BaseParser`;
+2. принимать `ParserContext`;
+3. возвращать `ParserResult`;
+4. заполнять обязательные normalized fields;
+5. не изменять raw файл;
+6. сохранять `event_index` или другой порядок, если timestamp отсутствует;
+7. использовать `LabelResolver`, а не назначать benign по умолчанию;
+8. сохранять неизвестные raw values в `raw_fields_json`/`metadata_json`, а не терять их.
 
-## Implementation steps
+Обязательные поля перечислены в [normalized_event_schema.md](normalized_event_schema.md).
 
-1. Добавить или изменить parser class в подходящем module:
+## Шаблон решения
 
-| Format family | Preferred module |
-| --- | --- |
-| DNS CSV/TXT/pcap.csv | `scripts/stage_two/parsers/dns.py` |
-| Host CSV/JSON/log/syscall wrappers | `scripts/stage_two/parsers/host.py` |
-| Metricbeat/system metrics | `scripts/stage_two/parsers/metrics.py` |
-| NetFlow/WLS | `scripts/stage_two/parsers/netflow.py` |
-| Packet captures | `scripts/stage_two/parsers/packet.py` |
-| BSON sandbox telemetry | `scripts/stage_two/parsers/bson.py` |
-| XML | `scripts/stage_two/parsers/xml.py` |
+```python
+from pathlib import Path
 
-2. Export parser из `scripts/stage_two/parsers/__init__.py`, если он нужен tests или registry validation.
-3. Добавить/обновить registry entry в `scripts/stage_two/parser_registry/parser_registry_seed.json`.
-4. Убедиться, что scanner inference знает format в `scripts/stage_two/ingestion/scanner.py`.
-5. Добавить direct parser smoke в `scripts/stage_two/parser_smoke.py` или focused tests в `tests/stage_two/`.
-6. Добавить encoded/compressed smoke в `scripts/stage_two/parser_input_smoke.py`, если format это поддерживает.
-7. Если меняется catalog behavior, обновить `scripts/stage_two/parser_catalog_smoke.py`.
-8. Запустить validation commands.
+from scripts.stage_two.labels import LabelResolver, LabelResolverProtocol
+from scripts.stage_two.parsers.base import BaseParser, ParserContext, ParserResult
+from scripts.stage_two.parsers.common import build_timestamp_fields
+from scripts.stage_two.parsers.input_reader import UniversalInputReader
 
-## Registry rules
 
-Пример registry group:
+class MyParser(BaseParser):
+    parser_name = "my_parser"
+    parser_version = "v1"
+
+    def __init__(self, label_resolver: LabelResolverProtocol | None = None) -> None:
+        self.label_resolver = label_resolver or LabelResolver()
+
+    def parse(self, path: str | Path, context: ParserContext) -> ParserResult:
+        events: list[dict[str, object]] = []
+        errors: list[str] = []
+
+        reader = UniversalInputReader(path)
+        with reader.open("json_lines") as records:
+            for event_index, raw_record in enumerate(records):
+                try:
+                    timestamp_fields = build_timestamp_fields(
+                        raw_record.get("timestamp"),
+                        event_index=event_index,
+                    )
+                    labels = self.label_resolver.resolve(raw_record, context)
+                    events.append(self.base_event(
+                        context,
+                        event_index=event_index,
+                        **timestamp_fields,
+                        **labels,
+                        event_type="my_event",
+                        entity_type="host",
+                        modality="host_event",
+                        raw_fields_json=raw_record,
+                    ))
+                except Exception as exc:
+                    errors.append(f"event_index={event_index}: {exc}")
+
+        return ParserResult(
+            events=events,
+            rows_read=len(events) + len(errors),
+            rows_parsed=len(events),
+            rows_failed=len(errors),
+            error_samples=errors,
+        )
+```
+
+В реальном parser используйте тот reader mode, который соответствует формату (`csv_rows`, `json_lines`, `lines`, `binary`, `packet_bytes`, `bson_stream`). Не добавляйте псевдополя в normalized output без обновления schema contract.
+
+## Запись в registry
+
+После добавления class нужно добавить или расширить parser group в:
+
+```text
+scripts/stage_two/parser_registry/parser_registry_seed.json
+```
+
+Минимальные поля:
 
 ```json
 {
-  "parser_name": "host_netflow_parser",
+  "parser_name": "my_parser",
   "parser_version": "v1",
   "branch": "host",
-  "source_formats": ["netflow_day", "netflow_ids", "wls_day"],
+  "source_formats": ["my_format"],
   "supported_roles": null,
+  "priority": 100,
   "normalized_schema_name": "normalized_event",
   "normalized_schema_version": "v1",
   "parser_module": "scripts.stage_two.parsers.host",
-  "parser_class": "HostNetflowParser",
-  "priority": 50,
-  "supports_streaming": true,
-  "requires_external_tools": false
+  "parser_class": "MyParser"
 }
 ```
 
-Не активируйте registry row для class, который не импортируется. `ParserResolver` и parser coverage покажут missing classes.
+`supported_roles = null` означает все активные роли. Если parser допустим только для `TEST` или только для `TRAIN/VALIDATION`, задайте список явно. Например `HostBsonSandboxParser` ограничен `TEST`, а `HostPacketCaptureParser` - `TRAIN`/`VALIDATION`.
 
-## Status rules
+## Обработка labels
 
-| Condition | Parser run status | Dataset file status |
-| --- | --- | --- |
-| Parsed rows and no failures | `SUCCESS` | `PARSED` |
-| Parsed rows and row failures | `PARTIAL_SUCCESS` | `PARTIALLY_PARSED` |
-| No usable content | `EMPTY_FILE` | `EMPTY_FILE` |
-| Parser cannot safely read file | `FAILED` | `FAILED` |
-| Helper/context file intentionally skipped | `SKIPPED` | `SKIPPED` |
-| No active parser exists | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` |
+Parser не должен самостоятельно назначать `label_binary = 0` при отсутствии label. Используйте `LabelResolver`:
 
-Unknown rows нельзя silent drop. Увеличивайте `rows_failed` и сохраняйте bounded `error_samples`.
+- explicit embedded/external labels дают `explicit_label` или configured status;
+- weak/inferred labels должны иметь confidence/source;
+- conflicting labels должны фиксироваться как `conflicting_label`;
+- для `TEST` filename/embedded heuristics отключены.
 
-## Label rules
+См. [label_resolver.md](label_resolver.md).
 
-- Используйте `LabelResolver`; не пишите ad hoc label logic внутри parsers.
-- Embedded labels разрешены только role-safe.
-- TEST filename heuristics отключены.
-- Missing labels остаются `label_binary=None`, `label_source="none"`, `label_status="unlabeled"`.
-- Label fields и traceability fields не должны стать model input features.
+## Обработка timestamp
 
-## Raw data and payload safety
+Запрещено подставлять `datetime.now()` для отсутствующего timestamp.
 
-- Никогда не изменять raw files.
-- Не использовать `eval`, `pickle` или subprocess на decoded content.
-- Не извлекать ZIP members в filesystem paths.
-- Не хранить full packet payloads, BSON streams или full raw logs в `metadata_json` или PostgreSQL.
-- Ограничивать previews через `STAGE_TWO_MAX_RAW_PREVIEW_BYTES`.
-- Ограничивать base64 decoded bytes через `STAGE_TWO_MAX_BASE64_DECODE_BYTES`.
+Используйте правила:
 
-## Validation commands
+```text
+timestamp present -> timestamp_type = absolute
+timestamp missing but event_index present -> timestamp_type = event_order
+timestamp missing and no ordering -> timestamp_type = missing
+```
 
-```powershell
-python -m compileall manage.py config.py scripts tests
-git diff --check
-python -m scripts.stage_two.parser_smoke
-python -m scripts.stage_two.parser_input_smoke
-python -m scripts.stage_two.parser_catalog_smoke
+## Обработка ошибок
+
+| Ошибка | Как фиксировать |
+| --- | --- |
+| Битая строка | Увеличить failed counter, добавить sample в errors, продолжить если возможно. |
+| Empty file | Вернуть status override `EMPTY_FILE` или `SKIPPED`, не создавать fake benign events. |
+| Unsupported subformat | Вернуть `UNSUPPORTED_FORMAT` или error metadata, если parser не может безопасно читать файл. |
+| Schema drift | Сохранить raw payload в JSON fields и добавить warning. |
+| Large binary file | Использовать packet summary/sample режимы; не загружать весь файл в память без необходимости. |
+
+## Проверки после добавления parser
+
+```bash
 python manage.py stage-two seed-parser-registry
-python manage.py stage-two parser-coverage
+python manage.py stage-two parser-coverage <branch>
+python manage.py stage-two mark-ready --branch <branch> --role <ROLE> --format <format> --dry-run
+python manage.py stage-two normalize-format --branch <branch> --role <ROLE> --format <format> --limit 10
+python manage.py stage-two run-duckdb-checks
 ```
 
-Для DB/catalog changes:
+Если parser влияет на labels или model-ready downstream, дополнительно:
 
-```powershell
-python -m scripts.db.smoke_check
-python -m alembic -c scripts/db/migrations/alembic.ini current
-python -m scripts.stage_two.cli_operational_smoke
+```bash
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
 ```
 
-## Common mistakes
+## Документация, которую нужно обновить
 
-| Mistake | Consequence | Correct approach |
-| --- | --- | --- |
-| Hardcoded storage paths in parser code | Ломает portability и config control. | Использовать `config.py` и existing writer/services. |
-| Binary files parsed as text | Corrupt packet/BSON handling. | Использовать binary reader modes. |
-| Labels treated as raw model features | Leakage risk. | Держать labels только в canonical label fields. |
-| Registry entry without class validation | Coverage gaps and runtime failures. | Implement/export class before activation. |
-| Marking all files ready without coverage review | Large failed batches. | Сначала `parser-coverage`. |
+- `parser_strategy.md` - список parser classes/source formats.
+- `normalized_event_schema.md` - если добавлены новые normalized fields или новая schema version.
+- `label_resolver.md` - если появились новые label fields/rules.
+- `data_quality_checks.md` - если нужен новый quality check.
+- `performance_tuning.md` - если parser требует специальных runtime limits.

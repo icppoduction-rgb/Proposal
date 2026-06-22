@@ -1,40 +1,97 @@
-# Stage Two Normalization Performance Tuning
+# Normalization Performance Tuning
 
-Use bounded batches and process workers for large files:
+This document describes only implemented runtime options from `scripts/stage_two/normalization/options.py` and `scripts/stage_two/cli.py`.
 
-```powershell
-python manage.py stage-two normalize-format --branch dns --role TRAIN --format pcap --limit 100 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --packet-mode dns-only --resume
-python manage.py stage-two normalize-all --branch host --limit 1000 --workers 4 --batch-size 50000 --max-output-part-rows 50000 --resume
+## Normalization Options
+
+| CLI option | Default | Purpose |
+| --- | --- | --- |
+| `--workers` | `STAGE_TWO_DEFAULT_WORKERS` (`1`) | Number of parallel worker processes for `normalize-format`/`normalize-all`. |
+| `--batch-size` | `STAGE_TWO_DEFAULT_BATCH_SIZE` (`50000`) | Batch size for parser batch processing. |
+| `--max-output-part-rows` | `STAGE_TWO_MAX_OUTPUT_PART_ROWS` (`50000`) | Maximum rows in one output part when the service splits output. |
+| `--resume` | `false` | Skip files that already have successful normalized artifacts. |
+| `--hash-output-artifacts` | `false` | Compute SHA-256 for output Parquet artifacts. |
+| `--packet-mode` | `packet-summary` | Packet parsing mode: `packet-summary`, `dns-only`, `sample`. |
+| `--sample-size` | unset | Required for `--packet-mode sample`. |
+
+Example:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --limit 10000 \
+  --workers 4 \
+  --batch-size 50000 \
+  --max-output-part-rows 50000 \
+  --resume
 ```
 
-## Flags
+## Choosing `--workers`
 
-| Flag | Purpose |
+`--workers > 1` enables `ProcessPoolExecutor` in the normalization runner. This helps with independent files, but increases:
+
+- number of open DB connections;
+- disk contention;
+- memory pressure on large parser outputs;
+- parser error diagnosis complexity.
+
+Practical sequence:
+
+1. Start with `--workers 1 --limit 10`.
+2. Check parser status, Parquet output, and DuckDB checks.
+3. Increase workers gradually.
+4. For binary PCAP/PCAPNG, do not increase workers without monitoring RAM/IO.
+
+## Packet Modes
+
+| Mode | When to use |
 | --- | --- |
-| `--workers` | File-level process workers. This uses `ProcessPoolExecutor`, not threads. |
-| `--batch-size` | Parser batch size before writing normalized rows. |
-| `--max-output-part-rows` | Maximum rows per Parquet part. |
-| `--resume` | Reuse the latest resumable parser run and skip already registered part indexes. |
-| `--packet-mode` | Packet parsing mode: `packet-summary`, `dns-only`, or `sample`. |
-| `--sample-size` | Packet limit for `--packet-mode sample`. |
-| `--hash-output-artifacts` | Re-enable output Parquet SHA-256 hashing. Disabled by default for large output speed. |
+| `packet-summary` | Default safe summary parsing for packet captures. |
+| `dns-only` | DNS extraction from packet captures when supported by the parser. |
+| `sample` | Initial assessment of large PCAP/PCAPNG; requires `--sample-size`. |
 
-## Metrics
+If `packet-mode = sample` and `sample-size` is not set, option validation raises an error.
 
-Per-file metrics are stored in `parser_runs.metadata_json.performance`:
+## Large-File Splitting
 
-- input size MB;
-- rows or packets read;
-- emitted events;
-- parse, Parquet write, catalog, and total time;
-- rows/sec, packets/sec, events/sec, MB/sec;
-- peak Python allocation memory;
-- output part count.
+For large line-based files:
 
-Each `normalized_artifacts.metadata_json` includes `part_index`, `batch_index`, `rows_in_part`, and checkpoint counters. This keeps traceability intact from raw file to normalized parts and downstream features/model-ready artifacts.
+```bash
+python manage.py stage-two split-large-files \
+  --branch host \
+  --role TRAIN \
+  --format csv \
+  --max-part-size-mb 512 \
+  --apply \
+  --register
+```
 
-## Operational Notes
+The splitter supports text/line formats and is not intended for `cap`, `pcap`, `pcapng`, or `bson`.
 
-`normalize-format` remains scoped to one `branch/role/source_format`. `normalize-all` groups by role and source format inside one branch, so `TRAIN`, `VALIDATION`, and `TEST` are not mixed.
+Risks:
 
-For packet captures, prefer `--packet-mode dns-only` for DNS datasets when non-DNS packet summaries are not needed. Use `sample` with `--sample-size` for parser smoke/performance checks before running multi-GB files.
+- JSON arrays/objects may be unsafe for line splitting;
+- header handling should be verified with `--header auto|yes|no`;
+- chunks do not appear in catalog unless `--register` is used.
+
+## Output Hashing
+
+`--hash-output-artifacts` improves verifiability but adds IO cost because the file must be read after writing. It can remain disabled for smoke/iteration; enable it for final artifacts.
+
+## Resume
+
+`--resume` skips files that already have successful normalized artifacts. It does not replace data quality checks. After resume, still run:
+
+```bash
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+```
+
+## Limitations
+
+- Performance options must not change contracts or labels.
+- Roles must not be merged for speed.
+- Do not use `TEST` to tune batch/feature/preprocessing decisions when that affects the training pipeline.
+- For mixed CSV/JSON schemas, reduce batch size and start with `--limit`.
