@@ -27,8 +27,8 @@ Related documents:
 - [../normalization/parser_strategy.md](../normalization/parser_strategy.md)
 - [../normalization/label_resolver.md](../normalization/label_resolver.md)
 - [../normalization/normalized_event_schema.md](../normalization/normalized_event_schema.md)
-- [../dataset_feature_extraction_map.md](../dataset_feature_extraction_map.md)
-- [../feature_catalogue_full.md](../feature_catalogue_full.md)
+- [../feature_extraction_and_catalogue.md](../feature_extraction_and_catalogue.md)
+- [../dataset_strategy_dns_host.md](../dataset_strategy_dns_host.md)
 
 ## Analysis coverage
 

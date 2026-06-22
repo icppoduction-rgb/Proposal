@@ -208,14 +208,13 @@ Handler-ы анализа содержимого также создают summa
 
 | Документ | Назначение |
 |---|---|
-| `docs/*/project_proposal_analysis.md` | Анализ проектного proposal |
-| `docs/*/functional_project_cheatsheet.md` | Краткая функциональная шпаргалка по проекту |
-| `docs/*/dns_dataset_strategy.md` | Стратегия работы с DNS-датасетами |
-| `docs/*/host_datasets_analysis.md` | Анализ Host-датасетов |
-| `docs/*/dataset_feature_extraction_map.md` | Карта признаков и feature extraction |
-| `docs/*/repository_qa_section_3_8.md` | QA/уточнения по разделам проекта |
-| `docs/*/analysis-dataset/analysis-dataset.md` | Общая сводка анализа датасетов |
-| `docs/*/analysis-dataset/**.md` | Отчеты по конкретным ролям и форматам |
+| `docs/*/project_documentation_index.md` | Индекс ключевой проектной документации и карта переноса старых файлов |
+| `docs/*/project_overview_and_research_context.md` | Research context, proposal-level архитектура, methodology, scope и ограничения |
+| `docs/*/dataset_strategy_dns_host.md` | Единая DNS/Host dataset strategy с разделением `TRAIN` / `VALIDATION` / `TEST` |
+| `docs/*/feature_extraction_and_catalogue.md` | Feature extraction map, feature catalogue, schema, leakage exclusions |
+| `docs/*/repository_state_qa_and_gaps.md` | QA по фактическому состоянию репозитория, gaps и follow-up задачи |
+| `docs/*/analysis-dataset/README.md` | Общая сводка анализа датасетов |
+| `docs/*/analysis-dataset/*.md` | Тематические документы по DNS/Host форматам, labels/readiness и parser recommendations |
 
 Отчеты анализа датасетов продублированы на русском и английском языках.
 

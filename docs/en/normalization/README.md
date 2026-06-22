@@ -10,7 +10,7 @@ Implemented areas:
 
 | Area | Implementation | Document |
 | --- | --- | --- |
-| CLI/routing | `manage.py`, `scripts/router_script.py`, `scripts/stage_two/cli.py` | [usage_guide.md](usage_guide.md) |
+| CLI/routing | `manage.py`, `scripts/router_script.py`, `scripts/stage_two/cli.py` | [usage_guide.md](usage_guide.md), [stage_two_commands.md](stage_two_commands.md) |
 | Storage bootstrap | `scripts/stage_two/storage/bootstrap.py` | [storage_architecture.md](storage_architecture.md) |
 | Catalog ingestion | `scripts/stage_two/ingestion/*` | [postgresql_catalog_schema.md](postgresql_catalog_schema.md) |
 | Parser registry/resolver | `scripts/stage_two/parser_registry/*` | [parser_strategy.md](parser_strategy.md) |
@@ -28,12 +28,13 @@ Not implemented as a dedicated CLI command in the current router: a full feature
 ## Recommended Reading Order
 
 1. [usage_guide.md](usage_guide.md) - how to run Stage Two and which commands the CLI actually supports.
-2. [storage_architecture.md](storage_architecture.md) - what must exist in `PATH_DATA_STORAGE`.
-3. [postgresql_catalog_schema.md](postgresql_catalog_schema.md) - which metadata and relationships are stored in PostgreSQL.
-4. [parser_strategy.md](parser_strategy.md) and [parser_development_guide.md](parser_development_guide.md) - how parsers are selected and how to add a new one.
-5. [normalized_event_schema.md](normalized_event_schema.md) and [label_resolver.md](label_resolver.md) - normalized event contract and label rules.
-6. [parquet_duckdb_artifacts.md](parquet_duckdb_artifacts.md), [data_quality_checks.md](data_quality_checks.md), [data_leakage_prevention.md](data_leakage_prevention.md), [traceability.md](traceability.md) - artifacts, checks, and lineage.
-7. [performance_tuning.md](performance_tuning.md), [runtime_resource_runbook.md](runtime_resource_runbook.md), [final_summary_template.md](final_summary_template.md) - operations, recovery, and final reporting.
+2. [stage_two_commands.md](stage_two_commands.md) - full normalization command reference: inputs, outputs, statuses, errors, and verification.
+3. [storage_architecture.md](storage_architecture.md) - what must exist in `PATH_DATA_STORAGE`.
+4. [postgresql_catalog_schema.md](postgresql_catalog_schema.md) - which metadata and relationships are stored in PostgreSQL.
+5. [parser_strategy.md](parser_strategy.md) and [parser_development_guide.md](parser_development_guide.md) - how parsers are selected and how to add a new one.
+6. [normalized_event_schema.md](normalized_event_schema.md) and [label_resolver.md](label_resolver.md) - normalized event contract and label rules.
+7. [parquet_duckdb_artifacts.md](parquet_duckdb_artifacts.md), [data_quality_checks.md](data_quality_checks.md), [data_leakage_prevention.md](data_leakage_prevention.md), [traceability.md](traceability.md) - artifacts, checks, and lineage.
+8. [performance_tuning.md](performance_tuning.md), [runtime_resource_runbook.md](runtime_resource_runbook.md), [final_summary_template.md](final_summary_template.md) - operations, recovery, and final reporting.
 
 ## Core Invariants
 

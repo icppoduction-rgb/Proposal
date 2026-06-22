@@ -2,6 +2,8 @@
 
 This document describes the implemented CLI layer: `manage.py` receives `module`, `service`, `action`, and `extra_args`; routes `stage-two` through `scripts.router_script.router_commands()`; and dispatches concrete Stage Two services through `scripts.stage_two.cli.router_stage_two()`.
 
+The full reference for each Stage Two normalization command, including inputs, outputs, PostgreSQL statuses, errors, and verification, is in [stage_two_commands.md](stage_two_commands.md).
+
 ## Prerequisites
 
 Configure the environment:

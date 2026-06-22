@@ -10,7 +10,7 @@ Stage Two начинается после Stage One, когда исходные
 
 | Область | Реализация | Документ |
 | --- | --- | --- |
-| CLI/routing | `manage.py`, `scripts/router_script.py`, `scripts/stage_two/cli.py` | [usage_guide.md](usage_guide.md) |
+| CLI/routing | `manage.py`, `scripts/router_script.py`, `scripts/stage_two/cli.py` | [usage_guide.md](usage_guide.md), [stage_two_commands.md](stage_two_commands.md) |
 | Storage bootstrap | `scripts/stage_two/storage/bootstrap.py` | [storage_architecture.md](storage_architecture.md) |
 | Catalog ingestion | `scripts/stage_two/ingestion/*` | [postgresql_catalog_schema.md](postgresql_catalog_schema.md) |
 | Parser registry/resolver | `scripts/stage_two/parser_registry/*` | [parser_strategy.md](parser_strategy.md) |
@@ -28,12 +28,13 @@ Stage Two начинается после Stage One, когда исходные
 ## Рекомендуемый порядок чтения
 
 1. [usage_guide.md](usage_guide.md) - как запустить Stage Two и какие команды реально поддерживает CLI.
-2. [storage_architecture.md](storage_architecture.md) - что должно быть в `PATH_DATA_STORAGE`.
-3. [postgresql_catalog_schema.md](postgresql_catalog_schema.md) - какие metadata и связи хранятся в PostgreSQL.
-4. [parser_strategy.md](parser_strategy.md) и [parser_development_guide.md](parser_development_guide.md) - как выбирается parser и как добавить новый.
-5. [normalized_event_schema.md](normalized_event_schema.md) и [label_resolver.md](label_resolver.md) - контракт normalized event и правила labels.
-6. [parquet_duckdb_artifacts.md](parquet_duckdb_artifacts.md), [data_quality_checks.md](data_quality_checks.md), [data_leakage_prevention.md](data_leakage_prevention.md), [traceability.md](traceability.md) - артефакты, проверки и lineage.
-7. [performance_tuning.md](performance_tuning.md), [runtime_resource_runbook.md](runtime_resource_runbook.md), [final_summary_template.md](final_summary_template.md) - эксплуатация, восстановление и итоговая отчетность.
+2. [stage_two_commands.md](stage_two_commands.md) - полный reference по командам normalization: входы, выходы, статусы, ошибки и проверки.
+3. [storage_architecture.md](storage_architecture.md) - что должно быть в `PATH_DATA_STORAGE`.
+4. [postgresql_catalog_schema.md](postgresql_catalog_schema.md) - какие metadata и связи хранятся в PostgreSQL.
+5. [parser_strategy.md](parser_strategy.md) и [parser_development_guide.md](parser_development_guide.md) - как выбирается parser и как добавить новый.
+6. [normalized_event_schema.md](normalized_event_schema.md) и [label_resolver.md](label_resolver.md) - контракт normalized event и правила labels.
+7. [parquet_duckdb_artifacts.md](parquet_duckdb_artifacts.md), [data_quality_checks.md](data_quality_checks.md), [data_leakage_prevention.md](data_leakage_prevention.md), [traceability.md](traceability.md) - артефакты, проверки и lineage.
+8. [performance_tuning.md](performance_tuning.md), [runtime_resource_runbook.md](runtime_resource_runbook.md), [final_summary_template.md](final_summary_template.md) - эксплуатация, восстановление и итоговая отчетность.
 
 ## Основные инварианты
 

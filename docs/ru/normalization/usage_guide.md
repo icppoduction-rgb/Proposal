@@ -2,6 +2,8 @@
 
 Документ фиксирует фактический CLI слой: `manage.py` принимает `module`, `service`, `action`, `extra_args`, передает `stage-two` в `scripts.stage_two.cli.router_stage_two()`, а роутер вызывает конкретные service functions.
 
+Полный reference по каждой Stage Two normalization команде, включая входы, выходы, статусы PostgreSQL, ошибки и проверки, находится в [stage_two_commands.md](stage_two_commands.md).
+
 ## Предварительные условия
 
 Нужно настроить окружение:
