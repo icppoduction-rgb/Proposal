@@ -1,0 +1,696 @@
+ЗАДАЧИ ДЛЯ CODEX
+Тема: оптимизация Stage Two normalization под новое железо без поломки корректности данных
+
+Контекст
+Проект: Proposal / Behaviour-driven hybrid learning for data exfiltration detection.
+Цель изменений: ускорить обработку датасетов объемом около 17 GB так, чтобы полный прогон Stage Two normalization укладывался максимум в 3 часа, а для line-based форматов по возможности быстрее.
+
+Железо:
+- CPU: Intel Core i7-14700KF
+- RAM: 64 GB DDR5
+- GPU: MSI GeForce RTX 5060 Ti 16 GB
+- Storage: Samsung M.2 SSD 2 TB
+- Основной упор: CPU multiprocessing + streaming/batch processing + быстрый Parquet output.
+- GPU использовать только там, где это реально безопасно и полезно: feature/model-ready/training layer, а не как обязательный raw parser.
+
+Обязательные документы для анализа перед изменениями
+1. docs/ru/General.md
+2. docs/ru/normalization/README.md
+3. docs/ru/normalization/stage_two_commands.md
+4. docs/ru/normalization/performance_tuning.md
+5. docs/ru/normalization/runtime_resource_runbook.md
+6. docs/ru/normalization/parser_strategy.md
+7. docs/ru/normalization/parser_development_guide.md
+8. docs/ru/normalization/normalized_event_schema.md
+9. docs/ru/normalization/label_resolver.md
+10. docs/ru/normalization/data_quality_checks.md
+11. docs/ru/normalization/data_leakage_prevention.md
+12. docs/ru/normalization/traceability.md
+13. docs/ru/analysis-dataset/format_status_matrix.md
+14. docs/ru/analysis-dataset/parser_feature_recommendations.md
+15. docs/ru/analysis-dataset/host_datasets.md
+16. docs/ru/analysis-dataset/dns_datasets.md
+17. config.py
+18. scripts/stage_two/**
+19. scripts/db/**
+
+Критичные инварианты, которые нельзя нарушать
+1. Raw-файлы датасетов не изменять.
+2. TRAIN / VALIDATION / TEST не смешивать ни в catalog, ни в Parquet paths, ни в feature/model-ready artifacts.
+3. TEST нельзя использовать для training, fit preprocessing, scaler/encoder fit, feature selection или threshold tuning.
+4. PostgreSQL использовать как catalog/control plane: metadata, статусы, пути, hashes, parser runs, reports.
+5. Большие normalized/features/model-ready данные хранить в Parquet, не в PostgreSQL.
+6. Labels не являются input features.
+7. label/source/path/scenario/dataset_role/dataset_name поля не должны попадать в model-ready X.
+8. Отсутствующий label не считать benign.
+9. Отсутствующий timestamp не заменять текущим временем; использовать null / timestamp_type=missing / event_order.
+10. Для каждого artifact сохранять traceability raw -> normalized -> features -> model-ready.
+11. Ошибки parser-а не скрывать. Использовать явные статусы SUCCESS / PARTIAL_SUCCESS / FAILED / SKIPPED / UNSUPPORTED_FORMAT.
+12. Ускорение не должно приводить к потере строк, событий, packets, labels, timestamps, raw_fields_json или metadata_json.
+
+Ожидаемый общий результат
+Нужно добавить performance-oriented execution architecture для Stage Two, но без переписывания смысловой логики парсеров и без нарушения normalized_event schema. Обработка должна использовать CPU multiprocessing, chunking, batch processing, atomic Parquet writes, resume/idempotency и performance reports.
+
+Не делать одной огромной задачей. Выполнять задачи ниже по порядку. Каждая задача должна завершаться рабочим кодом, тестами/проверками и отчетом.
+
+Формат отчетов после каждой задачи
+После завершения каждой задачи создать отчеты:
+
+PATH_REPORT/ru/stage-two/performance/TaskXX_<short_name>.md
+PATH_REPORT/en/stage-two/performance/TaskXX_<short_name>.md
+
+В отчете указать:
+- что изменено;
+- какие файлы изменены;
+- какие команды проверены;
+- какие тесты/проверки запущены;
+- какие риски остались;
+- как это влияет на скорость;
+- как сохранены инварианты data quality / leakage / traceability.
+
+
+================================================================================
+TASK 01. Performance profiles and safe configuration layer
+================================================================================
+
+Цель
+Добавить управляемые performance profiles для Stage Two, чтобы не менять глобально опасные параметры и не ломать существующий безопасный режим.
+
+Что сделать
+1. Проанализировать текущие значения в config.py:
+   - STAGE_TWO_PACKET_BATCH_SIZE
+   - STAGE_TWO_DEFAULT_BATCH_SIZE
+   - STAGE_TWO_MAX_OUTPUT_PART_ROWS
+   - STAGE_TWO_DEFAULT_WORKERS
+   - STAGE_TWO_HASH_OUTPUT_ARTIFACTS
+   - STAGE_TWO_PACKET_PARSE_MODE
+
+2. Добавить profiles:
+   - safe
+   - balanced
+   - fast
+   - aggressive
+
+Рекомендуемые значения:
+safe:
+  workers=4
+  batch_size=50000
+  max_output_part_rows=100000
+  packet_batch_size=50000
+  hash_output_artifacts=false
+
+balanced:
+  workers=8
+  batch_size=100000
+  max_output_part_rows=250000
+  packet_batch_size=50000
+  hash_output_artifacts=false
+
+fast:
+  workers=12
+  batch_size=200000
+  max_output_part_rows=500000
+  packet_batch_size=50000
+  hash_output_artifacts=false
+
+aggressive:
+  workers=14
+  batch_size=300000
+  max_output_part_rows=750000
+  packet_batch_size=50000
+  hash_output_artifacts=false
+
+3. Добавить CLI option:
+   --resource-profile safe|balanced|fast|aggressive
+
+4. CLI arguments должны иметь приоритет над profile.
+   Пример:
+   --resource-profile fast --workers 6
+   Итог: workers=6, остальные значения из fast.
+
+5. Добавить validation:
+   - workers >= 1
+   - batch_size > 0
+   - max_output_part_rows > 0
+   - packet_batch_size > 0
+   - unknown profile -> понятная ошибка
+   - aggressive profile должен выводить warning
+
+6. Не удалять текущие CLI flags:
+   - --workers
+   - --batch-size
+   - --max-output-part-rows
+   - --packet-mode
+   - --resume
+   - --hash-output-artifacts
+
+Acceptance criteria
+1. Старые команды Stage Two продолжают работать без изменений.
+2. Новая команда с --resource-profile корректно подставляет параметры.
+3. CLI явно печатает resolved runtime settings перед запуском normalization.
+4. Значения по умолчанию остаются безопасными, если profile не указан.
+5. Есть unit tests на profile resolution и validation.
+
+Пример команды
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --resource-profile fast --resume
+
+
+================================================================================
+TASK 02. WorkUnit execution planner and bounded multiprocessing
+================================================================================
+
+Цель
+Добавить планировщик выполнения normalization jobs, который позволяет безопасно распараллеливать обработку файлов и не перегружать PostgreSQL, RAM и SSD.
+
+Что сделать
+1. Добавить пакет:
+   scripts/stage_two/execution/
+
+2. Добавить основные компоненты:
+   - work_unit.py
+   - planner.py
+   - executor.py
+   - runtime_settings.py
+   - retry_policy.py
+   - progress.py
+
+3. WorkUnit должен содержать:
+   - branch
+   - role
+   - source_format
+   - dataset_id
+   - dataset_file_id
+   - source_path
+   - parser_name
+   - parser_version
+   - schema_version
+   - chunk_id, если применимо
+   - estimated_size_bytes
+   - engine=cpu|gpu|auto
+   - packet_mode, если применимо
+
+4. Planner должен строить WorkUnit только для dataset_files.status=READY_FOR_PARSING и только для одного branch/role/source_format или для safe grouped normalize-all.
+
+5. Executor:
+   - использует ProcessPoolExecutor для CPU parsing;
+   - ограничивает max_workers по resolved settings;
+   - не держит одну SQLAlchemy session между процессами;
+   - каждый worker открывает собственный DB/session context только там, где это нужно;
+   - не делает commit на каждую строку;
+   - обновляет catalog на уровне file/chunk/parser_run.
+
+6. Добавить bounded submission:
+   - не отправлять сразу сотни тысяч futures;
+   - держать ограниченное число pending futures, например workers * 2 или workers * 4;
+   - это особенно важно для Host TEST txt/json/log с большим количеством файлов.
+
+7. Resume/idempotency:
+   - если --resume и для dataset_file_id уже есть успешный normalized_artifact с подходящим parser/schema version, WorkUnit пропустить;
+   - не создавать дубли parser_runs/artifacts при повторном запуске.
+
+8. Retry policy:
+   - parser failure не должен ломать весь batch;
+   - failed WorkUnit получает статус FAILED;
+   - общая команда может завершиться PARTIAL_SUCCESS;
+   - количество error samples ограничить STAGE_TWO_MAX_ERROR_SAMPLES.
+
+Acceptance criteria
+1. normalize-format использует новый execution planner без изменения внешнего CLI behavior.
+2. При workers > 1 файлы реально обрабатываются параллельно.
+3. При --resume повторный запуск не создает дубликаты artifacts.
+4. Ошибка одного файла не останавливает всю обработку.
+5. Есть тесты на planner, bounded executor, resume skip, partial failure.
+
+
+================================================================================
+TASK 03. Streaming parse_batches contract for large formats
+================================================================================
+
+Цель
+Сделать parsing memory-safe и быстрым: parser не должен загружать большие файлы целиком в память.
+
+Что сделать
+1. Проанализировать scripts/stage_two/parsers/base.py.
+2. Добавить или формализовать интерфейс:
+   parse_batches(...)
+   или equivalent generator API.
+
+3. Batch должен возвращать:
+   - list/iterator ParsedEvent;
+   - counters;
+   - local errors;
+   - source_row_id / event_index / packet_id;
+   - raw_fields_json / metadata_json без потери важных полей.
+
+4. Для line-based форматов использовать streaming:
+   - csv
+   - pcap.csv
+   - txt
+   - sc
+   - ghc
+   - json
+   - json-1
+   - log/syslog/messages/mainlog/auth.log
+   - netflow_day
+   - netflow_ids
+   - wls_day
+   - metric logs
+
+5. Для JSON/JSONL:
+   - поддержать line-by-line parsing;
+   - не ломать multi-line или schema-dependent logic;
+   - Mongo-style NumberLong(...) не должен приводить к падению всего файла.
+
+6. Для text/syscall traces:
+   - сохранять event_order/event_index;
+   - не терять sequence order;
+   - не подставлять fake timestamp.
+
+7. Для CSV:
+   - поддержать header/headerless;
+   - не ломать fixed positional schemas;
+   - не считать malformed row successful silently;
+   - error rows учитывать в counters.
+
+8. Для binary formats:
+   - PCAP/PCAPNG/CAP и BSON не обязаны использовать line splitter;
+   - но parser должен работать streaming/iterator style, если возможно;
+   - нельзя загружать огромный binary file целиком в RAM.
+
+Acceptance criteria
+1. Большой файл обрабатывается batch-by-batch.
+2. Memory usage не растет линейно с размером файла.
+3. Event order сохраняется для sequence sources.
+4. Все неизвестные/нестандартные поля сохраняются в raw_fields_json или metadata_json.
+5. Есть тесты на batch parsing минимум для CSV, JSONL, TXT/log-like source.
+6. Существующие parser outputs не ломают normalized_event_v1 schema.
+
+
+================================================================================
+TASK 04. Chunk-aware large file processing
+================================================================================
+
+Цель
+Улучшить large-file flow: большие line-based файлы должны делиться на chunks и обрабатываться параллельно без потери traceability и порядка событий.
+
+Что сделать
+1. Проанализировать существующую команду split-large-files.
+2. Убедиться, что она поддерживает:
+   - csv
+   - pcap.csv
+   - txt
+   - json
+   - json-1
+   - log formats
+   - ghc
+   - sc
+   - netflow_day
+   - netflow_ids
+   - wls_day
+   - metricbeat-like logs
+
+3. Binary formats не делить обычным splitter:
+   - cap
+   - pcap
+   - pcapng
+   - bson
+
+4. Добавить chunk metadata:
+   - parent_file_id
+   - chunk_index
+   - chunk_path
+   - byte_start / byte_end, если возможно
+   - line_start / line_end, если возможно
+   - chunk_hash_sha256
+   - source_order_preserved=true/false
+   - original_source_path
+
+5. Если нет отдельной таблицы chunks, аккуратно расширить существующую catalog модель или metadata_json так, чтобы не ломать migrations и текущие queries.
+
+6. Registered chunks должны получать status=READY_FOR_PARSING.
+7. Parent source file можно пометить SKIPPED только если chunks зарегистрированы успешно и --keep-source-ready не указан.
+8. При normalize-format chunks должны обрабатываться как независимые WorkUnit, но traceability должна вести к parent raw file.
+
+Acceptance criteria
+1. split-large-files создает chunks и регистрирует их в catalog.
+2. normalize-format обрабатывает chunks параллельно.
+3. Traceability показывает связь chunk -> parent source file.
+4. Row/event counts по chunks суммируются в общий report.
+5. При ошибке одного chunk не теряется статус остальных chunks.
+6. Есть тесты на dry-run, apply, register, keep-source-ready и resume.
+
+
+================================================================================
+TASK 05. Atomic Parquet writer and output validation
+================================================================================
+
+Цель
+Сделать запись Parquet безопасной: нельзя регистрировать битый, пустой или частично записанный artifact как успешный.
+
+Что сделать
+1. Проанализировать scripts/stage_two/parquet/writer.py.
+2. Добавить atomic write:
+   - писать во временный файл;
+   - validate schema;
+   - validate row_count > 0, если parser не вернул expected empty result;
+   - validate required normalized columns;
+   - после успешной проверки делать rename/move в final path;
+   - только после этого регистрировать normalized_artifact в PostgreSQL.
+
+3. Добавить output counters:
+   - input_files
+   - input_bytes
+   - input_rows/events, если известно
+   - parsed_events
+   - output_rows
+   - failed_rows
+   - skipped_rows
+   - parser_errors_count
+   - parquet_size_bytes
+   - write_duration_seconds
+
+4. Добавить защиту от дубликатов:
+   - при --resume не писать новый artifact, если уже есть успешный artifact для той же версии parser/schema и того же file/chunk.
+   - если temporary file остался от старого падения, он должен быть очищен или переиспользован только безопасно.
+
+5. Добавить опциональный hashing:
+   - --hash-output-artifacts включает hash финального Parquet artifact;
+   - по умолчанию hashing выключен для скорости;
+   - финальные production runs могут включать hashing.
+
+Acceptance criteria
+1. При падении во время записи не появляется successful artifact.
+2. Пустой artifact не регистрируется как SUCCESS без явного allowed-empty case.
+3. Parquet schema соответствует normalized_event_v1.
+4. output_rows соответствует parser counters.
+5. run-duckdb-checks видит корректные Parquet files.
+6. Есть тесты на successful write, failed write, temp cleanup, resume.
+
+
+================================================================================
+TASK 06. Format-specific performance policy
+================================================================================
+
+Цель
+Добавить безопасную политику выбора workers/batch sizes по source_format, чтобы не использовать одинаковые настройки для TXT, JSON, PCAP и BSON.
+
+Что сделать
+1. Создать policy layer:
+   scripts/stage_two/execution/format_policy.py
+
+2. Policy должна учитывать:
+   - branch
+   - role
+   - source_format
+   - file_count
+   - total_size_bytes
+   - average_file_size
+   - binary vs line-based
+   - known parser risk
+   - packet_mode
+
+3. Рекомендуемые стартовые политики:
+
+Line-based fast formats:
+  source_format: txt, sc, ghc, log, syslog, messages, mainlog, wls_day
+  workers: 10-14
+  batch_size: 200000-300000
+  max_output_part_rows: 500000-750000
+
+CSV / pcap.csv / netflow:
+  source_format: csv, pcap.csv, netflow_day, netflow_ids
+  workers: 8-12
+  batch_size: 200000
+  max_output_part_rows: 500000
+
+JSON / JSONL:
+  source_format: json, json-1
+  workers: 6-8
+  batch_size: 100000-200000
+  max_output_part_rows: 250000-500000
+
+BSON:
+  source_format: bson
+  workers: 2-4
+  batch_size: 50000-100000
+  max_output_part_rows: 100000-250000
+
+PCAP / PCAPNG / CAP:
+  source_format: pcap, pcapng, cap
+  workers: 2-4
+  packet_batch_size: 50000
+  max_output_part_rows: 100000
+  default packet_mode=packet-summary
+
+4. Пользовательские CLI args должны иметь приоритет над policy.
+5. Policy должна печатать resolved settings и предупреждать о рискованных форматах.
+6. GPU:
+   - добавить engine=cpu|gpu|auto как reserved option;
+   - для raw normalization по умолчанию engine=cpu;
+   - не пытаться переводить PCAP/BSON/raw log parsing на GPU в этой задаче;
+   - GPU backend можно оставить как extension point для feature/model-ready layer.
+
+Acceptance criteria
+1. normalize-format без явных workers может выбрать адекватные параметры по profile+format policy.
+2. Пользовательские параметры CLI не перезаписываются policy.
+3. PCAP/BSON не запускаются с агрессивными workers по умолчанию.
+4. Line-based formats получают быстрые настройки.
+5. Есть тесты на policy resolution для txt/csv/json/bson/pcap.
+
+
+================================================================================
+TASK 07. Performance benchmark command and reports
+================================================================================
+
+Цель
+Добавить измеримый benchmark, чтобы проверить, реально ли текущий pipeline обрабатывает 17 GB за 3 часа или быстрее.
+
+Что сделать
+1. Добавить CLI command:
+   python manage.py stage-two benchmark-normalization
+
+2. Поддержать параметры:
+   --branch
+   --role
+   --format
+   --limit
+   --sample-ratio
+   --resource-profile
+   --workers
+   --batch-size
+   --max-output-part-rows
+   --resume
+   --dry-run
+
+3. Benchmark должен измерять:
+   - input_bytes
+   - processed_bytes
+   - processed_gb
+   - elapsed_seconds
+   - gb_per_hour
+   - files_per_second
+   - rows_per_second/events_per_second
+   - successful_files
+   - partial_files
+   - failed_files
+   - skipped_files
+   - unsupported_files
+   - parquet_output_size
+   - average_parser_time_per_file
+   - average_write_time_per_artifact
+   - CPU/RAM metrics, если можно без тяжелых зависимостей
+   - GPU metrics опционально, если engine/gpu layer доступен
+
+4. Добавить расчет:
+   - estimated_time_for_17gb
+   - meets_3_hour_target=true/false
+   - required_gb_per_hour=5.67
+   - current_gb_per_hour
+
+5. Reports:
+   - PATH_REPORT/ru/stage-two/performance/benchmark_<branch>_<role>_<format>.md
+   - PATH_REPORT/en/stage-two/performance/benchmark_<branch>_<role>_<format>.md
+   - JSON report рядом с markdown
+
+6. Benchmark не должен портить production artifacts.
+   Варианты:
+   - dry-run only для планирования;
+   - или normal run с --resume и явной registration logic;
+   - не создавать дубликаты.
+
+Acceptance criteria
+1. Команда benchmark-normalization работает по конкретному branch/role/format.
+2. Report показывает GB/hour и estimated_time_for_17gb.
+3. Report показывает failed/partial files.
+4. Benchmark можно безопасно повторять.
+5. Есть тесты на расчет throughput и report generation.
+
+Пример команды
+python manage.py stage-two benchmark-normalization --branch host --role TEST --format txt --limit 10000 --resource-profile fast
+
+
+================================================================================
+TASK 08. Regression quality gates: counts, leakage, traceability
+================================================================================
+
+Цель
+После ускорения pipeline добавить обязательные проверки, чтобы убедиться, что данные не потерялись и не смешались.
+
+Что сделать
+1. Добавить post-run validation для normalize-format:
+   - input files count;
+   - processed files count;
+   - parsed events count;
+   - output Parquet rows;
+   - failed rows/files;
+   - skipped rows/files;
+   - unsupported files;
+   - label coverage;
+   - timestamp coverage;
+   - schema drift summary.
+
+2. Добавить reconciliation:
+   - parsed_events == output_rows, если формат позволяет точный расчет;
+   - если точный расчет невозможен, report должен явно писать reason.
+
+3. Проверить split separation:
+   - один artifact не должен содержать разные role;
+   - path и columns должны соответствовать branch/role/source_format.
+
+4. Проверить leakage:
+   - label_* не попадает в model-ready X;
+   - source_file/path/dataset_name/dataset_role/scenario fields не попадают в X;
+   - TEST не участвует в fit/training artifacts.
+
+5. Проверить traceability:
+   - normalized_artifact -> parser_run -> dataset_file -> dataset -> raw path;
+   - chunk artifact -> chunk -> parent raw file, если chunks используются.
+
+6. После performance runs запускать:
+   python manage.py stage-two run-duckdb-checks
+   python manage.py stage-two run-leakage-checks
+   python -m scripts.stage_two.readiness_check
+
+Acceptance criteria
+1. После normalize-format создается readable summary report.
+2. Ошибки reconciliation не скрываются.
+3. DuckDB checks и leakage checks проходят на sample run.
+4. Traceability работает для обычных файлов и chunks.
+5. Есть tests для split contamination, leakage columns, broken trace chain.
+
+
+================================================================================
+TASK 09. Documentation and operational runbook update
+================================================================================
+
+Цель
+Обновить документацию, чтобы новая performance architecture была понятна и воспроизводима.
+
+Что обновить
+1. docs/ru/normalization/performance_tuning.md
+2. docs/en/normalization/performance_tuning.md
+3. docs/ru/normalization/runtime_resource_runbook.md
+4. docs/en/normalization/runtime_resource_runbook.md
+5. docs/ru/normalization/stage_two_commands.md
+6. docs/en/normalization/stage_two_commands.md
+7. docs/ru/code-documentation/stage_two_overview.md
+8. docs/en/code-documentation/stage_two_overview.md
+9. README.md или docs/ru/README.md, если там есть команды Stage Two.
+
+Что описать
+1. Новые resource profiles:
+   - safe
+   - balanced
+   - fast
+   - aggressive
+
+2. Рекомендованные настройки под текущее железо:
+   - CPU i7-14700KF
+   - RAM 64 GB
+   - Samsung M.2 SSD 2 TB
+   - RTX 5060 Ti 16 GB
+
+3. Примеры команд:
+   - benchmark-normalization
+   - split-large-files
+   - normalize-format с --resource-profile fast
+   - normalize-format для PCAP/BSON с безопасными settings
+   - run-duckdb-checks
+   - run-leakage-checks
+
+4. Правила:
+   - сначала benchmark 5-10% данных;
+   - потом full run;
+   - сначала safe/balanced;
+   - fast/aggressive только после проверки RAM/SSD/PostgreSQL/parser errors;
+   - GPU не использовать для raw parsers по умолчанию.
+
+5. Добавить раздел "Performance target":
+   - 17 GB <= 3 hours
+   - required throughput: около 5.67 GB/hour
+   - target throughput для нового железа: 10-20+ GB/hour для line-based formats
+
+Acceptance criteria
+1. Документация обновлена на RU и EN.
+2. Команды в документации соответствуют реальному CLI.
+3. В документации явно прописаны safety invariants.
+4. Есть troubleshooting section:
+   - PostgreSQL timeout
+   - too many DB connections
+   - memory pressure
+   - SSD throttling
+   - too many small files
+   - parser errors
+   - empty DuckDB views
+   - leakage critical
+
+
+================================================================================
+Финальная проверка после всех задач
+================================================================================
+
+После выполнения всех задач запустить:
+
+1. Миграции:
+   alembic -c scripts/db/migrations/alembic.ini upgrade head
+
+2. Smoke check:
+   python -m scripts.db.smoke_check
+
+3. Stage Two readiness:
+   python -m scripts.stage_two.readiness_check
+
+4. E2E dry run:
+   python -m scripts.stage_two.e2e_dry_run
+
+5. Parser coverage:
+   python manage.py stage-two parser-coverage
+
+6. Benchmark на sample:
+   python manage.py stage-two benchmark-normalization --branch host --role TEST --format txt --limit 10000 --resource-profile fast
+
+7. Normalization sample:
+   python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 10000 --resource-profile fast --resume
+
+8. Quality:
+   python manage.py stage-two run-duckdb-checks
+
+9. Leakage:
+   python manage.py stage-two run-leakage-checks
+
+10. Traceability:
+   python manage.py stage-two trace-artifact <existing_model_ready_id_or_artifact_path>
+
+Финальные acceptance criteria
+1. Старые Stage Two команды не сломаны.
+2. Новые performance profiles работают.
+3. normalize-format поддерживает fast parallel execution.
+4. Большие line-based файлы можно chunk-ить и обрабатывать параллельно.
+5. Output Parquet пишется атомарно.
+6. Resume не создает дубликаты.
+7. Benchmark показывает estimated_time_for_17gb.
+8. No TRAIN/VALIDATION/TEST mixing.
+9. No leakage fields in model-ready X.
+10. Traceability сохранена.
+11. Ошибки parser-а отражаются в reports и statuses, а не скрываются.
+12. Целевой performance target 17 GB <= 3 hours проверяется benchmark report.
