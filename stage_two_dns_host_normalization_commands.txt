@@ -139,13 +139,11 @@ python manage.py stage-two normalize-format --branch <branch> --role <role> --fo
 - TEST: csv=1
 
 DNS TEST csv, безопасный режим без split:
-
 python manage.py stage-two mark-ready --branch dns --role TEST --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TEST --format csv --apply
 python manage.py stage-two normalize-format --branch dns --role TEST --format csv --limit 1 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 DNS TEST csv, рекомендуемый режим через split:
-
 python manage.py stage-two mark-ready --branch dns --role TEST --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TEST --format csv --apply
 python manage.py stage-two split-large-files --branch dns --role TEST --format csv --limit 1 --max-part-size-gb 2 --min-size-gb 1 --header no --apply --register
@@ -161,172 +159,84 @@ python manage.py stage-two normalize-format --branch dns --role TEST --format cs
 - TEST: bson, csv, json, log, netflow_day, txt, wls_day
 
 
-HOST TRAIN csv
-
-python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format csv --apply
-python manage.py stage-two split-large-files --branch host --role TRAIN --format csv --limit 100 --max-part-size-gb 2 --min-size-gb 1 --header auto --apply --register
-python manage.py stage-two normalize-format --branch host --role TRAIN --format csv --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
 HOST TRAIN ghc
-
 python manage.py stage-two mark-ready --branch host --role TRAIN --format ghc --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format ghc --apply
 python manage.py stage-two split-large-files --branch host --role TRAIN --format ghc --limit 1000 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TRAIN --format ghc --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN json
-
 python manage.py stage-two mark-ready --branch host --role TRAIN --format json --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format json --apply
 python manage.py stage-two split-large-files --branch host --role TRAIN --format json --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TRAIN --format json --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-HOST TRAIN log
-
-python manage.py stage-two mark-ready --branch host --role TRAIN --format log --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format log --apply
-python manage.py stage-two split-large-files --branch host --role TRAIN --format log --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TRAIN --format log --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-HOST TRAIN log-1
-
-python manage.py stage-two mark-ready --branch host --role TRAIN --format log-1 --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format log-1 --apply
-python manage.py stage-two split-large-files --branch host --role TRAIN --format log-1 --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TRAIN --format log-1 --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-HOST TRAIN netflow_ids
-
-python manage.py stage-two mark-ready --branch host --role TRAIN --format netflow_ids --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format netflow_ids --apply
-python manage.py stage-two split-large-files --branch host --role TRAIN --format netflow_ids --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TRAIN --format netflow_ids --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
+python manage.py stage-two normalize-format --branch host --role TRAIN --format json --limit 2 --workers 8 --batch-size 50000 --max-output-part-rows 50000 --resume
 
 HOST TRAIN pcap
-
 python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --apply
 python manage.py stage-two normalize-format --branch host --role TRAIN --format pcap --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --packet-mode sample --sample-size 100000 --resume
 
 HOST TRAIN sc
-
 python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --dry-run
 python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --apply
 python manage.py stage-two split-large-files --branch host --role TRAIN --format sc --limit 1000 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TRAIN --format sc --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
-HOST TRAIN service.log
-
-python manage.py stage-two mark-ready --branch host --role TRAIN --format service.log --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format service.log --apply
-python manage.py stage-two split-large-files --branch host --role TRAIN --format service.log --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TRAIN --format service.log --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-HOST TRAIN xml
-
-python manage.py stage-two mark-ready --branch host --role TRAIN --format xml --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format xml --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format xml --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-
-HOST VALIDATION cap
-
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format cap --dry-run
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format cap --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format cap --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --packet-mode sample --sample-size 100000 --resume
-
-HOST VALIDATION csv
-
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format csv --dry-run
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format csv --apply
-python manage.py stage-two split-large-files --branch host --role VALIDATION --format csv --limit 100 --max-part-size-gb 2 --min-size-gb 1 --header auto --apply --register
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format csv --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION json
-
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --apply
 python manage.py stage-two split-large-files --branch host --role VALIDATION --format json --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role VALIDATION --format json --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION netflow_day
-
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --apply
 python manage.py stage-two split-large-files --branch host --role VALIDATION --format netflow_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
-HOST VALIDATION pcap
-
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcap --dry-run
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcap --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcap --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --packet-mode sample --sample-size 100000 --resume
-
-HOST VALIDATION pcapng
-
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcapng --dry-run
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format pcapng --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format pcapng --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --packet-mode sample --sample-size 100000 --resume
-
 HOST VALIDATION txt
-
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --apply
 python manage.py stage-two split-large-files --branch host --role VALIDATION --format txt --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role VALIDATION --format txt --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION wls_day
-
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --apply
 python manage.py stage-two split-large-files --branch host --role VALIDATION --format wls_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
-
 HOST TEST bson
-
 python manage.py stage-two mark-ready --branch host --role TEST --format bson --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format bson --apply
 python manage.py stage-two normalize-format --branch host --role TEST --format bson --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --resume
 
-HOST TEST csv
-
-python manage.py stage-two mark-ready --branch host --role TEST --format csv --dry-run
-python manage.py stage-two mark-ready --branch host --role TEST --format csv --apply
-python manage.py stage-two split-large-files --branch host --role TEST --format csv --limit 100 --max-part-size-gb 2 --min-size-gb 1 --header auto --apply --register
-python manage.py stage-two normalize-format --branch host --role TEST --format csv --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
 HOST TEST json
-
 python manage.py stage-two mark-ready --branch host --role TEST --format json --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format json --apply
 python manage.py stage-two split-large-files --branch host --role TEST --format json --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TEST --format json --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST TEST log
-
 python manage.py stage-two mark-ready --branch host --role TEST --format log --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format log --apply
 python manage.py stage-two split-large-files --branch host --role TEST --format log --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TEST --format log --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST TEST netflow_day
-
 python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --apply
 python manage.py stage-two split-large-files --branch host --role TEST --format netflow_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TEST --format netflow_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST TEST txt
-
 python manage.py stage-two mark-ready --branch host --role TEST --format txt --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format txt --apply
 python manage.py stage-two split-large-files --branch host --role TEST --format txt --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST TEST wls_day
-
 python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --apply
 python manage.py stage-two split-large-files --branch host --role TEST --format wls_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
