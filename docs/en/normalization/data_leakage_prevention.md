@@ -1,40 +1,19 @@
 # Data Leakage Prevention
 
-Stage Two treats leakage prevention as a data contract. Labels, split identity, source file metadata, parser metadata, and traceability fields are not model input features.
+Leakage prevention in Stage Two relies on contract-level exclusions, catalog traceability, and runtime checks. The main goal is that labels, source identifiers, and split metadata must not enter model-ready `X`.
 
-## Commands
+## Non-Negotiable Rules
 
-```powershell
-python manage.py stage-two run-leakage-checks
-```
+1. `TEST` is not used for training, preprocessing fit, scaler fit, encoder fit, threshold tuning, or feature selection.
+2. `TRAIN`, `VALIDATION`, and `TEST` are not mixed in one model-ready artifact.
+3. Labels are not ordinary input features.
+4. Filename heuristics for `TEST` labels are forbidden.
+5. Missing labels do not mean benign.
+6. Traceability fields are preserved in catalog/metadata but excluded from `X`.
 
-Expected successful output:
+## Forbidden X Columns
 
-```text
-"service": "stage-two run-leakage-checks"
-"status": "SUCCESS"
-"severity": "INFO"
-```
-
-## Label Resolution
-
-Implementation:
-
-```text
-scripts/stage_two/labels/resolver.py
-```
-
-`LabelResolver` sources:
-
-| Source | Allowed behavior |
-| --- | --- |
-| Embedded source fields | Allowed when role-safe, e.g. TRAIN labels in real columns. |
-| DB/config `label_mapping_rules` | Allowed when rule matches branch/role/source format/context. |
-| Filename hints | Conservative and disabled for TEST. |
-| IDS alert fields | Weak label only when role-safe. |
-| Missing labels | Explicit `unlabeled`, never benign by default. |
-
-Canonical label fields:
+Forbidden columns come from feature/model-ready contracts:
 
 ```text
 label_binary
@@ -44,52 +23,116 @@ label_source
 label_status
 label_confidence
 label_mapping_rule_id
+label
+labels
+target
+class
+is_attack
+is_malicious
+malicious
+attack
+attack_cat
+attack_category
+attack_subcat
+is_executing_exploit
+exploit
+ground_truth
+ground_truth_label
+dataset_id
+dataset_name
+dataset_role
+role
+branch
+source_format
+source_file
+source_file_name
+source_file_path
+source_file_hash
+source_normalized_path
+source_event_uid_refs
+parser_run_id
+parser_name
+parser_version
+schema_name
+schema_version
+normalized_artifact_id
+feature_group
+feature_schema_name
+feature_schema_version
+event_uid
+sample_uid
+entity_type
+entity_id
+window_start
+window_end
+window_size_seconds
+window_step_seconds
+scenario_name
+raw_fields_json
+metadata_json
+created_at
 ```
 
-## TEST Safety
+`ModelReadyRegistryService.write_table_artifact()` calls `validate_x_columns()` for `data_type = "X"` and rejects rows containing forbidden fields.
 
-- TEST filename heuristics are disabled.
-- TEST statistics must not fit scalers, imputers, encoders, thresholds, feature selectors, or models.
-- TEST rows may be transformed only with TRAIN-fitted preprocessing artifacts.
+## LeakageChecker
 
-## Forbidden X Columns
+Command:
 
-Forbidden model input columns are defined in:
-
-```text
-schemas/features/feature_artifact_v1.json
-schemas/model_ready/model_ready_v1.json
+```bash
+python manage.py stage-two run-leakage-checks
 ```
 
-They include:
-
-- labels and target aliases;
-- dataset role/split identifiers;
-- source paths and source hashes;
-- parser metadata and schema metadata;
-- traceability ids;
-- raw/metadata JSON fields;
-- scenario names and other context-only fields.
-
-## Leakage Checker
-
-Implementation:
+Code:
 
 ```text
 scripts/stage_two/quality/checkers.py
 ```
 
-The checker uses DuckDB views and catalog metadata to report critical leakage issues. Reports are written to:
+Checks:
 
-```text
-reports/en/stage-two/leakage/leakage_report.json
-reports/ru/stage-two/leakage/leakage_report.json
+| Check | What it catches |
+| --- | --- |
+| `x_forbidden_columns` | Label/source/traceability columns inside model-ready `X`. |
+| `test_absent_from_train` | `TEST` used in training context. |
+| `preprocessing_fit_only_train` | Preprocessing artifact fitted on a role other than `TRAIN`. |
+
+CRITICAL violations are registered in `data_quality_reports` and must block artifact use.
+
+## Labels
+
+Label fields may exist in normalized events for audit and in model-ready `y`, but not in `X`. Events without labels remain unlabeled:
+
+```json
+{
+  "label_binary": null,
+  "label_source": "none",
+  "label_status": "unlabeled"
+}
 ```
 
-## Parser Development Rules
+See [label_resolver.md](label_resolver.md).
 
-- Do not copy raw label columns into `features_json` as model-ready features.
-- Do not infer TEST labels from filenames.
-- Keep `dataset_role`, `branch`, `source_format`, `source_file_path`, `source_file_hash`, `parser_name`, and `parser_version` as traceability/context only.
-- Preserve unknown fields in `raw_fields_json` or `metadata_json`, not in X feature columns.
-- Treat missing labels as `label_binary=None`.
+## Traceability Without Leakage
+
+Traceability chain is mandatory:
+
+```text
+raw -> normalized -> features -> model-ready
+```
+
+But traceability identifiers (`event_uid`, `sample_uid`, paths, hashes, parser IDs) must not become features. They must remain in:
+
+- PostgreSQL Catalog;
+- artifact metadata;
+- non-X columns excluded from the training matrix.
+
+## Common Mistakes
+
+| Mistake | Consequence | Fix |
+| --- | --- | --- |
+| `label_binary` enters X | The model learns the answer. | Rebuild X after applying the exclusion contract. |
+| `source_file_path` enters X | The model can learn dataset/source identity. | Remove source fields from feature selection. |
+| `TEST` is used for scaler fit | Metrics become inflated. | Fit only on `TRAIN`, transform `VALIDATION`/`TEST`. |
+| Unlabeled is replaced with benign | Labels are corrupted. | Keep `label_binary = null`, `label_status = unlabeled`. |
+| Filename heuristic for TEST | Leakage from file name. | Disable the heuristic; use only explicit ground truth. |

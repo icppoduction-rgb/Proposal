@@ -1,262 +1,214 @@
-# Stage Two usage guide
+# Руководство запуска Stage Two normalization
 
-Этот runbook описывает реализованный операционный путь от filtered dataset root до normalized Parquet artifacts.
+Документ фиксирует фактический CLI слой: `manage.py` принимает `module`, `service`, `action`, `extra_args`, передает `stage-two` в `scripts.stage_two.cli.router_stage_two()`, а роутер вызывает конкретные service functions.
+
+Полный reference по каждой Stage Two normalization команде, включая входы, выходы, статусы PostgreSQL, ошибки и проверки, находится в [stage_two_commands.md](stage_two_commands.md).
 
 ## Предварительные условия
 
-1. Настройте `.env` или environment variables:
+Нужно настроить окружение:
 
-```text
-PATH_DATA_STORAGE=<absolute storage root>
-PATH_FOLDER_DATASETS=<absolute raw dataset root для Stage One/audit>
-PATH_FOLDER_DATASETS_FILTER=<absolute filtered dataset root для Stage Two>
-DATABASE_URL=<PostgreSQL SQLAlchemy URL>
+```bash
+export PATH_DATA_STORAGE=/absolute/path/to/stage-two-storage
+export PATH_FOLDER_DATASETS_FILTER=/absolute/path/to/stage-one-filtered-or-sorted-tree
+export DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/database
 ```
 
-2. PostgreSQL должен быть доступен по `DATABASE_URL`.
-3. Поддерживаемый runtime - Python 3.11.x. На локальной Windows dev-машине используйте `C:\Users\fmark\.conda\envs\proposal2\python.exe` или активируйте `conda activate proposal2`.
-4. Для development и CI checks должны быть установлены зависимости из `requirements-dev.txt`; для production/runtime install можно использовать `requirements.txt`.
-5. Команды запускаются из корня репозитория.
-6. Stage Two smoke-скрипты запускаются как модули: `python -m scripts.stage_two.<module>`.
-   Прямой запуск по пути вроде `python scripts/stage_two/parser_smoke.py` не поддерживается, потому что может убрать корень репозитория из `sys.path` и сломать импорты `scripts.*`.
+`DATABASE_URL` читается через `scripts/db/config.py`. Если переменной нет в окружении, код пробует загрузить `.env` из корня проекта.
 
-## Рекомендуемый порядок
+## Базовый порядок запуска
 
-### 1. Bootstrap storage
-
-```powershell
+```bash
 python manage.py stage-two bootstrap-storage
-```
-
-Ожидаемый output:
-
-```text
-{
-  "service": "stage-two bootstrap-storage",
-  "root": "...",
-  "created_count": <number>,
-  "existing_count": <number>
-}
-```
-
-Команда idempotent. Она создает directories под `PATH_DATA_STORAGE` для Parquet, reports, DuckDB, logs, config, schemas и temp data.
-
-### 2. Database migrations
-
-```powershell
-python -m alembic -c scripts/db/migrations/alembic.ini upgrade head
-python -m alembic -c scripts/db/migrations/alembic.ini current
-```
-
-Ожидаемое состояние:
-
-```text
-5a38996dff5f (head)
-```
-
-### 3. Seed parser registry and schema version
-
-```powershell
-python manage.py stage-two seed-parser-registry
-```
-
-Output содержит:
-
-```text
-"service": "stage-two seed-parser-registry"
-"schema_name": "normalized_event"
-"schema_version": "v1"
-"inserted": <number>
-"updated": <number>
-```
-
-Команда idempotent и читает `scripts/stage_two/parser_registry/parser_registry_seed.json`.
-
-### 4. Catalog ingest
-
-```powershell
+alembic -c scripts/db/migrations/alembic.ini upgrade head
 python manage.py stage-two catalog-ingest
-```
-
-Что происходит:
-
-- `DatasetFileScanner` сканирует только `PATH_FOLDER_DATASETS_FILTER`.
-- Определяются `branch`, `role`, `source_format`, dataset name, file size и SHA-256 hash.
-- Заполняются или обновляются `datasets`, `ingestion_runs`, `dataset_files`.
-- Raw files не изменяются.
-- В Stage Two catalog попадают только роли `TRAIN`, `VALIDATION`, `TEST`. `EXPERIMENTS` игнорируется.
-
-Типовые statuses после ingestion:
-
-| Status | Значение |
-| --- | --- |
-| `REGISTERED` | Новый файл добавлен в catalog. |
-| `CHANGED` | Hash/metadata уже известного файла изменились. |
-| `DISCOVERED` | Файл найден и может быть promoted. |
-| `EMPTY_FILE` | Файл пустой. |
-| `UNSUPPORTED_FORMAT` | Scanner нашел format без active parser coverage. |
-
-`PATH_FOLDER_DATASETS` намеренно не сканируется этой командой. Он остается immutable raw source location и может содержать лишние датасеты, которые не входят в текущий рабочий корпус.
-
-### 5. Parser coverage
-
-```powershell
+python manage.py stage-two seed-parser-registry
 python manage.py stage-two parser-coverage
-python manage.py stage-two parser-coverage host
-python manage.py stage-two parser-coverage dns
-```
-
-Колонки output:
-
-```text
-branch | role | source_format | files_count | parser_active | parser_class | parser_name | action
-```
-
-Ключевые `action` values:
-
-| Action | Значение |
-| --- | --- |
-| `ready_for_normalization` | Catalog files существуют и active parser доступен. |
-| `parser_available_empty_bucket` | Файлов сейчас нет, но registry coverage есть. |
-| `add_parser_registry_entry` | В catalog есть format без registry entry. |
-| `implement_parser_class` | Registry указывает на class, который не импортируется. |
-| `activate_parser_registry_entry` | Registry row есть, но inactive. |
-
-Не запускайте широкую нормализацию, если `catalog_gap_rows` или `missing_parser_rows` не равны нулю.
-
-### 6. Mark ready
-
-Сначала dry-run:
-
-```powershell
-python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --dry-run
-```
-
-Запись только после проверки counts:
-
-```powershell
-python manage.py stage-two mark-ready --branch host --role TRAIN --format auth.log --apply
-```
-
-Fallback syntax:
-
-```powershell
-python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
-python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
-```
-
-Только эти statuses переводятся в `READY_FOR_PARSING`:
-
-```text
-REGISTERED, CHANGED, DISCOVERED
-```
-
-Для повторного запуска файлов после исправления parser/writer используйте явный recovery-режим:
-
-```powershell
-python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --dry-run
-python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --retry-failed --apply
-```
-
-Recovery-режим переводит обратно в `READY_FOR_PARSING` только:
-
-```text
-FAILED, SKIPPED, PARTIALLY_PARSED
-```
-
-`PARSED` файлы не изменяются. Команда пишет EN/RU отчеты в `reports/{en,ru}/stage-two/status/`.
-
-Эти statuses не меняются в default mark-ready mode:
-
-```text
-EMPTY_FILE, FAILED, PARSED, PARTIALLY_PARSED, SKIPPED
-```
-
-### 7. Normalize one format
-
-```powershell
-python manage.py stage-two normalize-format --branch host --role TRAIN --format auth.log --limit 100
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
+python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
 python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 ```
 
-Fallback syntax:
+Порядок сохраняет разделение ролей. Нормализация `TRAIN`, `VALIDATION` и `TEST` запускается отдельными командами или через `normalize-all`, который группирует файлы по `branch/role/source_format` и не объединяет роли в один output artifact.
 
-```powershell
+## Команды Stage Two
+
+| Команда | Назначение | Основной выход |
+| --- | --- | --- |
+| `bootstrap-storage` | Создает обязательные директории в `PATH_DATA_STORAGE`. | Storage tree, schema/report/temp/log directories. |
+| `catalog-ingest` | Сканирует `PATH_FOLDER_DATASETS_FILTER`, регистрирует datasets/files. | `datasets`, `ingestion_runs`, `dataset_files`. |
+| `seed-parser-registry` | Загружает `parser_registry_seed.json` в catalog. | `parser_registry`, `schema_versions`. |
+| `parser-coverage [branch]` | Проверяет, есть ли parser для зарегистрированных `branch/role/source_format`. | Console report, parser coverage diagnostics. |
+| `mark-ready` | Переводит файлы подходящего bucket в `READY_FOR_PARSING`. | Обновленные `dataset_files.status`. |
+| `normalize-format` | Нормализует конкретный `branch/role/source_format`. | `parser_runs`, normalized Parquet, `normalized_artifacts`. |
+| `normalize-all` | Нормализует все ready buckets по branch. | То же, по группам role/format. |
+| `split-large-files` | Делит большие line-based files на chunks. | Chunk files, optional catalog registration. |
+| `normalize-dns [limit]` | Legacy shortcut для DNS ready files. | Normalized DNS artifacts. |
+| `normalize-host [limit]` | Legacy shortcut для Host ready files. | Normalized Host artifacts. |
+| `run-duckdb-checks` | Создает DuckDB views поверх Parquet и запускает analytics checks. | DuckDB report, `data_quality_reports`. |
+| `run-leakage-checks` | Проверяет model-ready/feature contracts на leakage. | Leakage reports, `data_quality_reports`. |
+| `trace-artifact` | Восстанавливает lineage для model-ready artifact. | Console JSON trace chain. |
+
+## `mark-ready`
+
+Флаги:
+
+```bash
+python manage.py stage-two mark-ready \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --dry-run
+
+python manage.py stage-two mark-ready \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --apply
+```
+
+Также поддерживается compact form:
+
+```bash
+python manage.py stage-two mark-ready apply:host:TRAIN:auth.log
+python manage.py stage-two mark-ready dry-run:host:TRAIN:auth.log
+```
+
+Ограничения:
+
+- `--dry-run` и `--apply` взаимоисключающие.
+- `role` должен быть одним из `TRAIN`, `VALIDATION`, `TEST`.
+- Команда работает только с metadata catalog, raw files не изменяет.
+
+## `normalize-format`
+
+Флаги:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TRAIN \
+  --format auth.log \
+  --limit 100 \
+  --workers 2 \
+  --batch-size 50000 \
+  --max-output-part-rows 50000 \
+  --packet-mode packet-summary \
+  --resume \
+  --hash-output-artifacts
+```
+
+Компактная форма:
+
+```bash
 python manage.py stage-two normalize-format host:TRAIN:auth.log:100
 ```
 
-Output содержит selected/processed/normalized counts, parser name/class, per-file status и artifact id, если artifact создан.
+Поведение:
 
-`PARTIAL_SUCCESS` означает, что batch завершился, но часть выбранных файлов failed/skipped/unsupported. Успешные файлы сохраняют `PARSED` и `normalized_artifacts`; проблемные файлы после исправления причины можно вернуть через `mark-ready --retry-failed`.
+- выбирает `dataset_files` со статусом `READY_FOR_PARSING` для точного `branch/role/source_format`;
+- через `ParserResolver` выбирает активный parser из `parser_registry`;
+- если parser не найден, выбранные файлы помечаются `UNSUPPORTED_FORMAT`;
+- пишет normalized Parquet и регистрирует `parser_runs`/`normalized_artifacts`;
+- при `--workers > 1` использует `ProcessPoolExecutor`;
+- при `--resume` пропускает файлы, для которых уже есть успешный normalized artifact.
 
-### 8. Normalize branch
+`--packet-mode` поддерживает значения:
 
-```powershell
-python manage.py stage-two normalize-all --branch host --limit 1000
-python manage.py stage-two normalize-all --branch dns --limit 1000
+| Значение | Назначение |
+| --- | --- |
+| `packet-summary` | Безопасный режим для packet captures: summary-level parsing. |
+| `dns-only` | Извлекать DNS-события из packet captures, где parser это поддерживает. |
+| `sample` | Обрабатывать sample пакетов; требует `--sample-size`. |
+
+## `normalize-all`
+
+```bash
+python manage.py stage-two normalize-all \
+  --branch dns \
+  --limit 1000 \
+  --workers 2 \
+  --resume
 ```
 
-Fallback syntax:
+Компактная форма:
 
-```powershell
-python manage.py stage-two normalize-all host:1000
+```bash
+python manage.py stage-two normalize-all dns:1000
 ```
 
-`normalize-all` выбирает только `READY_FOR_PARSING` files и группирует работу по `role` и `source_format`.
+Команда выбирает ready groups внутри одной branch и запускает `NormalizeFormatRunner` по группам. Группировка выполняется по `role` и `source_format`; это защищает от смешивания `TRAIN`, `VALIDATION`, `TEST`.
 
-`normalize-format`, `normalize-all` и большие `mark-ready` запуски показывают Rich progress bar, если `rich` доступен. В non-interactive режиме финальный summary и traceback сохраняются.
+## Legacy-команды
 
-### 9. Checks
+```bash
+python manage.py stage-two normalize-dns 10
+python manage.py stage-two normalize-host 10
+```
 
-```powershell
+Эти команды оставлены для совместимости. Для воспроизводимых запусков предпочтительны `normalize-format` или `normalize-all`, потому что они явно задают branch/role/format и performance options.
+
+## Разделение больших файлов
+
+```bash
+python manage.py stage-two split-large-files \
+  --branch host \
+  --role TRAIN \
+  --format csv \
+  --max-part-size-mb 512 \
+  --apply \
+  --register
+```
+
+Назначение: подготовить line-based files к нормализации, когда один файл слишком большой. Команда поддерживает `csv`, `pcap.csv`, `txt`, `json`, `json-1`, логовые форматы, `sc`, `ghc`, `netflow_day`, `netflow_ids`, `wls_day` и metricbeat-like logs. Binary formats (`cap`, `pcap`, `pcapng`, `bson`) не делятся этим splitter.
+
+Важные правила:
+
+- `--register` допустим только вместе с `--apply`;
+- без `--apply` команда работает как dry run;
+- chunks пишутся в `PATH_FOLDER_DATASETS_FILTER/chunked/...`;
+- при регистрации chunks получают статус `READY_FOR_PARSING`;
+- исходный файл может быть помечен `SKIPPED`, если не указан `--keep-source-ready`.
+
+## Проверки
+
+```bash
 python manage.py stage-two run-duckdb-checks
 python manage.py stage-two run-leakage-checks
-python -m scripts.stage_two.readiness_check
 ```
 
-Ожидаемый result:
+`run-duckdb-checks` строит views `normalized_all`, `features_all`, `model_ready_all` поверх Parquet и проверяет row counts, required columns, split contamination и schema mismatch. `run-leakage-checks` проверяет запретные X columns, отсутствие `TEST` в training/preprocessing fit и регистрирует CRITICAL нарушения.
 
-```text
-status: SUCCESS
+## Trace artifact
+
+```bash
+python manage.py stage-two trace-artifact 123
+python manage.py stage-two trace-artifact parquet/model_ready/tabular/dns/TRAIN/schema=v1/X_train.parquet
 ```
 
-Reports пишутся в `PATH_DATA_STORAGE/reports/en/stage-two/` и `PATH_DATA_STORAGE/reports/ru/stage-two/`.
+Числовой аргумент трактуется как `model_ready_artifacts.id`, строковый путь - как `model_ready_artifacts.artifact_path`. Команда требует, чтобы у model-ready artifact был `feature_artifact_id`, а у feature artifact - `normalized_artifact_id`; иначе traceability chain считается разорванной.
 
-## Проверка успешного завершения
+## Модульные проверки
 
-Для обычного parser workflow:
+Эти проверки не зарегистрированы как `manage.py stage-two` commands, но реализованы как Python modules:
 
-```powershell
-python -m compileall manage.py config.py scripts tests
-git diff --check
+```bash
 python -m scripts.db.smoke_check
-python manage.py stage-two parser-coverage
-python -m scripts.stage_two.parser_smoke
-python -m scripts.stage_two.parser_input_smoke
-python -m scripts.stage_two.parser_catalog_smoke
-python -m scripts.stage_two.cli_operational_smoke
+python -m scripts.stage_two.readiness_check
+python -m scripts.stage_two.e2e_dry_run
 ```
 
-Catalog smoke и CLI smoke используют synthetic files и откатывают DB changes.
-Не запускайте эти smoke-скрипты через `python scripts/stage_two/*.py`; используйте module form из блока выше.
+`readiness_check` проверяет миграции, storage paths, counts catalog tables, parser coverage, normalized/feature/model-ready registration, quality/leakage reports, traceability и raw file hashes. `e2e_dry_run` создает synthetic DNS/Host samples под `temp_data`, прогоняет ingestion, seed, normalization, feature/model-ready registry services, DuckDB/leakage checks и traceability.
 
-## Troubleshooting
+## Типовые ошибки
 
-| Симптом | Вероятная причина | Исправление |
+| Симптом | Причина | Действие |
 | --- | --- | --- |
-| `DATABASE_URL` connection error | PostgreSQL не запущен или URL неверный. | Запустить PostgreSQL и проверить `.env`. |
-| `PATH_DATA_STORAGE must be configured` | Storage root пустой. | Задать `PATH_DATA_STORAGE` и запустить `bootstrap-storage`. |
-| `parser_active=no` в coverage | Нет registry/class mapping. | Обновить seed, реализовать class, запустить `seed-parser-registry`. |
-| `selected=0` в `mark-ready` | Нет matching rows или statuses не eligible. | Проверить `parser-coverage` и `dataset_files.status`. |
-| `selected=0` в `normalize-format` | Matching files не `READY_FOR_PARSING`. | Запустить `mark-ready --apply` для exact branch/role/format. |
-| `PARTIAL_SUCCESS` | Часть rows failed, часть parsed. | Смотреть parser run reports в `reports/*/stage-two/parser/`. |
-| DuckDB report fails on missing Parquet | Нет normalized artifacts для scope. | Сначала нормализовать небольшой batch. |
-
-## Production safety notes
-
-- Не редактировать raw datasets, чтобы parser "заработал".
-- Mixed `raw_fields_json`, `metadata_json`, `features_json` и другие `*_json` payloads сериализуются перед Parquet write, чтобы PyArrow не выводил нестабильные nested types.
-- Не использовать `EXPERIMENTS` в Stage Two командах; рабочие роли: `TRAIN`, `VALIDATION`, `TEST`.
-- Не хранить raw packet payloads, BSON streams или full raw logs в PostgreSQL metadata.
-- Не переводить целые branches в ready без просмотра `parser-coverage`.
-- Не считать synthetic smoke tests подтверждением full-corpus readiness.
+| `DATABASE_URL must be configured` | Нет `DATABASE_URL` в окружении или `.env`. | Настроить `DATABASE_URL`. |
+| `PATH_DATA_STORAGE must be configured` | Storage root не задан. | Задать `PATH_DATA_STORAGE`, затем `bootstrap-storage`. |
+| `No parser available` / `UNSUPPORTED_FORMAT` | В `parser_registry` нет активного parser для `branch/role/source_format`. | Проверить `parser-coverage`, добавить parser или registry entry. |
+| Empty DuckDB views | Parquet layer пустой или paths не созданы. | Проверить `normalized_artifacts` и storage paths. |
+| Leakage CRITICAL | X artifact содержит label/source fields или TEST участвует в fit/training. | Пересобрать artifact с корректным contract. |

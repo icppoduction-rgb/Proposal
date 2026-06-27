@@ -1,40 +1,19 @@
-# Data leakage prevention
+# Предотвращение data leakage
 
-Stage Two рассматривает leakage prevention как data contract. Labels, split identity, source file metadata, parser metadata и traceability fields не являются model input features.
+Leakage prevention в Stage Two опирается на contract-level запреты, catalog traceability и runtime checks. Главная цель: labels, source identifiers и split metadata не должны попадать в model-ready `X`.
 
-## Commands
+## Неприкосновенные правила
 
-```powershell
-python manage.py stage-two run-leakage-checks
-```
+1. `TEST` не используется для обучения, fit preprocessing, fit scaler, fit encoder, threshold tuning или feature selection.
+2. `TRAIN`, `VALIDATION`, `TEST` не смешиваются в одном model-ready artifact.
+3. Labels не являются обычными input features.
+4. Filename heuristic для `TEST` labels запрещен.
+5. Отсутствующий label не означает benign.
+6. Traceability fields сохраняются в catalog/metadata, но исключаются из `X`.
 
-Expected successful output:
+## Запрещенные X columns
 
-```text
-"service": "stage-two run-leakage-checks"
-"status": "SUCCESS"
-"severity": "INFO"
-```
-
-## Label resolution
-
-Implementation:
-
-```text
-scripts/stage_two/labels/resolver.py
-```
-
-`LabelResolver` sources:
-
-| Source | Allowed behavior |
-| --- | --- |
-| Embedded source fields | Разрешены, когда role-safe, например TRAIN labels в реальных columns. |
-| DB/config `label_mapping_rules` | Разрешены, когда rule matches branch/role/source format/context. |
-| Filename hints | Conservative и disabled for TEST. |
-| IDS alert fields | Weak label only when role-safe. |
-| Missing labels | Explicit `unlabeled`, никогда benign by default. |
-
-Canonical label fields:
+Запрещенные columns берутся из feature/model-ready contracts:
 
 ```text
 label_binary
@@ -44,52 +23,116 @@ label_source
 label_status
 label_confidence
 label_mapping_rule_id
+label
+labels
+target
+class
+is_attack
+is_malicious
+malicious
+attack
+attack_cat
+attack_category
+attack_subcat
+is_executing_exploit
+exploit
+ground_truth
+ground_truth_label
+dataset_id
+dataset_name
+dataset_role
+role
+branch
+source_format
+source_file
+source_file_name
+source_file_path
+source_file_hash
+source_normalized_path
+source_event_uid_refs
+parser_run_id
+parser_name
+parser_version
+schema_name
+schema_version
+normalized_artifact_id
+feature_group
+feature_schema_name
+feature_schema_version
+event_uid
+sample_uid
+entity_type
+entity_id
+window_start
+window_end
+window_size_seconds
+window_step_seconds
+scenario_name
+raw_fields_json
+metadata_json
+created_at
 ```
 
-## TEST safety
+`ModelReadyRegistryService.write_table_artifact()` вызывает `validate_x_columns()` для `data_type = "X"` и отклоняет rows, если в них есть запрещенные поля.
 
-- TEST filename heuristics отключены.
-- TEST statistics не используются для fit scalers, imputers, encoders, thresholds, feature selectors или models.
-- TEST rows могут transform только через TRAIN-fitted preprocessing artifacts.
+## LeakageChecker
 
-## Forbidden X columns
+Команда:
 
-Forbidden model input columns определены в:
-
-```text
-schemas/features/feature_artifact_v1.json
-schemas/model_ready/model_ready_v1.json
+```bash
+python manage.py stage-two run-leakage-checks
 ```
 
-Они включают:
-
-- labels и target aliases;
-- dataset role/split identifiers;
-- source paths и source hashes;
-- parser metadata и schema metadata;
-- traceability ids;
-- raw/metadata JSON fields;
-- scenario names и context-only fields.
-
-## Leakage checker
-
-Implementation:
+Код:
 
 ```text
 scripts/stage_two/quality/checkers.py
 ```
 
-Checker использует DuckDB views и catalog metadata для reports по critical leakage issues. Reports:
+Проверки:
 
-```text
-reports/en/stage-two/leakage/leakage_report.json
-reports/ru/stage-two/leakage/leakage_report.json
+| Проверка | Что ловит |
+| --- | --- |
+| `x_forbidden_columns` | Label/source/traceability columns внутри model-ready `X`. |
+| `test_absent_from_train` | Использование `TEST` в training context. |
+| `preprocessing_fit_only_train` | Preprocessing artifact fitted на роли, отличной от `TRAIN`. |
+
+CRITICAL нарушения регистрируются в `data_quality_reports` и должны блокировать использование artifact.
+
+## Labels
+
+Label fields могут присутствовать в normalized events для audit и в model-ready `y`, но не в `X`. События без label остаются unlabeled:
+
+```json
+{
+  "label_binary": null,
+  "label_source": "none",
+  "label_status": "unlabeled"
+}
 ```
 
-## Parser development rules
+См. [label_resolver.md](label_resolver.md).
 
-- Не копировать raw label columns в `features_json` как model-ready features.
-- Не infer TEST labels из filenames.
-- `dataset_role`, `branch`, `source_format`, `source_file_path`, `source_file_hash`, `parser_name`, `parser_version` остаются traceability/context only.
-- Unknown fields сохранять в `raw_fields_json` или `metadata_json`, не в X feature columns.
-- Missing labels сохранять как `label_binary=None`.
+## Traceability без leakage
+
+Traceability chain обязателен:
+
+```text
+raw -> normalized -> features -> model-ready
+```
+
+Но traceability identifiers (`event_uid`, `sample_uid`, paths, hashes, parser IDs) не должны становиться признаками. Они должны храниться:
+
+- в PostgreSQL Catalog;
+- в artifact metadata;
+- в non-X columns, исключенных из training matrix.
+
+## Типовые ошибки
+
+| Ошибка | Последствие | Исправление |
+| --- | --- | --- |
+| `label_binary` попал в X | Модель обучается на ответе. | Пересобрать X после exclusion contract. |
+| `source_file_path` попал в X | Модель может выучить dataset/source identity. | Удалить source fields из feature selection. |
+| `TEST` использован для scaler fit | Метрики становятся завышенными. | Fit только на `TRAIN`, transform для `VALIDATION`/`TEST`. |
+| Unlabeled заменен на benign | Искажение labels. | Сохранять `label_binary = null`, `label_status = unlabeled`. |
+| Filename heuristic для TEST | Leakage из имени файла. | Отключить heuristic, использовать только explicit ground truth. |

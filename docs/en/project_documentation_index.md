@@ -1,0 +1,46 @@
+# Key project documentation index
+
+This index replaces the scattered top-level documents and shows where the key information on the proposal, dataset strategy, feature engineering, and the actual repository state has moved.
+
+## Final structure
+
+| Document | Purpose |
+| --- | --- |
+| [project_overview_and_research_context.md](project_overview_and_research_context.md) | Research context, proposal-level architecture, questions, objectives, methodology, scope, plan, and limitations. |
+| [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md) | Unified DNS and Host dataset strategy with explicit `TRAIN` / `VALIDATION` / `TEST` separation. |
+| [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) | Feature extraction map, feature catalogue groups, schema requirements, leakage exclusions, and implementation priorities. |
+| [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md) | Confirmed repository state, proposal-vs-implementation boundaries, QA for sections 3.3-3.8, gaps, and follow-up work. |
+
+## Merged legacy documents
+
+| Old document | Content moved to |
+| --- | --- |
+| `project_proposal_analysis.md` | `project_overview_and_research_context.md`, `repository_state_qa_and_gaps.md`. |
+| `functional_project_cheatsheet.md` | `project_overview_and_research_context.md`, `dataset_strategy_dns_host.md`, `feature_extraction_and_catalogue.md`. |
+| `dns_dataset_strategy.md` | `dataset_strategy_dns_host.md`. |
+| `host_datasets_analysis.md` | `dataset_strategy_dns_host.md`, `repository_state_qa_and_gaps.md`. |
+| `dataset_feature_extraction_map.md` | `feature_extraction_and_catalogue.md`, `dataset_strategy_dns_host.md`. |
+| `feature_catalogue_full.md` | `feature_extraction_and_catalogue.md`. |
+| `repository_qa_section_3_8.md` | `repository_state_qa_and_gaps.md`. |
+
+## Related current sections
+
+- [analysis-dataset/README.md](analysis-dataset/README.md) — factual Stage One bucket/format/readiness analysis.
+- [normalization/README.md](normalization/README.md) — Stage Two normalization guide.
+- [code-documentation/README.md](code-documentation/README.md) — code architecture, CLI, Stage One/Stage Two, DB, and parser strategy.
+
+## Reading order
+
+1. For the research proposal, read [project_overview_and_research_context.md](project_overview_and_research_context.md).
+2. For dataset selection, read [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md).
+3. For feature engineering implementation, read [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md).
+4. For current-code verification, read [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md).
+
+## Architecture invariants
+
+- `TRAIN`, `VALIDATION`, and `TEST` are not mixed.
+- `TEST` is not used for training, fit preprocessing, feature selection, or threshold tuning.
+- DNS and Host logic are separated; integration happens only through normalized events, windows, features, and traceability.
+- Labels are target/audit fields, not input features.
+- A missing label does not mean benign.
+- Proposal-level ideas are not documented as implemented unless confirmed by code, artifacts, or Stage Two documentation.

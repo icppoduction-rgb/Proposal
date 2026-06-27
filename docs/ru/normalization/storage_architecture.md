@@ -1,88 +1,120 @@
-# Storage architecture
+# Архитектура storage Stage Two
 
-Stage Two использует `PATH_DATA_STORAGE` как root для generated data и reports. Значение берется из environment через `config.py`.
+Stage Two хранит большие данные вне PostgreSQL. Корень задается переменной `PATH_DATA_STORAGE`, а `bootstrap-storage` создает обязательную структуру директорий через `scripts/stage_two/storage/bootstrap.py`.
 
-Raw datasets находятся вне этого storage tree и никогда не изменяются Stage Two.
-Текущий рабочий вход Stage Two - `PATH_FOLDER_DATASETS_FILTER`, а не `PATH_FOLDER_DATASETS`. Raw root сохраняется для immutable source storage, Stage One discovery и аудита/traceback.
+## Назначение `PATH_DATA_STORAGE`
 
-## Bootstrap
+`PATH_DATA_STORAGE` - отдельный storage root для Stage Two artifacts:
 
-```powershell
-python manage.py stage-two bootstrap-storage
+- Parquet normalized/features/model-ready tables;
+- DuckDB SQL files, exports и локальные `.duckdb` databases;
+- runtime logs;
+- temp data для ingestion/parser/normalization/DuckDB;
+- backups catalog metadata;
+- runtime schema copies;
+- reports на русском и английском.
+
+Raw dataset files не копируются в `PATH_DATA_STORAGE` при catalog ingestion. Их путь и хеш сохраняются в PostgreSQL (`dataset_files.file_path`, `dataset_files.file_hash_sha256`).
+
+## Базовая структура
+
+```text
+PATH_DATA_STORAGE/
+  postgres/
+  pgadmin/
+  parquet/
+    normalized/
+    features/
+    model_ready/
+  duckdb/
+    sql/
+    exports/
+  logs/
+    stage-two/
+  backups/
+    postgres_catalog/
+    metadata_exports/
+  temp_data/
+    ingestion/
+    parser_runs/
+    normalization/
+    duckdb/
+  schemas/
+    normalized/
+    features/
+    model_ready/
+  reports/
+    ru/
+      stage-two/
+        parser/
+        normalization/
+        quality/
+        leakage/
+        schema_mismatch/
+    en/
+      stage-two/
+        parser/
+        normalization/
+        quality/
+        leakage/
+        schema_mismatch/
+  config/
 ```
 
-Implementation: `scripts/stage_two/storage/bootstrap.py`. Команда idempotent и создает только missing directories.
+`StorageBootstrapper.required_relative_paths()` также создает role-aware поддиректории для normalized/features/model-ready layers, чтобы `TRAIN`, `VALIDATION` и `TEST` не смешивались.
 
-## Основные storage areas
+## Parquet layers
 
-| Area | Relative path | Purpose |
+| Layer | Путь | Кто пишет |
 | --- | --- | --- |
-| PostgreSQL runtime | `postgres/`, `pgadmin/` | Local database service state при использовании docker-compose. |
-| Normalized Parquet | `parquet/normalized/` | Parser outputs. |
-| Feature Parquet | `parquet/features/` | Target для feature artifact contract. |
-| Model-ready artifacts | `parquet/model_ready/` | Target для model-ready artifact contract. |
-| DuckDB | `duckdb/`, `duckdb/sql`, `duckdb/exports` | Analytical views/check exports. |
-| Reports | `reports/en/stage-two/`, `reports/ru/stage-two/` | Parser, normalization, quality, leakage, readiness reports. |
-| Logs | `logs/stage-two/` | Stage Two operational logs. |
-| Temp data | `temp_data/ingestion`, `temp_data/parser_runs`, `temp_data/normalization`, `temp_data/duckdb` | Intermediate diagnostics. |
-| Config | `config/` | Runtime config files, например label mapping rules. |
-| Schema copies | `schemas/normalized`, `schemas/features`, `schemas/model_ready` | Storage-side schema artifacts. |
+| normalized | `parquet/normalized/{branch}/{role}/{modality}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet` | `ParquetArtifactWriter.write_normalized()` через DNS/Host normalization services |
+| features | `parquet/features/{feature_group}/{role}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet` | `FeatureArtifactWriter.write_and_register()` |
+| model-ready | `parquet/model_ready/{artifact_type}/{branch}/{role}/schema={schema_version}/{file_name}` | `ModelReadyRegistryService.write_table_artifact()` |
 
-## Normalized Parquet layout
+В текущем CLI есть команды normalization и checks. Полноценная CLI-команда feature/model-ready build не реализована; соответствующий слой представлен contracts/writers/registry services.
 
-`ParquetArtifactWriter.write_normalized()` пишет:
+## Reports
 
-```text
-parquet/normalized/{branch}/{role}/{modality}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet
-```
+| Report group | Примеры файлов | Кто пишет |
+| --- | --- | --- |
+| parser | coverage/status reports | parser coverage/status tools |
+| normalization | parser run summaries | normalization services/runners |
+| quality | `duckdb_analytics_report.json`, data quality reports | `DuckDBAnalyticsService`, `DataQualityChecker` |
+| leakage | leakage reports RU/EN | `LeakageChecker` |
+| stage-two root | readiness/e2e reports | `readiness_check`, `e2e_dry_run` |
 
-Examples:
+`DuckDBAnalyticsService` сохраняет JSON report в `reports/en/stage-two/quality/duckdb_analytics_report.json`. `DataQualityChecker` и `LeakageChecker` сохраняют отчеты в RU/EN report roots.
 
-```text
-parquet/normalized/dns/TRAIN/dns/example-dataset/schema=v1/part-42.parquet
-parquet/normalized/host/VALIDATION/network_flow/example-dataset/schema=v1/part-43.parquet
-parquet/normalized/host/TEST/sandbox/example-dataset/schema=v1/part-44.parquet
-```
+## Temp data
 
-Parquet path регистрируется в PostgreSQL `normalized_artifacts.normalized_path`.
-
-## Report layout
-
-Coverage reports:
+`temp_data` используется для временных результатов ingestion, parser runs, normalization и DuckDB. `e2e_dry_run` создает synthetic workspace под:
 
 ```text
-reports/en/stage-two/parser/parser_coverage_matrix.md
-reports/ru/stage-two/parser/parser_coverage_matrix.md
+temp_data/stage_two_e2e_dry_run/
 ```
 
-Parser run reports:
+Данные из `temp_data` нельзя считать source of truth. Source of truth для metadata - PostgreSQL Catalog, для больших таблиц - Parquet artifacts.
+
+## Config и schemas
+
+| Путь | Назначение |
+| --- | --- |
+| `config/label_mapping_rules.json` | Внешние label mapping rules, если файл создан в storage. |
+| `schemas/normalized/` | Runtime schema copies для normalized layer. |
+| `schemas/features/` | Runtime schema copies для feature layer. |
+| `schemas/model_ready/` | Runtime schema copies для model-ready layer. |
+
+Проектные schema contracts находятся в репозитории:
 
 ```text
-reports/en/stage-two/parser/
-reports/ru/stage-two/parser/
+schemas/normalized/normalized_event_v1.json
+schemas/features/feature_artifact_v1.json
+schemas/model_ready/model_ready_v1.json
 ```
 
-Normalization reports:
+## Ограничения
 
-```text
-reports/en/stage-two/normalization/
-reports/ru/stage-two/normalization/
-```
-
-Quality/leakage reports:
-
-```text
-reports/en/stage-two/quality/
-reports/en/stage-two/leakage/
-reports/ru/stage-two/leakage/
-```
-
-## Storage rules
-
-- Raw input хранится только в original raw dataset roots.
-- `PATH_FOLDER_DATASETS_FILTER` используется как источник Stage Two catalog и normalization.
-- Большие normalized rows хранятся в Parquet, не PostgreSQL.
-- PostgreSQL хранит metadata, counters, hashes, paths и bounded diagnostics.
-- TRAIN, VALIDATION и TEST разделены в catalog rows и artifact paths.
-- `EXPERIMENTS` не создается и не обрабатывается в Stage Two.
-- Parser code должен брать paths из `config.py`, а не hardcode absolute paths.
+- Storage bootstrap создает директории, но не запускает PostgreSQL и не применяет Alembic migrations.
+- PostgreSQL хранит пути к artifacts, но не хранит большие normalized/features/model-ready таблицы.
+- Удаление или перенос файлов в `PATH_DATA_STORAGE/parquet` ломает `normalized_artifacts`, `feature_artifacts`, `model_ready_artifacts` и traceability.
+- `PATH_FOLDER_DATASETS_FILTER` и `PATH_DATA_STORAGE` должны быть разными зонами ответственности: первая содержит input tree, вторая - Stage Two outputs.

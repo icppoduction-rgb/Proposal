@@ -1,56 +1,130 @@
-# Normalized event schema
+# Схема normalized event
 
-Canonical normalized event schema:
+Normalized event schema хранится в:
 
 ```text
 schemas/normalized/normalized_event_v1.json
 ```
 
-Регистрируется в PostgreSQL `schema_versions` командой:
+Это JSON contract с `schema_name = "normalized_event"`, `schema_version = "v1"`, `layer = "normalized"` и массивом `fields`. Parser implementations должны выдавать rows, совместимые с этим контрактом.
 
-```powershell
-python manage.py stage-two seed-parser-registry
+## Обязательные поля parser output
+
+Базовый parser contract в `scripts/stage_two/parsers/base.py` требует поля:
+
+```text
+event_uid
+dataset_name
+dataset_role
+branch
+source_format
+source_file_path
+parser_name
+parser_version
+schema_name
+schema_version
+timestamp_type
+entity_type
+event_type
+modality
+label_source
+label_status
+created_at
 ```
 
-## Field groups
+Дополнительные поля из JSON schema могут быть nullable, но parser должен сохранять traceability и label/timestamp null policy.
 
-| Group | Representative fields | Purpose |
-| --- | --- | --- |
-| Traceability | `event_uid`, `dataset_id`, `file_id`, `dataset_name`, `dataset_role`, `branch`, `source_format`, `source_file_path`, `source_file_hash`, `parser_name`, `parser_version`, `parser_run_id`, `schema_name`, `schema_version` | Связать normalized row с raw file и parser run. |
-| Time/order | `timestamp`, `timestamp_source`, `timestamp_type`, `event_index` | Сохранить absolute timestamps, relative timestamps или stream order. |
-| Event identity | `entity_type`, `entity_id`, `event_type`, `raw_event_name`, `modality` | Описать event domain и normalized type. |
-| Host | `host_name`, `user_name`, `process_id`, `process_name`, `parent_process_id`, `parent_process_name`, `syscall_name`, `event_id`, `command_line`, `file_path` | Host/syscall/log/sandbox fields. |
-| Network/DNS | `src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`, `domain`, `query_domain`, `qtype`, `qclass`, `ttl`, `rcode` | DNS, packet и flow fields. |
-| Metrics | `metric_name`, `metric_value` | Host metricbeat/system metrics. |
-| Labels | `label_binary`, `label_family`, `label_subtype`, `label_source`, `label_status`, `label_confidence`, `label_mapping_rule_id` | Canonical label metadata, не X features. |
-| Flexible JSON | `features_json`, `raw_fields_json`, `metadata_json` | Non-canonical source fields, parser metadata, bounded previews, parser-safe derived features. |
+## Traceability поля
+
+| Поле | Назначение |
+| --- | --- |
+| `event_uid` | Уникальный идентификатор normalized event. |
+| `dataset_name` | Имя dataset из catalog/source context. |
+| `dataset_role` | `TRAIN`, `VALIDATION` или `TEST`. |
+| `branch` | `dns`, `host`, `network`, `hybrid`. |
+| `source_format` | Формат raw файла. |
+| `source_file_path` | Путь к исходному файлу. |
+| `source_file_hash` | SHA-256 raw файла, если доступен из catalog. |
+| `parser_run_id` | ID parser run, связывает event с `parser_runs`. |
+| `parser_name`, `parser_version` | Parser implementation и версия. |
+| `schema_name`, `schema_version` | Версия normalized schema. |
+| `event_index` | Порядковый номер события внутри файла, если доступен. |
+
+Traceability поля нельзя удалять из normalized artifacts. Для model-ready `X` они считаются leakage/source columns и должны быть исключены из признаков.
 
 ## Timestamp policy
 
-| `timestamp_type` | Meaning |
+| Поле | Правило |
 | --- | --- |
-| `absolute` | Source содержит absolute timestamp. |
-| `relative` | Source содержит relative time/counter. |
-| `event_order` | Нет absolute time; `event_index` сохраняет порядок. |
-| `missing` | Нет usable time и ordered context. |
+| `timestamp` | Может быть `null`. |
+| `timestamp_type` | Одно из `absolute`, `relative`, `event_order`, `missing`. |
+| `event_index` | Используется для сохранения порядка, когда абсолютного времени нет. |
 
-Parsers не должны silently inject current year/timezone, если source не дает достаточно контекста.
+Если timestamp отсутствует, нельзя подставлять текущее время. Правильные варианты:
 
-## Null policy
+- `timestamp = null`, `timestamp_type = "event_order"`, если есть надежный `event_index`;
+- `timestamp = null`, `timestamp_type = "missing"`, если нет времени и порядка.
 
-- Missing values сохраняются как JSON null, SQL NULL или Parquet null.
-- Missing labels не считаются benign.
-- Unlabeled events используют `label_binary=None`, `label_source="none"`, `label_status="unlabeled"`.
-- Unknown source fields сохраняются в JSON fields, а не silently drop.
+`build_timestamp_fields()` в `scripts/stage_two/parsers/common.py` реализует это правило: timestamp дает `absolute`, event index без timestamp дает `event_order`, отсутствие обоих дает `missing`.
 
-## Required parser behavior
+## DNS поля
 
-Каждый emitted event должен содержать required normalized fields из `scripts/stage_two/parsers/base.py`. Parser smoke tests проверяют это через `REQUIRED_NORMALIZED_FIELDS`.
+DNS parsers заполняют поля, связанные с DNS/network context, если они есть в source:
 
-Recommended event creation:
+- `src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`;
+- `query_domain`, `qtype`, `qclass`, `rcode`, `ttl`;
+- DNS-specific values внутри `features_json` или `raw_fields_json`, если исходная схема не совпадает напрямую с normalized fields.
 
-1. Построить traceability fields helpers из `scripts/stage_two/parsers/common.py`.
-2. Добавить timestamp/order fields.
-3. Resolve labels через `LabelResolver`.
-4. Merge canonical fields, `raw_fields_json`, `features_json`, `metadata_json`.
-5. Вернуть `ParserResult` с counters и status.
+DNS packet captures могут давать summary-level events в зависимости от `--packet-mode`.
+
+## Host поля
+
+Host parsers используют поля, связанные с host telemetry:
+
+- process: `process_id`, `process_name`, parent process fields;
+- file/path: `path`, file action fields;
+- syscall/log: `sys_call`, `event_id`, `event_type`;
+- metrics/log payload, если source формат логовый или metricbeat-like.
+
+Для нестандартных строковых логов часть значений сохраняется в `raw_fields_json`, а normalized columns заполняются только когда значение можно извлечь без выдумывания.
+
+## Network/hybrid поля
+
+`network` и `hybrid` branches есть в schema/catalog constants, но текущий normalization runner поддерживает только `dns` и `host`. Network/hybrid fields могут использоваться контрактами будущих parsers, но не должны описываться как полностью реализованный normalization pipeline.
+
+## Labels
+
+Unlabeled event должен иметь:
+
+```json
+{
+  "label_binary": null,
+  "label_family": null,
+  "label_subtype": null,
+  "label_source": "none",
+  "label_status": "unlabeled",
+  "label_confidence": null,
+  "label_mapping_rule_id": null
+}
+```
+
+Отсутствующий label не равен benign. Для `TEST` filename/embedded heuristics отключены `LabelResolver.label_hints_allowed()`, чтобы не вносить leakage через имя файла или поля, которые не являются explicit external ground truth.
+
+## JSON поля
+
+| Поле | Назначение |
+| --- | --- |
+| `features_json` | Parser-level extracted attributes, которые еще не являются model-ready X features. |
+| `raw_fields_json` | Исходные поля или фрагменты raw record для audit/debug. |
+| `metadata_json` | Parser/file metadata, warnings, confidence, дополнительные counters. |
+
+`ParquetArtifactWriter` сериализует поля с суффиксом `_json` в deterministic JSON strings перед записью Parquet.
+
+## Граничные случаи
+
+| Сценарий | Ожидаемое поведение |
+| --- | --- |
+| Empty file | Parser result может привести к `EMPTY_FILE`/`SKIPPED`, artifact не обязан создаваться. |
+| Частично битые строки | Допустим `PARTIAL_SUCCESS`/`PARTIALLY_PARSED`, ошибки фиксируются в parser run counters/error samples. |
+| Неизвестный source format | Файл получает `UNSUPPORTED_FORMAT`, если resolver не нашел parser. |
+| Schema drift | Parser должен сохранять неизвестные raw values в `raw_fields_json`/`metadata_json`, а не расширять model-ready X без schema review. |
