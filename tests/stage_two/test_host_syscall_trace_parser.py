@@ -33,6 +33,23 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertIsNone(event["metadata_json"].get("syscall_id"))
         self.assertEqual(event["raw_fields_json"]["arguments"], 'AT_FDCWD, "/tmp/a", O_RDONLY')
 
+    def test_real_ghc_module_offset_sequence_expands_to_events(self) -> None:
+        line = "kernel32.dll+0x14af5 kernel32.dll+0x1d3a ntdll.dll+0x16d33"
+        path = _write_temp_text(self, line + "\n", file_name="trace.GHC")
+
+        result = _parser().parse(path, _context(path, source_format="ghc"))
+
+        self.assertEqual(result.rows_read, 3)
+        self.assertEqual(result.rows_parsed, 3)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual([event["event_index"] for event in result.events], [0, 1, 2])
+        self.assertEqual(result.events[0]["syscall_name"], "kernel32.dll+0x14af5")
+        self.assertEqual(result.events[0]["process_name"], "kernel32.dll")
+        self.assertEqual(result.events[0]["event_id"], "0x14af5")
+        self.assertEqual(result.events[2]["process_name"], "ntdll.dll")
+        self.assertEqual(result.events[2]["metadata_json"]["sequence_length"], 3)
+        self.assertEqual(result.events[2]["metadata_json"]["token_index"], 2)
+
     def test_sc_like_numeric_syscall_id_line(self) -> None:
         line = "pid=7 syscall=59 args=/bin/sh"
         path = _write_temp_text(self, line + "\n", file_name="trace.sc")

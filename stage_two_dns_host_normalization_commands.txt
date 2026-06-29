@@ -153,19 +153,7 @@ python manage.py stage-two mark-ready --branch host --role TRAIN --format ghc --
 python manage.py stage-two split-large-files --branch host --role TRAIN --format ghc --limit 1000 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TRAIN --format ghc --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
-
-HOST TRAIN pcap
-python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --apply
-python manage.py stage-two normalize-format --branch host --role TRAIN --format pcap --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --packet-mode sample --sample-size 100000 --resume
-
-python manage.py stage-two normalize-format --branch host --role TRAIN --format pcap --workers 5 --packet-mode packet-summary --batch-size 50000 --max-output-part-rows 100000 --resume
-
-HOST TRAIN sc
-python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --dry-run
-python manage.py stage-two mark-ready --branch host --role TRAIN --format sc --apply
-python manage.py stage-two split-large-files --branch host --role TRAIN --format sc --limit 1000 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TRAIN --format sc --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
+python manage.py stage-two normalize-format --branch host --role TRAIN --format ghc --limit 10000 --workers 14 --batch-size 120000 --max-output-part-rows 200000 --resume
 
 
 HOST VALIDATION json

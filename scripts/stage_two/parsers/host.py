@@ -146,6 +146,10 @@ TRACE_ISO_TIMESTAMP_PREFIX_PATTERN = re.compile(
 )
 TRACE_RELATIVE_TIMESTAMP_PREFIX_PATTERN = re.compile(r"^(?P<relative_timestamp>\d+\.\d+)\s+(?P<body>.+)$")
 TRACE_NAME_PATTERN = re.compile(r"^[A-Za-z_][\w.$:@/-]*$")
+GHC_MODULE_OFFSET_TOKEN_PATTERN = re.compile(
+    r"^(?P<module>[A-Za-z0-9_.-]+\.(?:dll|exe|sys))\+0x(?P<offset>[0-9A-Fa-f]+)$",
+    re.IGNORECASE,
+)
 
 
 class HostCsvParser(BaseParser):
@@ -694,41 +698,52 @@ class HostSyscallTraceParser(BaseParser):
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
+        event_index = 0
         error_samples: list[str] = []
         reader = UniversalInputReader(path)
         with reader.iter_lines(keepends=False, skip_empty=False) as lines:
-            for index, line in enumerate(lines):
+            for line_index, line in enumerate(lines):
                 if not line.strip():
                     continue
-                rows_read += 1
-                row, error = _parse_syscall_trace_line(
+                rows = _parse_ghc_trace_sequence_line(
                     line,
-                    line_number=index + 1,
+                    line_number=line_index + 1,
                     source_format=context.source_format,
                 )
-                if error is not None:
-                    rows_failed += 1
-                    error_samples.append(error)
-                    continue
-                try:
-                    events.append(_host_event_from_row(self, row, index, context, modality="syscall"))
-                except Exception as exc:
-                    rows_failed += 1
-                    error_samples.append(_error_sample(row, exc))
-                if len(events) >= batch_size:
-                    result = ParserResult(
-                        rows_read=rows_read,
-                        rows_parsed=len(events),
-                        rows_failed=rows_failed,
-                        events=events,
-                        error_samples=error_samples,
+                if not rows:
+                    row, error = _parse_syscall_trace_line(
+                        line,
+                        line_number=line_index + 1,
+                        source_format=context.source_format,
                     )
-                    self.validate_result(result)
-                    yield result
-                    events = []
-                    rows_read = 0
-                    rows_failed = 0
-                    error_samples = []
+                    if error is not None:
+                        rows_read += 1
+                        rows_failed += 1
+                        error_samples.append(error)
+                        continue
+                    rows = [row]
+                for row in rows:
+                    rows_read += 1
+                    try:
+                        events.append(_host_event_from_row(self, row, event_index, context, modality="syscall"))
+                        event_index += 1
+                    except Exception as exc:
+                        rows_failed += 1
+                        error_samples.append(_error_sample(row, exc))
+                    if len(events) >= batch_size:
+                        result = ParserResult(
+                            rows_read=rows_read,
+                            rows_parsed=len(events),
+                            rows_failed=rows_failed,
+                            events=events,
+                            error_samples=error_samples,
+                        )
+                        self.validate_result(result)
+                        yield result
+                        events = []
+                        rows_read = 0
+                        rows_failed = 0
+                        error_samples = []
 
         reader_metadata = reader.metadata_snapshot()
         warnings = [
@@ -834,6 +849,50 @@ def _parse_syscall_trace_line(
     if timestamp not in ("", None):
         row["timestamp"] = timestamp
     return row, None
+
+
+def _parse_ghc_trace_sequence_line(
+    line: str,
+    *,
+    line_number: int,
+    source_format: str,
+) -> list[dict[str, Any]]:
+    if source_format.strip().lower() != "ghc":
+        return []
+    text = line.strip()
+    if not text or _is_control_heavy_trace_line(text):
+        return []
+    raw_tokens = _trace_tokens(text)
+    parsed_tokens: list[tuple[str, str, str]] = []
+    for token in raw_tokens:
+        cleaned = _clean_trace_token(token)
+        match = GHC_MODULE_OFFSET_TOKEN_PATTERN.match(cleaned)
+        if match is None:
+            return []
+        parsed_tokens.append((cleaned, match.group("module"), f"0x{match.group('offset').lower()}"))
+
+    line_hash = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+    sequence_length = len(parsed_tokens)
+    return [
+        {
+            "_trace_source_type": "ghc_module_offset_sequence",
+            "source_format": source_format,
+            "line_number": line_number,
+            "token_index": token_index,
+            "sequence_length": sequence_length,
+            "_raw_line_sha256": line_hash,
+            "_raw_line_length": len(text),
+            "_raw_line_preview": _trace_line_preview(text),
+            "raw_event_name": token,
+            "syscall_name": token,
+            "event_id": offset,
+            "process_name": module_name,
+            "module_name": module_name,
+            "module_offset": offset,
+            "command_line": token,
+        }
+        for token_index, (token, module_name, offset) in enumerate(parsed_tokens)
+    ]
 
 
 def _trace_key_values(text: str) -> dict[str, str]:
@@ -1466,6 +1525,10 @@ def _host_trace_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any
         "raw_line_length": row.get("_raw_line_length"),
         "raw_line_preview_truncated": _line_preview_truncated(row),
         "syscall_id": row.get("syscall_id"),
+        "module_name": row.get("module_name"),
+        "module_offset": row.get("module_offset"),
+        "token_index": row.get("token_index"),
+        "sequence_length": row.get("sequence_length"),
         "arguments_length": len(str(arguments)) if arguments not in ("", None) else None,
         "return_value": row.get("return_value"),
         "relative_timestamp": row.get("relative_timestamp"),
