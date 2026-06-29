@@ -16,44 +16,90 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-    shm_size: "1gb"
+    shm_size: "2gb"
 
     command:
       - "postgres"
+
+      # ---------------- Connections ----------------
       - "-c"
-      - "max_connections=1000"
+      - "max_connections=200"
+
+      # ---------------- Memory ----------------
       - "-c"
-      - "shared_buffers=4GB"
+      - "shared_buffers=16GB"
       - "-c"
-      - "effective_cache_size=8GB"
+      - "effective_cache_size=48GB"
       - "-c"
-      - "maintenance_work_mem=1024MB"
+      - "maintenance_work_mem=2GB"
       - "-c"
-      - "work_mem=2048MB"
+      - "work_mem=64MB"
+
+      # ---------------- WAL ----------------
       - "-c"
-      - "wal_buffers=256MB"
+      - "wal_level=replica"
+      - "-c"
+      - "wal_buffers=64MB"
+      - "-c"
+      - "max_wal_size=16GB"
+      - "-c"
+      - "min_wal_size=4GB"
+
+      # ---------------- Checkpoints ----------------
       - "-c"
       - "checkpoint_timeout=15min"
       - "-c"
       - "checkpoint_completion_target=0.9"
-      - "-c"
-      - "max_wal_size=10GB"
-      - "-c"
-      - "min_wal_size=4GB"
+
+      # ---------------- Planner ----------------
       - "-c"
       - "random_page_cost=1.1"
       - "-c"
       - "effective_io_concurrency=200"
       - "-c"
       - "default_statistics_target=200"
+
+      # ---------------- Parallel ----------------
+      - "-c"
+      - "max_worker_processes=16"
+      - "-c"
+      - "max_parallel_workers=8"
+      - "-c"
+      - "max_parallel_workers_per_gather=4"
+      - "-c"
+      - "max_parallel_maintenance_workers=4"
+
+      # ---------------- Autovacuum ----------------
+      - "-c"
+      - "autovacuum=on"
+      - "-c"
+      - "autovacuum_max_workers=4"
+      - "-c"
+      - "autovacuum_naptime=30s"
+
+      # ---------------- Monitoring ----------------
       - "-c"
       - "track_io_timing=on"
       - "-c"
-      - "log_min_duration_statement=2000"
+      - "track_activity_query_size=4096"
+
+      # ---------------- Logging ----------------
+      - "-c"
+      - "logging_collector=on"
       - "-c"
       - "log_checkpoints=on"
       - "-c"
+      - "log_connections=off"
+      - "-c"
+      - "log_disconnections=off"
+      - "-c"
+      - "log_lock_waits=on"
+      - "-c"
+      - "log_temp_files=256MB"
+      - "-c"
       - "log_autovacuum_min_duration=1000"
+      - "-c"
+      - "log_min_duration_statement=3000"
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -65,14 +111,18 @@ services:
     image: dpage/pgadmin4:8
     container_name: proposal-pgadmin
     restart: unless-stopped
+
     depends_on:
       postgres:
         condition: service_healthy
+
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+
     ports:
       - "${PGADMIN_PORT}:80"
+
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
