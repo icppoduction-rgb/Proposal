@@ -10,3 +10,5 @@ environment.yml
 requirements-dev.txt
 .python-version
 graphify-out
+.agents
+.codex
