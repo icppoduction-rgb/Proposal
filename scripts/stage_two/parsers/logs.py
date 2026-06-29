@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from dataclasses import dataclass
 from typing import Any
 
 from config import STAGE_TWO_MAX_RAW_PREVIEW_BYTES
+from scripts.stage_two.parsers.json_utils import loads_json_record
 
 
 RAW_LINE_PREVIEW_CHARS = min(512, STAGE_TWO_MAX_RAW_PREVIEW_BYTES)
@@ -70,12 +70,12 @@ def parse_host_log_line(
 
     if stripped[0] in "{[":
         try:
-            payload = json.loads(stripped)
-        except json.JSONDecodeError as exc:
+            payload = loads_json_record(stripped)
+        except ValueError as exc:
             return ParsedLogLine(
                 row=base,
                 source_type="json_line",
-                error=f"json line {line_number}: {exc.msg}",
+                error=f"json line {line_number}: {exc}",
             )
         base.update({"_log_source_type": "json_line", "event_type": "json_log"})
         return ParsedLogLine(row=base, source_type="json_line", json_payload=payload)

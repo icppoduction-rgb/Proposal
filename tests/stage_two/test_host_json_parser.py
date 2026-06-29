@@ -106,6 +106,55 @@ class HostJsonLinesParserTest(unittest.TestCase):
         self.assertEqual(event["command_line"], "cmd.exe /c whoami")
         self.assertEqual(event["metadata_json"]["json_source_type"], "json_object")
 
+    def test_pretty_printed_json_object_is_not_treated_as_json_lines(self) -> None:
+        payload = {
+            "container": [
+                {"ip": "172.29.0.2", "name": "normal-container", "role": "normal"},
+                {"ip": "172.29.0.3", "name": "attack-container", "role": "attacker"},
+            ]
+        }
+        path = _write_temp_text(self, json.dumps(payload, indent=4), file_name="containers.json")
+
+        result = _parser().parse(path, _context(path))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.events[0]["metadata_json"]["json_source_type"], "json_object")
+        self.assertEqual(result.events[0]["raw_fields_json"]["container"][0]["ip"], "172.29.0.2")
+
+    def test_multiline_json_lines_stays_streaming_json_lines(self) -> None:
+        rows = [
+            {"message": "first", "event": {"action": "one"}},
+            {"message": "second", "event": {"action": "two"}},
+        ]
+        path = _write_temp_text(self, "\n".join(json.dumps(row) for row in rows) + "\n")
+
+        result = _parser().parse(path, _context(path))
+
+        self.assertEqual(result.rows_read, 2)
+        self.assertEqual(result.rows_parsed, 2)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.events[0]["metadata_json"]["json_source_type"], "json_lines")
+
+    def test_epoch_milliseconds_timestamp_json_line_parses_on_windows(self) -> None:
+        row = {
+            "timestamp": "1642080053798",
+            "source": "10.229.255.254",
+            "destination": "10.229.2.216",
+            "protocol": "DNS",
+            "info": "Standard query",
+        }
+        path = _write_temp_text(self, json.dumps(row) + "\n", file_name="traffic.json")
+
+        result = _parser().parse(path, _context(path))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.events[0]["timestamp_type"], "absolute")
+        self.assertEqual(result.events[0]["timestamp_source"], "timestamp")
+
     def test_bad_json_line_is_partial_success(self) -> None:
         path = _write_temp_text(
             self,

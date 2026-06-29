@@ -162,3 +162,110 @@ Readiness check пересчитывает hashes для `dataset_files.file_pat
 2. Проверить source path и backup.
 3. Повторить `catalog-ingest`, если raw tree официально обновлен.
 4. Пересобрать downstream artifacts, потому что normalized/features/model-ready могли быть созданы из старого содержимого.
+## Performance runbook для текущего железа
+
+Целевое железо:
+
+- Intel Core i7-14700KF.
+- 64 GB DDR5 RAM.
+- Samsung M.2 SSD 2 TB.
+- MSI GeForce RTX 5060 Ti 16 GB.
+
+Raw normalization ориентирована на CPU. GPU по умолчанию не используется для raw parsers; оставляйте GPU для feature/model-ready/training layers, пока нет отдельного parser backend с проверенной корректностью.
+
+### Цель
+
+- Full Stage Two normalization target: `17 GB <= 3 hours`.
+- Требуемая скорость: около `5.67 GB/hour`.
+- Ожидаемый target для line-based formats на этом железе: `10-20+ GB/hour` после benchmark validation.
+
+### Безопасный порядок запуска
+
+1. Проверить parser coverage и подготовить один точный bucket.
+2. Запустить `benchmark-normalization` на 5-10% файлов.
+3. Начать с `safe` или `balanced`.
+4. Переходить на `fast` только после проверки parser reports, DuckDB checks, leakage checks, RAM, DB connections и SSD write behavior.
+5. Использовать `aggressive` только для line-based formats после чистого `fast` run.
+6. Full bucket запускать с `--resume`.
+7. Запустить post-run gates:
+
+```bash
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+```
+
+### Примеры команд
+
+Benchmark:
+
+```bash
+python manage.py stage-two benchmark-normalization \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --limit 10000 \
+  --sample-ratio 0.10 \
+  --resource-profile fast
+```
+
+Line-based full run:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --resource-profile fast \
+  --resume
+```
+
+PCAP safe run:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch dns \
+  --role TRAIN \
+  --format pcap \
+  --resource-profile safe \
+  --workers 3 \
+  --packet-mode packet-summary \
+  --resume
+```
+
+BSON safe run:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format bson \
+  --resource-profile safe \
+  --workers 3 \
+  --batch-size 75000 \
+  --resume
+```
+
+### Troubleshooting performance runs
+
+| Проблема | Что проверить | Recovery |
+| --- | --- | --- |
+| PostgreSQL timeout | long transactions, locks, slow catalog writes | уменьшить `--workers`, использовать `safe`, перезапустить с `--resume` |
+| too many DB connections | process workers vs DB pool size | ограничить workers до `4-8`, не использовать `aggressive`, проверить worker-local sessions |
+| memory pressure | batch size, output part rows, binary formats | уменьшить `--batch-size`, уменьшить `--max-output-part-rows`, split для line-based files |
+| SSD throttling | high concurrent writes, temperature, hashing | уменьшить workers, отключить output hashing на итерациях, разделить большие buckets |
+| too many small files | scheduler и catalog overhead | использовать bounded execution, группировать exact format, избегать mixed all-branch runs |
+| parser errors | parser run reports, error samples, malformed rows | исправить parser/schema handling; не считать malformed rows успешными silently |
+| empty DuckDB views | нет Parquet roots или неверный storage path | проверить `PATH_DATA_STORAGE`, artifact paths и `run-duckdb-checks` report |
+| leakage critical | forbidden X columns или TEST в training artifacts | остановить training use, проверить leakage report, пересобрать feature/model-ready artifacts |
+
+### Safety rules
+
+- Не изменять raw dataset files.
+- Не смешивать `TRAIN`, `VALIDATION`, `TEST`.
+- Не использовать `TEST` для training, preprocessing fit, scaler/encoder fit, feature selection или threshold tuning.
+- PostgreSQL остается catalog/control plane, Parquet хранит большие данные.
+- Labels и path/source/scenario fields не попадают в model-ready X.
+- Missing labels не считаются benign.
+- Missing timestamps не заменяются current time.
+- Traceability сохраняется от raw file до normalized, features и model-ready artifacts.

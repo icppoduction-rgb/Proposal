@@ -162,3 +162,111 @@ Actions:
 2. Check source path and backup.
 3. Rerun `catalog-ingest` if the raw tree was officially updated.
 4. Rebuild downstream artifacts because normalized/features/model-ready artifacts may have been produced from older content.
+
+## Performance Runbook for the Current Workstation
+
+Target hardware:
+
+- Intel Core i7-14700KF.
+- 64 GB DDR5 RAM.
+- Samsung M.2 SSD 2 TB.
+- MSI GeForce RTX 5060 Ti 16 GB.
+
+Raw normalization is CPU-oriented. GPU is not enabled for raw parsers by default; keep GPU for feature/model-ready/training work unless a parser-specific backend is implemented and validated.
+
+### Target
+
+- Full Stage Two normalization target: `17 GB <= 3 hours`.
+- Required throughput: about `5.67 GB/hour`.
+- Expected target for line-based formats on this hardware: `10-20+ GB/hour` after benchmark validation.
+
+### Safe Operational Sequence
+
+1. Run parser coverage and mark one exact bucket ready.
+2. Run `benchmark-normalization` on 5-10% of files.
+3. Start with `safe` or `balanced`.
+4. Move to `fast` only after parser reports, DuckDB checks, leakage checks, RAM, DB connections, and SSD write behavior look healthy.
+5. Use `aggressive` only for line-based formats after a clean `fast` run.
+6. Run the full bucket with `--resume`.
+7. Run post-run gates:
+
+```bash
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+```
+
+### Example Commands
+
+Benchmark:
+
+```bash
+python manage.py stage-two benchmark-normalization \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --limit 10000 \
+  --sample-ratio 0.10 \
+  --resource-profile fast
+```
+
+Line-based full run:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --resource-profile fast \
+  --resume
+```
+
+PCAP safe run:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch dns \
+  --role TRAIN \
+  --format pcap \
+  --resource-profile safe \
+  --workers 3 \
+  --packet-mode packet-summary \
+  --resume
+```
+
+BSON safe run:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format bson \
+  --resource-profile safe \
+  --workers 3 \
+  --batch-size 75000 \
+  --resume
+```
+
+### Troubleshooting Performance Runs
+
+| Issue | What to check | Recovery |
+| --- | --- | --- |
+| PostgreSQL timeout | long transactions, locks, slow catalog writes | lower `--workers`, use `safe`, rerun with `--resume` |
+| too many DB connections | process workers vs DB pool size | cap workers to `4-8`, avoid `aggressive`, verify worker-local sessions |
+| memory pressure | batch size, output part rows, binary formats | reduce `--batch-size`, reduce `--max-output-part-rows`, split line-based files |
+| SSD throttling | high concurrent writes, temperature, hashing | reduce workers, disable output hashing during iterations, stagger large buckets |
+| too many small files | scheduler and catalog overhead | keep bounded execution, group by exact format, avoid mixed all-branch runs |
+| parser errors | parser run reports, error samples, malformed rows | fix parser/schema handling; do not mark malformed rows successful silently |
+| empty DuckDB views | missing Parquet roots or wrong storage path | verify `PATH_DATA_STORAGE`, artifact paths, and `run-duckdb-checks` report |
+| leakage critical | forbidden X columns or TEST in training artifacts | stop training use, inspect leakage report, rebuild feature/model-ready artifacts |
+
+### Safety Rules
+
+- Never edit raw dataset files.
+- Do not mix `TRAIN`, `VALIDATION`, and `TEST`.
+- Do not use `TEST` for training, preprocessing fit, scaler/encoder fit, feature selection, or threshold tuning.
+- Keep PostgreSQL as catalog/control plane and Parquet as the large-data store.
+- Keep labels and path/source/scenario fields out of model-ready X.
+- Do not treat missing labels as benign.
+- Do not replace missing timestamps with current time.
+- Preserve traceability from raw file to normalized, features, and model-ready artifacts.

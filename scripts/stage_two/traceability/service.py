@@ -169,6 +169,7 @@ def parser_run_metadata(parser_run: ParserRun) -> dict[str, Any]:
 
 def dataset_file_metadata(dataset_file: DatasetFile) -> dict[str, Any]:
     """Return serializable raw dataset file metadata."""
+    metadata = dataset_file.metadata_json or {}
     return {
         "id": dataset_file.id,
         "file_path": dataset_file.file_path,
@@ -178,6 +179,19 @@ def dataset_file_metadata(dataset_file: DatasetFile) -> dict[str, Any]:
         "branch": dataset_file.branch,
         "source_format": dataset_file.source_format,
         "status": dataset_file.status,
+        "metadata_json": metadata,
+        "chunk": {
+            "is_chunk": "parent_file_id" in metadata or "split_source_file_id" in metadata,
+            "parent_file_id": metadata.get("parent_file_id") or metadata.get("split_source_file_id"),
+            "chunk_index": metadata.get("chunk_index") or metadata.get("split_part_index"),
+            "chunk_path": metadata.get("chunk_path") or dataset_file.file_path,
+            "byte_start": metadata.get("byte_start"),
+            "byte_end": metadata.get("byte_end"),
+            "line_start": metadata.get("line_start"),
+            "line_end": metadata.get("line_end"),
+            "source_order_preserved": metadata.get("source_order_preserved"),
+            "original_source_path": metadata.get("original_source_path") or metadata.get("split_source_file_path"),
+        },
     }
 
 

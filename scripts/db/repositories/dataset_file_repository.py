@@ -21,7 +21,7 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
 
     model = DatasetFile
 
-    def bulk_upsert_files(self, rows: list[dict[str, Any]]) -> int:
+    def bulk_upsert_files(self, rows: list[dict[str, Any]], *, force_status: bool = False) -> int:
         """Bulk upsert raw file rows by `(dataset_id, file_path)` without committing."""
         if not rows:
             return 0
@@ -29,10 +29,10 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         total = 0
         deduplicated_rows = self._deduplicate_file_rows(rows)
         for chunk in self._chunk_rows(deduplicated_rows, chunk_size=MAX_BULK_UPSERT_ROWS):
-            total += self._bulk_upsert_file_chunk(chunk)
+            total += self._bulk_upsert_file_chunk(chunk, force_status=force_status)
         return total
 
-    def _bulk_upsert_file_chunk(self, rows: list[dict[str, Any]]) -> int:
+    def _bulk_upsert_file_chunk(self, rows: list[dict[str, Any]], *, force_status: bool = False) -> int:
         table = DatasetFile.__table__
         statement = insert(table).values(rows)
         excluded = statement.excluded
@@ -60,7 +60,7 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
             "error_message": excluded.error_message,
             "last_seen_at": func.now(),
             "updated_at": func.now(),
-            "status": case((hash_changed, "CHANGED"), else_=table.c.status),
+            "status": excluded.status if force_status else case((hash_changed, "CHANGED"), else_=table.c.status),
         }
         result = self.session.execute(
             statement.on_conflict_do_update(

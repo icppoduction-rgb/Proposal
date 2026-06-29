@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session
 from scripts.db.models import DatasetFile, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository, DatasetFileRepository, ParserRepository
 from scripts.stage_two.labels import LabelResolver
-from scripts.stage_two.normalization.options import NormalizationOptions
+from scripts.stage_two.normalization.options import NormalizationOptions, batch_size_for_source_format
 from scripts.stage_two.normalization.performance import MemoryTracker, NormalizationPerformance, PerfTimer
 from scripts.stage_two.parquet import ParquetArtifactWriter
+from scripts.stage_two.parquet.writer import ParquetWriteResult
 from scripts.stage_two.parser_registry import ParserResolver
 from scripts.stage_two.parsers import ParserContext, ParserResult
 from scripts.stage_two.reports import save_parser_run_reports
@@ -138,7 +139,10 @@ class HostNormalizationService:
             output_parquet_path=output_path,
             warning_count=len(result.warnings),
             error_message=_parser_result_error_message(result),
-            metadata_json={"performance": performance.payload()},
+            metadata_json={
+                "performance": performance.payload(),
+                "output_counters": _aggregate_output_counters(dataset_file, result, performance),
+            },
         )
         self.file_repository.mark_file_status(
             dataset_file,
@@ -193,7 +197,7 @@ class HostNormalizationService:
             parse_batches(
                 path,
                 context,
-                batch_size=self.options.batch_size,
+                batch_size=batch_size_for_source_format(dataset_file.source_format, self.options),
                 packet_mode=self.options.packet_mode,
                 sample_size=self.options.sample_size,
             )
@@ -263,6 +267,12 @@ class HostNormalizationService:
                                 "rows_parsed": rows_parsed,
                                 "bytes_read": bytes_read,
                             },
+                            "output_counters": _artifact_output_counters(
+                                dataset_file,
+                                batch_result,
+                                write_result,
+                                output_rows=len(events_part),
+                            ),
                         },
                     )
                 artifact = artifact or registered
@@ -321,15 +331,60 @@ def _existing_parts_by_index(
     return parts
 
 
+def _artifact_output_counters(
+    dataset_file: DatasetFile,
+    batch_result: ParserResult,
+    write_result: ParquetWriteResult,
+    *,
+    output_rows: int,
+) -> dict[str, Any]:
+    return {
+        "input_files": 1,
+        "input_bytes": dataset_file.file_size_bytes,
+        "input_rows": batch_result.rows_read,
+        "input_events": batch_result.rows_read,
+        "parsed_events": len(batch_result.events),
+        "output_rows": output_rows,
+        "failed_rows": batch_result.rows_failed,
+        "skipped_rows": 0,
+        "parser_errors_count": batch_result.parse_errors_count or 0,
+        "parquet_size_bytes": write_result.file_size_bytes,
+        "write_duration_seconds": write_result.write_duration_seconds,
+    }
+
+
+def _aggregate_output_counters(
+    dataset_file: DatasetFile,
+    result: ParserResult,
+    performance: NormalizationPerformance,
+) -> dict[str, Any]:
+    return {
+        "input_files": 1,
+        "input_bytes": dataset_file.file_size_bytes,
+        "input_rows": result.rows_read,
+        "input_events": result.rows_read,
+        "parsed_events": result.events_emitted,
+        "output_rows": result.events_emitted,
+        "failed_rows": result.rows_failed,
+        "skipped_rows": 0,
+        "parser_errors_count": result.parse_errors_count or 0,
+        "parquet_size_bytes": None,
+        "write_duration_seconds": performance.parquet_write_seconds,
+    }
+
+
 def _options_payload(options: NormalizationOptions) -> dict[str, Any]:
     return {
         "workers": options.workers,
         "batch_size": options.batch_size,
         "max_output_part_rows": options.max_output_part_rows,
+        "packet_batch_size": options.packet_batch_size,
         "resume": options.resume,
         "packet_mode": options.packet_mode,
         "hash_outputs": options.hash_outputs,
         "sample_size": options.sample_size,
+        "resource_profile": options.resource_profile,
+        "engine": options.engine,
     }
 
 

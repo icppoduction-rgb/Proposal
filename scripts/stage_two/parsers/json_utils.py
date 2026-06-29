@@ -3,8 +3,56 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from typing import Any
+
+
+MONGO_NUMBER_WRAPPER_RE = re.compile(
+    r"\b(?P<name>NumberLong|NumberInt|NumberDouble)\(\s*(?P<value>\"[^\"\\]*(?:\\.[^\"\\]*)*\"|-?\d+(?:\.\d+)?)\s*\)"
+)
+MONGO_STRING_WRAPPER_RE = re.compile(
+    r"\b(?P<name>ISODate|ObjectId)\(\s*(?P<value>\"[^\"\\]*(?:\\.[^\"\\]*)*\")\s*\)"
+)
+
+
+def loads_json_record(text: str) -> Any:
+    """Load one JSON record, accepting common Mongo shell wrapper values.
+
+    This helper keeps JSON parsing deterministic: it never evaluates code and
+    only rewrites known scalar wrappers such as NumberLong("123") or
+    ISODate("...") before retrying json.loads().
+    """
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        normalized = normalize_mongo_json_wrappers(text)
+        if normalized == text:
+            raise
+        return json.loads(normalized)
+
+
+def normalize_mongo_json_wrappers(text: str) -> str:
+    """Return JSON text with safe Mongo shell scalar wrappers converted."""
+
+    def replace_number(match: re.Match[str]) -> str:
+        raw_value = match.group("value")
+        if raw_value.startswith('"'):
+            try:
+                decoded = json.loads(raw_value)
+            except json.JSONDecodeError:
+                return raw_value
+            if re.fullmatch(r"-?\d+(?:\.\d+)?", str(decoded)):
+                return str(decoded)
+            return json.dumps(decoded, ensure_ascii=False)
+        return raw_value
+
+    def replace_string(match: re.Match[str]) -> str:
+        return match.group("value")
+
+    normalized = MONGO_NUMBER_WRAPPER_RE.sub(replace_number, text)
+    normalized = MONGO_STRING_WRAPPER_RE.sub(replace_string, normalized)
+    return normalized
 
 
 def flatten_json_object(value: Any, *, separator: str = ".") -> dict[str, Any]:

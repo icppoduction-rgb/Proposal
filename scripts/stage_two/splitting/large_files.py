@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,8 @@ LINE_SPLIT_SOURCE_FORMATS: frozenset[str] = frozenset(
         "mainlog-3",
         "messages",
         "messages-1",
+        "mail-info-1",
+        "mail-warn-1",
         "journal",
         "journal~",
         "info",
@@ -65,6 +68,8 @@ LINE_SPLIT_SOURCE_FORMATS: frozenset[str] = frozenset(
         "uptime.log",
     }
 )
+
+BINARY_SOURCE_FORMATS: frozenset[str] = frozenset({"cap", "pcap", "pcapng", "bson"})
 
 
 @dataclass(frozen=True)
@@ -123,6 +128,11 @@ class _ChunkInfo:
     path: Path
     rows_written: int
     bytes_written: int
+    byte_start: int | None
+    byte_end: int | None
+    line_start: int | None
+    line_end: int | None
+    chunk_hash_sha256: str
 
 
 @dataclass(frozen=True)
@@ -202,7 +212,7 @@ class SplitLargeFilesService:
 
     def _split_one(self, file: DatasetFile, request: SplitLargeFilesRequest) -> SplitFileResult:
         path = Path(file.file_path)
-        if request.source_format not in LINE_SPLIT_SOURCE_FORMATS:
+        if request.source_format in BINARY_SOURCE_FORMATS or request.source_format not in LINE_SPLIT_SOURCE_FORMATS:
             return SplitFileResult(
                 file_id=file.id,
                 file_path=file.file_path,
@@ -264,7 +274,7 @@ class SplitLargeFilesService:
         source_status = file.status
         if request.register:
             registered = self._register_chunks(file, chunks, request)
-            if not request.keep_source_ready:
+            if chunks and registered == len(chunks) and not request.keep_source_ready:
                 self.file_repository.mark_file_status(
                     file,
                     "SKIPPED",
@@ -299,6 +309,7 @@ class SplitLargeFilesService:
                 relative_path = chunk.path.resolve().relative_to(root)
             except ValueError:
                 relative_path = chunk.path.name  # type: ignore[assignment]
+            chunk_id = f"{source_file.id}:{index}"
             rows.append(
                 {
                     "dataset_id": source_file.dataset_id,
@@ -309,13 +320,24 @@ class SplitLargeFilesService:
                     "file_extension": chunk.path.suffix.lower() or None,
                     "source_format": request.source_format,
                     "file_size_bytes": chunk.path.stat().st_size,
-                    "file_hash_sha256": None,
+                    "file_hash_sha256": chunk.chunk_hash_sha256,
                     "file_modified_at": now,
                     "role": source_file.role,
                     "branch": source_file.branch,
                     "status": "READY_FOR_PARSING",
                     "row_count_hint": chunk.rows_written,
                     "metadata_json": {
+                        "chunk_id": chunk_id,
+                        "parent_file_id": source_file.id,
+                        "chunk_index": index,
+                        "chunk_path": str(chunk.path),
+                        "byte_start": chunk.byte_start,
+                        "byte_end": chunk.byte_end,
+                        "line_start": chunk.line_start,
+                        "line_end": chunk.line_end,
+                        "chunk_hash_sha256": chunk.chunk_hash_sha256,
+                        "source_order_preserved": True,
+                        "original_source_path": source_file.file_path,
                         "split_source_file_id": source_file.id,
                         "split_source_file_path": source_file.file_path,
                         "split_part_index": index,
@@ -326,7 +348,7 @@ class SplitLargeFilesService:
                     },
                 }
             )
-        return self.file_repository.bulk_upsert_files(rows)
+        return self.file_repository.bulk_upsert_files(rows, force_status=True)
 
 
 def _validate_request(request: SplitLargeFilesRequest) -> None:
@@ -396,30 +418,54 @@ def _split_line_file(
     output_file: Any | None = None
     output_path: Path | None = None
     tmp_path: Path | None = None
+    chunk_byte_start: int | None = None
+    chunk_line_start: int | None = None
+    last_byte_end: int | None = None
+    last_line_number: int | None = None
     rows_written = 0
     bytes_written = 0
     current_size = 0
 
     def close_part() -> None:
-        nonlocal output_file, output_path, tmp_path, rows_written, bytes_written, current_size
+        nonlocal output_file, output_path, tmp_path
+        nonlocal chunk_byte_start, chunk_line_start, last_byte_end, last_line_number
+        nonlocal rows_written, bytes_written, current_size
         if output_file is None or output_path is None or tmp_path is None:
             return
         output_file.close()
         tmp_path.replace(output_path)
-        chunks.append(_ChunkInfo(output_path, rows_written, bytes_written))
+        chunks.append(
+            _ChunkInfo(
+                path=output_path,
+                rows_written=rows_written,
+                bytes_written=bytes_written,
+                byte_start=chunk_byte_start,
+                byte_end=last_byte_end,
+                line_start=chunk_line_start,
+                line_end=last_line_number,
+                chunk_hash_sha256=_sha256_file(output_path),
+            )
+        )
         output_file = None
         output_path = None
         tmp_path = None
+        chunk_byte_start = None
+        chunk_line_start = None
+        last_byte_end = None
+        last_line_number = None
         rows_written = 0
         bytes_written = 0
         current_size = 0
 
-    def open_part(header: bytes | None) -> None:
+    def open_part(header: bytes | None, *, byte_start: int, line_start: int) -> None:
         nonlocal part_index, output_file, output_path, tmp_path, current_size
+        nonlocal chunk_byte_start, chunk_line_start
         part_index += 1
         output_path = _part_path(path, output_dir, part_index)
         tmp_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
         output_file = tmp_path.open("wb")
+        chunk_byte_start = byte_start
+        chunk_line_start = line_start
         current_size = 0
         if header:
             output_file.write(header)
@@ -427,19 +473,35 @@ def _split_line_file(
 
     with path.open("rb") as input_file:
         header = input_file.readline() if has_header else None
-        for line in input_file:
+        line_number = 1 if has_header else 0
+        while True:
+            line_start_byte = input_file.tell()
+            line = input_file.readline()
+            if not line:
+                break
+            line_number += 1
             if output_file is None:
-                open_part(header)
+                open_part(header, byte_start=line_start_byte, line_start=line_number)
             elif rows_written > 0 and current_size + len(line) > max_part_size_bytes:
                 close_part()
-                open_part(header)
+                open_part(header, byte_start=line_start_byte, line_start=line_number)
             output_file.write(line)
             rows_written += 1
             bytes_written += len(line)
             current_size += len(line)
+            last_byte_end = line_start_byte + len(line)
+            last_line_number = line_number
         close_part()
 
     return chunks
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _planned_part_count(path: Path, max_part_size_bytes: int) -> int:

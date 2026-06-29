@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any
 
 try:
@@ -25,13 +25,7 @@ except ModuleNotFoundError:
         def print(self, value: object) -> None:
             print(value)
 
-from config import (
-    STAGE_TWO_DEFAULT_BATCH_SIZE,
-    STAGE_TWO_DEFAULT_WORKERS,
-    STAGE_TWO_MAX_OUTPUT_PART_ROWS,
-    STAGE_TWO_PACKET_PARSE_MODE,
-    manage_commands,
-)
+from config import manage_commands
 from scripts.db import session_scope
 from scripts.db.models.constants import (
     ACTIVE_CATALOG_SOURCE_GROUP,
@@ -39,13 +33,29 @@ from scripts.db.models.constants import (
     BRANCH_VALUES,
 )
 from scripts.db.repositories import DataQualityRepository, DatasetFileRepository
+from scripts.stage_two.benchmark import (
+    BenchmarkNormalizationRequest,
+    benchmark_normalization,
+    select_benchmark_files,
+)
+from scripts.stage_two.execution.format_policy import (
+    FormatRuntimeFacts,
+    format_runtime_facts_payload,
+    resolve_format_policy,
+)
 from scripts.stage_two.normalization.runner import (
     NormalizeAllRequest,
     NormalizeAllRunner,
     NormalizeFormatRequest,
     NormalizeFormatRunner,
 )
+from scripts.stage_two.normalization.options import (
+    NormalizationOptions,
+    resolve_normalization_options,
+    resource_profile_warning,
+)
 from scripts.stage_two.parser_coverage import ParserCoverageResult, run_parser_coverage
+from scripts.stage_two.quality import validate_normalize_format_run
 from scripts.stage_two.splitting import SplitLargeFilesRequest, SplitLargeFilesService
 from scripts.stage_two.status_tools import MarkReadyRequest, MarkReadyService, save_mark_ready_reports
 
@@ -75,6 +85,7 @@ def router_stage_two(
         "mark-ready": _mark_ready,
         "normalize-format": _normalize_format,
         "normalize-all": _normalize_all,
+        "benchmark-normalization": _benchmark_normalization,
         "split-large-files": _split_large_files,
         "normalize-dns": lambda args: _normalize_branch("dns", args),
         "normalize-host": lambda args: _normalize_branch("host", args),
@@ -345,7 +356,10 @@ def _normalize_format(args: Sequence[str]) -> None:
     request = _parse_normalize_format_args(args)
     if Progress is None:
         with session_scope() as session:
+            request = _resolve_format_policy_for_request(session, request)
+            _print_resolved_runtime_settings("normalize-format", request)
             result = NormalizeFormatRunner(session).normalize_format(request)
+            validation = validate_normalize_format_run(session, request=request, result=result)
     else:
         with Progress(
             SpinnerColumn(),
@@ -357,17 +371,25 @@ def _normalize_format(args: Sequence[str]) -> None:
         ) as progress:
             callback = _normalize_progress_callback(progress)
             with session_scope() as session:
+                request = _resolve_format_policy_for_request(session, request)
+                _print_resolved_runtime_settings("normalize-format", request)
                 result = NormalizeFormatRunner(session, progress_callback=callback).normalize_format(request)
+                validation = validate_normalize_format_run(session, request=request, result=result)
     console.print(
         {
             "service": "stage-two normalize-format",
             **asdict(result),
+            "post_run_validation": {
+                "status": validation.status,
+                "report_paths": validation.report_paths,
+            },
         }
     )
 
 
 def _normalize_all(args: Sequence[str]) -> None:
     request = _parse_normalize_all_args(args)
+    _print_resolved_runtime_settings("normalize-all", request)
     if Progress is None:
         with session_scope() as session:
             result = NormalizeAllRunner(session).normalize_all(request)
@@ -387,6 +409,61 @@ def _normalize_all(args: Sequence[str]) -> None:
         {
             "service": "stage-two normalize-all",
             **asdict(result),
+        }
+    )
+
+
+def _benchmark_normalization(args: Sequence[str]) -> None:
+    benchmark_request, normalize_request = _parse_benchmark_normalization_args(args)
+    if Progress is None:
+        with session_scope() as session:
+            selected_files = select_benchmark_files(session, benchmark_request)
+            normalize_request = replace(
+                normalize_request,
+                file_ids=tuple(file.file_id for file in selected_files),
+                limit=None,
+                resume=normalize_request.resume or not benchmark_request.dry_run,
+            )
+            normalize_request = _resolve_format_policy_for_request(session, normalize_request)
+            _print_resolved_runtime_settings("benchmark-normalization", normalize_request)
+            result = benchmark_normalization(
+                session,
+                benchmark_request=benchmark_request,
+                normalize_request=normalize_request,
+            )
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            callback = _normalize_progress_callback(progress)
+            with session_scope() as session:
+                selected_files = select_benchmark_files(session, benchmark_request)
+                normalize_request = replace(
+                    normalize_request,
+                    file_ids=tuple(file.file_id for file in selected_files),
+                    limit=None,
+                    resume=normalize_request.resume or not benchmark_request.dry_run,
+                )
+                normalize_request = _resolve_format_policy_for_request(session, normalize_request)
+                _print_resolved_runtime_settings("benchmark-normalization", normalize_request)
+                result = benchmark_normalization(
+                    session,
+                    benchmark_request=benchmark_request,
+                    normalize_request=normalize_request,
+                    progress_callback=callback,
+                )
+    console.print(
+        {
+            "service": "stage-two benchmark-normalization",
+            "status": result.status,
+            "metrics": asdict(result.metrics),
+            "report_paths": asdict(result.report_paths),
+            "resume_forced": result.resume_forced,
         }
     )
 
@@ -539,6 +616,57 @@ def _mark_ready_progress_callback(progress: Any, request: MarkReadyRequest) -> C
         progress.update(task_id, completed=int(payload.get("current") or 0), total=total)
 
     return callback
+
+
+def _resolve_format_policy_for_request(session: Any, request: NormalizeFormatRequest) -> NormalizeFormatRequest:
+    files = DatasetFileRepository(session).get_files_ready_for_parsing(
+        branch=request.branch,
+        role=request.role,
+        source_format=request.source_format,
+        limit=request.limit,
+        file_ids=request.file_ids,
+        source_group=ACTIVE_CATALOG_SOURCE_GROUP,
+    )
+    total_size = sum(int(file.file_size_bytes or 0) for file in files)
+    facts = FormatRuntimeFacts(
+        branch=request.branch,
+        role=request.role,
+        source_format=request.source_format,
+        file_count=len(files),
+        total_size_bytes=total_size,
+        packet_mode=request.packet_mode,
+    )
+    base_options = NormalizationOptions(
+        workers=request.workers,
+        batch_size=request.batch_size,
+        max_output_part_rows=request.max_output_part_rows,
+        packet_batch_size=request.packet_batch_size,
+        resume=request.resume,
+        packet_mode=request.packet_mode,
+        sample_size=request.sample_size,
+        hash_outputs=request.hash_outputs,
+        resource_profile=request.resource_profile,
+        engine=request.engine,
+    )
+    decision = resolve_format_policy(
+        base_options,
+        facts,
+        explicit_overrides=set(request.explicit_runtime_overrides),
+    )
+    options = decision.options
+    return replace(
+        request,
+        workers=options.workers,
+        batch_size=options.batch_size,
+        max_output_part_rows=options.max_output_part_rows,
+        packet_batch_size=options.packet_batch_size,
+        packet_mode=options.packet_mode,
+        hash_outputs=options.hash_outputs,
+        engine=options.engine,
+        format_policy=decision.policy_name,
+        format_policy_warnings=decision.warnings,
+        runtime_facts=format_runtime_facts_payload(facts),
+    )
 
 
 def _normalize_progress_callback(progress: Any) -> Callable[[str, dict[str, Any]], None]:
@@ -741,6 +869,8 @@ def _parse_normalize_format_args(args: Sequence[str]) -> NormalizeFormatRequest:
             "--max-output-part-rows",
             "--packet-mode",
             "--sample-size",
+            "--resource-profile",
+            "--engine",
         }:
             if index + 1 >= len(args) or args[index + 1].startswith("--"):
                 raise ValueError(f"normalize-format requires a value for {arg}")
@@ -754,6 +884,7 @@ def _parse_normalize_format_args(args: Sequence[str]) -> NormalizeFormatRequest:
         raise ValueError(
             "normalize-format accepts --branch, --role, --format, --limit, --workers, "
             "--batch-size, --max-output-part-rows, --resume, --packet-mode, --sample-size, "
+            "--resource-profile, --engine, "
             "--hash-output-artifacts "
             "or fallback branch:role:format:limit"
         )
@@ -774,7 +905,72 @@ def _parse_normalize_format_args(args: Sequence[str]) -> NormalizeFormatRequest:
         packet_mode=values.get("--packet-mode"),
         sample_size=values.get("--sample-size"),
         hash_outputs="--hash-output-artifacts" in flags,
+        resource_profile=values.get("--resource-profile"),
+        engine=values.get("--engine"),
+        explicit_runtime_overrides=_explicit_runtime_overrides(values),
     )
+
+
+def _parse_benchmark_normalization_args(
+    args: Sequence[str],
+) -> tuple[BenchmarkNormalizationRequest, NormalizeFormatRequest]:
+    values: dict[str, str] = {}
+    flags: set[str] = set()
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in {
+            "--branch",
+            "--role",
+            "--format",
+            "--limit",
+            "--sample-ratio",
+            "--resource-profile",
+            "--workers",
+            "--batch-size",
+            "--max-output-part-rows",
+        }:
+            if index + 1 >= len(args) or args[index + 1].startswith("--"):
+                raise ValueError(f"benchmark-normalization requires a value for {arg}")
+            values[arg] = args[index + 1]
+            index += 2
+            continue
+        if arg in {"--resume", "--dry-run"}:
+            flags.add(arg)
+            index += 1
+            continue
+        raise ValueError(
+            "benchmark-normalization accepts --branch, --role, --format, --limit, "
+            "--sample-ratio, --resource-profile, --workers, --batch-size, "
+            "--max-output-part-rows, --resume, --dry-run"
+        )
+
+    missing = [flag for flag in ("--branch", "--role", "--format") if flag not in values]
+    if missing:
+        raise ValueError(f"benchmark-normalization missing required arguments: {', '.join(missing)}")
+
+    normalize_request = _build_normalize_format_request(
+        branch=values["--branch"],
+        role=values["--role"],
+        source_format=values["--format"],
+        limit=values.get("--limit"),
+        workers=values.get("--workers"),
+        batch_size=values.get("--batch-size"),
+        max_output_part_rows=values.get("--max-output-part-rows"),
+        resume="--resume" in flags,
+        resource_profile=values.get("--resource-profile"),
+        explicit_runtime_overrides=_explicit_runtime_overrides(values),
+    )
+    benchmark_request = BenchmarkNormalizationRequest(
+        branch=normalize_request.branch,
+        role=normalize_request.role,
+        source_format=normalize_request.source_format,
+        limit=normalize_request.limit,
+        sample_ratio=_parse_sample_ratio(values.get("--sample-ratio")),
+        dry_run="--dry-run" in flags,
+        resume=normalize_request.resume,
+    )
+    return benchmark_request, normalize_request
 
 
 def _parse_normalize_format_fallback(token: str) -> NormalizeFormatRequest:
@@ -791,6 +987,17 @@ def _parse_normalize_format_fallback(token: str) -> NormalizeFormatRequest:
     )
 
 
+def _explicit_runtime_overrides(values: dict[str, str]) -> tuple[str, ...]:
+    mapping = {
+        "--workers": "workers",
+        "--batch-size": "batch_size",
+        "--max-output-part-rows": "max_output_part_rows",
+        "--packet-mode": "packet_mode",
+        "--engine": "engine",
+    }
+    return tuple(value for key, value in mapping.items() if key in values)
+
+
 def _build_normalize_format_request(
     *,
     branch: str,
@@ -804,6 +1011,9 @@ def _build_normalize_format_request(
     packet_mode: str | None = None,
     sample_size: str | None = None,
     hash_outputs: bool = False,
+    resource_profile: str | None = None,
+    engine: str | None = None,
+    explicit_runtime_overrides: tuple[str, ...] = (),
 ) -> NormalizeFormatRequest:
     normalized_branch = branch.strip().lower()
     normalized_role = role.strip().upper()
@@ -816,31 +1026,37 @@ def _build_normalize_format_request(
         raise ValueError(f"normalize-format role must be one of: {allowed}")
     if not normalized_format:
         raise ValueError("normalize-format format must not be empty")
+    options = resolve_normalization_options(
+        resource_profile=resource_profile,
+        workers=_parse_positive_int(workers, field_name="workers", service="normalize-format"),
+        batch_size=_parse_positive_int(batch_size, field_name="batch-size", service="normalize-format"),
+        max_output_part_rows=_parse_positive_int(
+            max_output_part_rows,
+            field_name="max-output-part-rows",
+            service="normalize-format",
+        ),
+        resume=resume,
+        packet_mode=packet_mode.strip() if packet_mode else None,
+        sample_size=_parse_positive_int(sample_size, field_name="sample-size", service="normalize-format"),
+        hash_outputs=hash_outputs,
+        engine=engine.strip().lower() if engine else None,
+    )
     return NormalizeFormatRequest(
         branch=normalized_branch,
         role=normalized_role,
         source_format=normalized_format,
         limit=parsed_limit,
-        workers=(
-            _parse_positive_int(workers, field_name="workers", service="normalize-format")
-            or STAGE_TWO_DEFAULT_WORKERS
-        ),
-        batch_size=(
-            _parse_positive_int(batch_size, field_name="batch-size", service="normalize-format")
-            or STAGE_TWO_DEFAULT_BATCH_SIZE
-        ),
-        max_output_part_rows=(
-            _parse_positive_int(
-                max_output_part_rows,
-                field_name="max-output-part-rows",
-                service="normalize-format",
-            )
-            or STAGE_TWO_MAX_OUTPUT_PART_ROWS
-        ),
-        resume=resume,
-        packet_mode=(packet_mode.strip() if packet_mode else STAGE_TWO_PACKET_PARSE_MODE),
-        sample_size=_parse_positive_int(sample_size, field_name="sample-size", service="normalize-format"),
-        hash_outputs=hash_outputs,
+        workers=options.workers,
+        batch_size=options.batch_size,
+        max_output_part_rows=options.max_output_part_rows,
+        packet_batch_size=options.packet_batch_size,
+        resume=options.resume,
+        packet_mode=options.packet_mode,
+        sample_size=options.sample_size,
+        hash_outputs=options.hash_outputs,
+        resource_profile=options.resource_profile,
+        engine=options.engine,
+        explicit_runtime_overrides=explicit_runtime_overrides,
     )
 
 
@@ -860,6 +1076,18 @@ def _parse_positive_int(value: str | None, *, field_name: str, service: str) -> 
     if normalized_value.isdecimal() and int(normalized_value) > 0:
         return int(normalized_value)
     raise ValueError(f"{service} {field_name} must be a positive integer")
+
+
+def _parse_sample_ratio(value: str | None) -> float | None:
+    if value is None or not value.strip():
+        return None
+    try:
+        sample_ratio = float(value.strip())
+    except ValueError as exc:
+        raise ValueError("benchmark-normalization sample-ratio must be a number in (0, 1]") from exc
+    if 0 < sample_ratio <= 1:
+        return sample_ratio
+    raise ValueError("benchmark-normalization sample-ratio must be in (0, 1]")
 
 
 def _parse_split_large_files_args(args: Sequence[str]) -> SplitLargeFilesRequest:
@@ -985,6 +1213,8 @@ def _parse_normalize_all_args(args: Sequence[str]) -> NormalizeAllRequest:
             "--max-output-part-rows",
             "--packet-mode",
             "--sample-size",
+            "--resource-profile",
+            "--engine",
         }:
             if index + 1 >= len(args) or args[index + 1].startswith("--"):
                 raise ValueError(f"normalize-all requires a value for {arg}")
@@ -998,6 +1228,7 @@ def _parse_normalize_all_args(args: Sequence[str]) -> NormalizeAllRequest:
         raise ValueError(
             "normalize-all accepts --branch, --limit, --workers, --batch-size, "
             "--max-output-part-rows, --resume, --packet-mode, --sample-size, "
+            "--resource-profile, --engine, "
             "--hash-output-artifacts or fallback branch:limit"
         )
 
@@ -1014,6 +1245,8 @@ def _parse_normalize_all_args(args: Sequence[str]) -> NormalizeAllRequest:
         packet_mode=values.get("--packet-mode"),
         sample_size=values.get("--sample-size"),
         hash_outputs="--hash-output-artifacts" in flags,
+        resource_profile=values.get("--resource-profile"),
+        engine=values.get("--engine"),
     )
 
 
@@ -1037,34 +1270,41 @@ def _build_normalize_all_request(
     packet_mode: str | None = None,
     sample_size: str | None = None,
     hash_outputs: bool = False,
+    resource_profile: str | None = None,
+    engine: str | None = None,
 ) -> NormalizeAllRequest:
     normalized_branch = branch.strip().lower()
     parsed_limit = _parse_normalize_all_limit(limit)
     if normalized_branch not in {"dns", "host"}:
         raise ValueError("normalize-all branch must be one of: dns, host")
+    options = resolve_normalization_options(
+        resource_profile=resource_profile,
+        workers=_parse_positive_int(workers, field_name="workers", service="normalize-all"),
+        batch_size=_parse_positive_int(batch_size, field_name="batch-size", service="normalize-all"),
+        max_output_part_rows=_parse_positive_int(
+            max_output_part_rows,
+            field_name="max-output-part-rows",
+            service="normalize-all",
+        ),
+        resume=resume,
+        packet_mode=packet_mode.strip() if packet_mode else None,
+        sample_size=_parse_positive_int(sample_size, field_name="sample-size", service="normalize-all"),
+        hash_outputs=hash_outputs,
+        engine=engine.strip().lower() if engine else None,
+    )
     return NormalizeAllRequest(
         branch=normalized_branch,
         limit=parsed_limit,
-        workers=(
-            _parse_positive_int(workers, field_name="workers", service="normalize-all")
-            or STAGE_TWO_DEFAULT_WORKERS
-        ),
-        batch_size=(
-            _parse_positive_int(batch_size, field_name="batch-size", service="normalize-all")
-            or STAGE_TWO_DEFAULT_BATCH_SIZE
-        ),
-        max_output_part_rows=(
-            _parse_positive_int(
-                max_output_part_rows,
-                field_name="max-output-part-rows",
-                service="normalize-all",
-            )
-            or STAGE_TWO_MAX_OUTPUT_PART_ROWS
-        ),
-        resume=resume,
-        packet_mode=(packet_mode.strip() if packet_mode else STAGE_TWO_PACKET_PARSE_MODE),
-        sample_size=_parse_positive_int(sample_size, field_name="sample-size", service="normalize-all"),
-        hash_outputs=hash_outputs,
+        workers=options.workers,
+        batch_size=options.batch_size,
+        max_output_part_rows=options.max_output_part_rows,
+        packet_batch_size=options.packet_batch_size,
+        resume=options.resume,
+        packet_mode=options.packet_mode,
+        sample_size=options.sample_size,
+        hash_outputs=options.hash_outputs,
+        resource_profile=options.resource_profile,
+        engine=options.engine,
     )
 
 
@@ -1105,6 +1345,59 @@ def _print_unknown_stage_two_command(service: str | None) -> None:
         }
     )
     console.print(manage_commands)
+
+
+def _runtime_settings_payload(
+    service: str,
+    request: NormalizeFormatRequest | NormalizeAllRequest,
+) -> dict[str, Any]:
+    warning = resource_profile_warning(request.resource_profile)
+    payload: dict[str, Any] = {
+        "service": f"stage-two {service}",
+        "event": "resolved_runtime_settings",
+        "resource_profile": request.resource_profile or "default",
+        "format_policy": getattr(request, "format_policy", None),
+        "workers": request.workers,
+        "batch_size": request.batch_size,
+        "max_output_part_rows": request.max_output_part_rows,
+        "packet_batch_size": request.packet_batch_size,
+        "packet_mode": request.packet_mode,
+        "engine": request.engine,
+        "sample_size": request.sample_size,
+        "resume": request.resume,
+        "hash_output_artifacts": request.hash_outputs,
+    }
+    if isinstance(request, NormalizeFormatRequest):
+        payload.update(
+            {
+                "branch": request.branch,
+                "role": request.role,
+                "source_format": request.source_format,
+                "limit": request.limit,
+                "runtime_facts": request.runtime_facts,
+                "format_policy_warnings": request.format_policy_warnings,
+            }
+        )
+    else:
+        payload.update(
+            {
+                "branch": request.branch,
+                "limit": request.limit,
+            }
+        )
+    if warning is not None:
+        payload["warning"] = warning
+    policy_warnings = tuple(getattr(request, "format_policy_warnings", ()) or ())
+    if policy_warnings:
+        payload["warnings"] = [*([warning] if warning is not None else []), *policy_warnings]
+    return payload
+
+
+def _print_resolved_runtime_settings(
+    service: str,
+    request: NormalizeFormatRequest | NormalizeAllRequest,
+) -> None:
+    console.print(_runtime_settings_payload(service, request))
 
 
 def _print_parser_coverage_table(result: ParserCoverageResult) -> None:

@@ -113,3 +113,24 @@ The documentation separates:
 7. A missing label does not mean benign.
 8. Missing timestamps must not be replaced with current time.
 9. Traceability must be preserved through `raw -> normalized -> features -> model-ready`.
+
+## Stage Two Performance Quick Start
+
+Use these docs for the current performance architecture:
+
+- [normalization/performance_tuning.md](normalization/performance_tuning.md) - resource profiles, format policy, benchmark target, and troubleshooting.
+- [normalization/runtime_resource_runbook.md](normalization/runtime_resource_runbook.md) - operational sequence for benchmark/full runs and recovery.
+- [normalization/stage_two_commands.md](normalization/stage_two_commands.md) - exact CLI reference, including `benchmark-normalization`.
+- [code-documentation/stage_two_overview.md](code-documentation/stage_two_overview.md) - execution planner, bounded multiprocessing, chunking, atomic Parquet, benchmark, and validation architecture.
+
+Recommended flow:
+
+```bash
+python manage.py stage-two benchmark-normalization --branch host --role TEST --format txt --limit 10000 --sample-ratio 0.10 --resource-profile fast
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --resource-profile fast --resume
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+```
+
+Start with `safe` or `balanced`; use `fast` or `aggressive` only after benchmark reports and quality gates are clean.

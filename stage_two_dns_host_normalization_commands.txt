@@ -135,19 +135,7 @@ python manage.py stage-two normalize-format --branch <branch> --role <role> --fo
 5. Оставшиеся команды DNS
 -------------------------
 
-Оставшийся DNS из твоего списка:
-- TEST: csv=1
 
-DNS TEST csv, безопасный режим без split:
-python manage.py stage-two mark-ready --branch dns --role TEST --format csv --dry-run
-python manage.py stage-two mark-ready --branch dns --role TEST --format csv --apply
-python manage.py stage-two normalize-format --branch dns --role TEST --format csv --limit 1 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-DNS TEST csv, рекомендуемый режим через split:
-python manage.py stage-two mark-ready --branch dns --role TEST --format csv --dry-run
-python manage.py stage-two mark-ready --branch dns --role TEST --format csv --apply
-python manage.py stage-two split-large-files --branch dns --role TEST --format csv --limit 1 --max-part-size-gb 2 --min-size-gb 1 --header no --apply --register
-python manage.py stage-two normalize-format --branch dns --role TEST --format csv --limit 4 --workers 4 --batch-size 30000 --max-output-part-rows 50000 --resume
 
 
 6. Оставшиеся команды HOST
@@ -170,6 +158,7 @@ python manage.py stage-two mark-ready --branch host --role TRAIN --format json -
 python manage.py stage-two mark-ready --branch host --role TRAIN --format json --apply
 python manage.py stage-two split-large-files --branch host --role TRAIN --format json --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TRAIN --format json --limit 2 --workers 8 --batch-size 50000 --max-output-part-rows 50000 --resume
+python manage.py stage-two normalize-format --branch host --role TRAIN --format json --limit 219 --workers 10 --batch-size 120000 --max-output-part-rows 270000 --resume
 
 HOST TRAIN pcap
 python manage.py stage-two mark-ready --branch host --role TRAIN --format pcap --dry-run

@@ -3,9 +3,20 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 from typing import Any
+from unittest.mock import patch
 
 from scripts.db.models import DatasetFile
-from scripts.stage_two.cli import _parse_normalize_all_args, _parse_normalize_format_args
+from scripts.stage_two.cli import (
+    _parse_normalize_all_args,
+    _parse_normalize_format_args,
+    _resolve_format_policy_for_request,
+    _runtime_settings_payload,
+)
+from scripts.stage_two.normalization.options import (
+    NormalizationOptions,
+    batch_size_for_source_format,
+    resolve_normalization_options,
+)
 from scripts.stage_two.normalization.runner import (
     NormalizeAllRequest,
     NormalizeAllRunner,
@@ -17,7 +28,9 @@ from scripts.stage_two.normalization.runner import (
 @dataclass(frozen=True)
 class _FakeParser:
     parser_name: str = "host_auth_log_parser"
+    parser_version: str = "v1"
     parser_class: str = "HostLineLogParser"
+    normalized_schema_version: str = "v1"
 
 
 @dataclass(frozen=True)
@@ -58,6 +71,7 @@ class _FakeFileRepository:
         role: str | None = None,
         source_format: str | None = None,
         limit: int | None = None,
+        file_ids: tuple[int, ...] | None = None,
         source_group: str | None = None,
     ) -> list[DatasetFile]:
         self.ready_call = {
@@ -75,6 +89,7 @@ class _FakeFileRepository:
             and file.branch == branch
             and file.role == role
             and file.source_format == source_format
+            and (file_ids is None or file.id in file_ids)
         ]
         return result[:limit] if limit is not None else result
 
@@ -104,6 +119,17 @@ class _FakeFileRepository:
             {"role": role, "source_format": source_format, "files_count": files_count}
             for (role, source_format), files_count in sorted(groups.items())
         ]
+
+
+class _FakePolicyRepository:
+    def __init__(self, _session: object) -> None:
+        self.files = [
+            _file(1, "one.txt", status="READY_FOR_PARSING", source_format="txt", file_size_bytes=1024),
+            _file(2, "two.txt", status="READY_FOR_PARSING", source_format="txt", file_size_bytes=2048),
+        ]
+
+    def get_files_ready_for_parsing(self, **_: object) -> list[DatasetFile]:
+        return self.files
 
 
 class _FakeSession:
@@ -180,6 +206,70 @@ class NormalizeFormatCliTest(unittest.TestCase):
         self.assertEqual(request.source_format, "pcap")
         self.assertEqual(request.limit, 50)
 
+    def test_parse_normalize_format_resource_profile_with_cli_override(self) -> None:
+        request = _parse_normalize_format_args(
+            [
+                "--branch",
+                "host",
+                "--role",
+                "TEST",
+                "--format",
+                "txt",
+                "--resource-profile",
+                "fast",
+                "--workers",
+                "6",
+                "--resume",
+            ]
+        )
+
+        self.assertEqual(request.resource_profile, "fast")
+        self.assertEqual(request.workers, 6)
+        self.assertEqual(request.batch_size, 200_000)
+        self.assertEqual(request.max_output_part_rows, 500_000)
+        self.assertEqual(request.packet_batch_size, 50_000)
+        self.assertFalse(request.hash_outputs)
+        self.assertTrue(request.resume)
+
+    def test_normalize_format_policy_uses_catalog_facts_without_overriding_cli_workers(self) -> None:
+        request = _parse_normalize_format_args(
+            [
+                "--branch",
+                "host",
+                "--role",
+                "TEST",
+                "--format",
+                "txt",
+                "--workers",
+                "6",
+            ]
+        )
+
+        with patch("scripts.stage_two.cli.DatasetFileRepository", _FakePolicyRepository):
+            resolved = _resolve_format_policy_for_request(object(), request)
+
+        self.assertEqual(resolved.format_policy, "line_fast")
+        self.assertEqual(resolved.workers, 6)
+        self.assertEqual(resolved.batch_size, 250_000)
+        self.assertEqual(resolved.max_output_part_rows, 750_000)
+        self.assertEqual(resolved.runtime_facts["file_count"], 2)
+        self.assertEqual(resolved.runtime_facts["total_size_bytes"], 3072)
+
+    def test_parse_normalize_format_rejects_unknown_resource_profile(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown resource profile"):
+            _parse_normalize_format_args(
+                [
+                    "--branch",
+                    "host",
+                    "--role",
+                    "TRAIN",
+                    "--format",
+                    "txt",
+                    "--resource-profile",
+                    "unsafe",
+                ]
+            )
+
 
 class NormalizeAllCliTest(unittest.TestCase):
     def test_parse_normalize_all_flags(self) -> None:
@@ -222,6 +312,44 @@ class NormalizeAllCliTest(unittest.TestCase):
 
         self.assertEqual(request.branch, "dns")
         self.assertEqual(request.limit, 1000)
+
+    def test_parse_normalize_all_resource_profile(self) -> None:
+        request = _parse_normalize_all_args(["--branch", "host", "--resource-profile", "balanced"])
+
+        self.assertEqual(request.resource_profile, "balanced")
+        self.assertEqual(request.workers, 8)
+        self.assertEqual(request.batch_size, 100_000)
+        self.assertEqual(request.max_output_part_rows, 250_000)
+        self.assertEqual(request.packet_batch_size, 50_000)
+
+    def test_runtime_settings_payload_warns_for_aggressive_profile(self) -> None:
+        request = _parse_normalize_all_args(["--branch", "host", "--resource-profile", "aggressive"])
+        payload = _runtime_settings_payload("normalize-all", request)
+
+        self.assertEqual(payload["resource_profile"], "aggressive")
+        self.assertIn("warning", payload)
+
+
+class NormalizationOptionsProfileTest(unittest.TestCase):
+    def test_resolve_normalization_options_preserves_default_safe_mode_without_profile(self) -> None:
+        options = resolve_normalization_options()
+
+        self.assertEqual(options.workers, 1)
+        self.assertEqual(options.batch_size, 50_000)
+        self.assertEqual(options.max_output_part_rows, 50_000)
+        self.assertEqual(options.packet_batch_size, 50_000)
+        self.assertFalse(options.hash_outputs)
+        self.assertIsNone(options.resource_profile)
+
+    def test_normalization_options_validates_packet_batch_size(self) -> None:
+        with self.assertRaisesRegex(ValueError, "packet_batch_size"):
+            NormalizationOptions(packet_batch_size=0)
+
+    def test_packet_formats_use_packet_batch_size(self) -> None:
+        options = NormalizationOptions(batch_size=300_000, packet_batch_size=50_000)
+
+        self.assertEqual(batch_size_for_source_format("pcap", options), 50_000)
+        self.assertEqual(batch_size_for_source_format("txt", options), 300_000)
 
 
 class NormalizeFormatRunnerTest(unittest.TestCase):
@@ -379,6 +507,7 @@ def _file(
     status: str,
     role: str = "TRAIN",
     source_format: str = "auth.log",
+    file_size_bytes: int = 100,
 ) -> DatasetFile:
     return DatasetFile(
         id=file_id,
@@ -389,6 +518,7 @@ def _file(
         role=role,
         branch="host",
         status=status,
+        file_size_bytes=file_size_bytes,
     )
 
 

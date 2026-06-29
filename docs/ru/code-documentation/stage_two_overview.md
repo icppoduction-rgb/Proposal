@@ -299,3 +299,56 @@ model_ready_artifacts.feature_artifact_id
 - Model-ready creation есть как registry/writer service, но нет полноценной команды сборки X/y для всех branches.
 - `normalize-dns/host` legacy routes менее управляемы, чем `normalize-format`.
 - Некоторые Stage One docs могут иметь статус `NEEDS_CUSTOM_PARSER`, даже если Stage Two уже содержит parser class для части формата; решающим является active parser registry + parser coverage.
+## Performance execution architecture
+
+Stage Two normalization теперь имеет performance-oriented execution layer без изменения normalized event contract.
+
+Основные файлы:
+
+- `scripts/stage_two/execution/work_unit.py`;
+- `scripts/stage_two/execution/planner.py`;
+- `scripts/stage_two/execution/executor.py`;
+- `scripts/stage_two/execution/runtime_settings.py`;
+- `scripts/stage_two/execution/retry_policy.py`;
+- `scripts/stage_two/execution/progress.py`;
+- `scripts/stage_two/execution/format_policy.py`;
+- `scripts/stage_two/benchmark.py`;
+- `scripts/stage_two/quality/post_run_validation.py`.
+
+Ключевое поведение:
+
+- `WorkUnitPlanner` строит работу только для `dataset_files.status=READY_FOR_PARSING` и одного точного `branch/role/source_format`.
+- `WorkUnitExecutor` использует `ProcessPoolExecutor` для CPU parsing и bounded future submission.
+- Workers не делят одну SQLAlchemy session; каждый process открывает собственный DB/session context только там, где нужно.
+- Resume пропускает successful normalized artifacts с подходящими parser/schema versions.
+- Parser failures изолируются на уровне file/chunk и могут давать `PARTIAL_SUCCESS` для команды.
+- Parsers используют `parse_batches` для streaming/batch parsing там, где возможно.
+- Большие line-based files можно делить на registered chunks с parent trace metadata.
+- Binary formats (`cap`, `pcap`, `pcapng`, `bson`) не делятся обычным line splitter.
+- `ParquetArtifactWriter` пишет через atomic temp-file и валидирует output до artifact registration.
+- `benchmark-normalization` измеряет throughput и оценивает достижимость `17 GB <= 3 hours`.
+- `normalize-format` создает post-run validation report по counts, reconciliation, split separation, leakage и traceability.
+
+Resource profiles:
+
+| Profile | workers | batch_size | max_output_part_rows |
+| --- | ---: | ---: | ---: |
+| `safe` | 4 | 50000 | 100000 |
+| `balanced` | 8 | 100000 | 250000 |
+| `fast` | 12 | 200000 | 500000 |
+| `aggressive` | 14 | 300000 | 750000 |
+
+Format policy ограничивает рискованные форматы:
+
+- PCAP/PCAPNG/CAP: low workers и `packet-summary` by default.
+- BSON: low workers и moderate batches.
+- JSON/JSONL: moderate workers.
+- line-based logs/TXT/syscall traces: fast settings после benchmark validation.
+
+Operational target:
+
+- required throughput для 17 GB за 3 часа: около `5.67 GB/hour`;
+- target на i7-14700KF / 64 GB RAM / M.2 SSD: `10-20+ GB/hour` для line-based formats;
+- GPU остается extension point для feature/model-ready/training, а не default raw parser engine.
+
+Safety invariants не меняются: raw files immutable, splits separate, `TEST` не используется для training/fit/tuning, labels не являются X features, missing labels/timestamps сохраняют explicit null/missing semantics, traceability остается полной.

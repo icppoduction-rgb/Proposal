@@ -385,3 +385,108 @@ The file includes Windows-specific `cd` and `conda activate` commands; these are
 5. A missing label does not mean benign.
 6. A missing timestamp must not be replaced with current time.
 7. All artifacts must preserve traceability `raw -> normalized -> features -> model-ready`.
+
+## Performance Commands and Profiles
+
+The current CLI also includes `benchmark-normalization` and resource profiles for `normalize-format` / `normalize-all`.
+
+### `benchmark-normalization`
+
+```bash
+python manage.py stage-two benchmark-normalization \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --limit 10000 \
+  --sample-ratio 0.10 \
+  --resource-profile fast
+```
+
+Supported options:
+
+- `--branch`;
+- `--role`;
+- `--format`;
+- `--limit`;
+- `--sample-ratio`;
+- `--resource-profile`;
+- `--workers`;
+- `--batch-size`;
+- `--max-output-part-rows`;
+- `--resume`;
+- `--dry-run`.
+
+The report includes `input_bytes`, `processed_bytes`, `processed_gb`, `elapsed_seconds`, `gb_per_hour`, file/row/event rates, failed/partial/skipped/unsupported files, Parquet output size, average parser/write time, `estimated_time_for_17gb`, and `meets_3_hour_target`.
+
+Actual benchmark runs force safe resume behavior when `--dry-run` is not used, so repeated benchmark commands should not duplicate successful normalized artifacts.
+
+### Resource profiles
+
+| Profile | workers | batch_size | max_output_part_rows | packet_batch_size |
+| --- | ---: | ---: | ---: | ---: |
+| `safe` | 4 | 50000 | 100000 | 50000 |
+| `balanced` | 8 | 100000 | 250000 | 50000 |
+| `fast` | 12 | 200000 | 500000 | 50000 |
+| `aggressive` | 14 | 300000 | 750000 | 50000 |
+
+CLI overrides take priority over profile and format policy. Example:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --resource-profile fast \
+  --workers 6 \
+  --resume
+```
+
+This resolves `workers=6` and keeps the other values from `fast`, unless the format policy safely caps them for risky formats.
+
+### Safe PCAP/BSON examples
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch dns \
+  --role TRAIN \
+  --format pcap \
+  --resource-profile safe \
+  --workers 3 \
+  --packet-mode packet-summary \
+  --resume
+
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format bson \
+  --resource-profile safe \
+  --workers 3 \
+  --batch-size 75000 \
+  --resume
+```
+
+### Large line-based files
+
+```bash
+python manage.py stage-two split-large-files \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --max-part-size-mb 512 \
+  --apply \
+  --register
+```
+
+Do not split `cap`, `pcap`, `pcapng`, or `bson` with the line splitter.
+
+### Required gates after performance runs
+
+`normalize-format` writes a post-run validation summary. After performance runs, also run:
+
+```bash
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+```
+
+If `run-leakage-checks` returns CRITICAL, do not use the affected feature/model-ready artifacts.

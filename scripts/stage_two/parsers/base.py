@@ -12,6 +12,9 @@ from config import STAGE_TWO_DEFAULT_BATCH_SIZE, STAGE_TWO_MAX_ERROR_SAMPLES
 from scripts.stage_two.parsers.common import build_normalized_event
 
 
+ParsedEvent = dict[str, Any]
+
+
 REQUIRED_NORMALIZED_FIELDS: frozenset[str] = frozenset(
     {
         "event_uid",
@@ -91,12 +94,20 @@ class ParserContext:
 
 @dataclass(frozen=True)
 class ParserResult:
-    """Normalized parser output and parser-level counters."""
+    """One normalized parser result or one bounded parser batch.
+
+    Streaming parsers should emit ParserResult instances from parse_batches()
+    without reading the full raw file into memory. Each batch carries only
+    batch-local counters and local error samples. Sequence-capable parsers keep
+    stable source row identity on emitted events through event_index and, when
+    the source has packet identity, raw_fields_json/metadata_json packet fields.
+    Unknown source fields must be retained in raw_fields_json or metadata_json.
+    """
 
     rows_read: int
     rows_parsed: int
     rows_failed: int
-    events: list[dict[str, Any]]
+    events: list[ParsedEvent]
     warnings: list[str] = field(default_factory=list)
     bytes_read: int | None = None
     files_read: int = 1
@@ -194,6 +205,11 @@ class ParserResult:
         """Return the DB-safe dataset_files.status value."""
         return self.status_decision.file_status
 
+    @property
+    def local_errors(self) -> tuple[str, ...]:
+        """Return batch-local parser errors as an immutable tuple."""
+        return tuple(self.error_samples)
+
 
 def limit_error_samples(
     samples: list[str] | tuple[str, ...],
@@ -211,7 +227,7 @@ def collect_parser_batches(batches: Iterator[ParserResult]) -> ParserResult:
     rows_read = 0
     rows_parsed = 0
     rows_failed = 0
-    events: list[dict[str, Any]] = []
+    events: list[ParsedEvent] = []
     warnings: list[str] = []
     error_samples: list[str] = []
     bytes_read: int | None = None
@@ -356,7 +372,14 @@ def _with_status_reason(
 
 
 class BaseParser(ABC):
-    """Abstract base class for Stage Two normalization parsers."""
+    """Abstract base class for Stage Two normalization parsers.
+
+    parse_batches() is the preferred execution contract for large files. It
+    must stream from the raw source where the format allows it, keep each
+    yielded ParserResult bounded by batch_size, and preserve row/event order via
+    event_index or source identifiers in raw_fields_json/metadata_json. parse()
+    remains available as a compatibility adapter for existing callers.
+    """
 
     parser_name: str
     parser_version: str = "v1"
@@ -375,7 +398,13 @@ class BaseParser(ABC):
         batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE,
         **_: Any,
     ) -> Iterator[ParserResult]:
-        """Return bounded output batches for parsers without a streaming implementation."""
+        """Return bounded output batches for parsers without a streaming implementation.
+
+        Format-specific parsers for large line-oriented or streamable binary
+        inputs should override this method. The fallback is intentionally
+        compatibility-only because it materializes parse() output before
+        chunking events.
+        """
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         result = self.parse(path, context)

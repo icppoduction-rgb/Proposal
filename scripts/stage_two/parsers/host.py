@@ -29,7 +29,7 @@ from scripts.stage_two.parsers.csv_utils import (
     row_from_header,
 )
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
-from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object
+from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object, loads_json_record
 from scripts.stage_two.parsers.logs import ParsedLogLine, parse_host_log_line
 from scripts.stage_two.parsers.metrics import HOST_METRIC_SOURCE_FORMATS, HostMetricbeatParser
 from scripts.stage_two.parsers.netflow import HostNetflowParser
@@ -286,7 +286,7 @@ class HostJsonLinesParser(BaseParser):
                     continue
                 rows_read += 1
                 try:
-                    record = json.loads(line)
+                    record = loads_json_record(line)
                 except json.JSONDecodeError as exc:
                     rows_failed += 1
                     error_samples.append(f"json line {line_number}: {exc.msg}")
@@ -403,13 +403,13 @@ def _iter_host_json_records(content: str):
         return
 
     try:
-        payload = json.loads(stripped)
+        payload = loads_json_record(stripped)
     except json.JSONDecodeError:
         for line_number, line in enumerate(content.splitlines(), start=1):
             if not line.strip():
                 continue
             try:
-                yield line_number - 1, json.loads(line), "json_lines", None
+                yield line_number - 1, loads_json_record(line), "json_lines", None
             except json.JSONDecodeError as exc:
                 message = f"json line {line_number}: {exc.msg}"
                 yield line_number - 1, {"line_number": line_number, "raw_line": line}, "json_lines", message
@@ -426,23 +426,30 @@ def _iter_host_json_records(content: str):
 
 
 def _looks_like_materialized_json_document(path: str | Path) -> bool:
-    non_empty_lines = 0
     first_char: str | None = None
+    second_char: str | None = None
     try:
         with Path(path).open("r", encoding="utf-8", errors="replace") as file:
             for line in file:
                 stripped = line.lstrip()
                 if not stripped:
                     continue
-                non_empty_lines += 1
-                first_char = first_char or stripped[0]
-                if first_char == "[":
-                    return True
-                if non_empty_lines > 1:
+                if first_char is None:
+                    first_char = stripped[0]
+                    if first_char == "[":
+                        return True
+                    if first_char not in {"{"}:
+                        return False
+                    continue
+                second_char = stripped[0]
+                if second_char == "{":
                     return False
+                if second_char in {'"', "}", "]"}:
+                    return True
+                return False
     except OSError:
         return False
-    return first_char == "{" and non_empty_lines == 1
+    return first_char == "{"
 
 
 def _chunk_materialized_result(result: ParserResult, *, batch_size: int) -> Iterator[ParserResult]:
@@ -1525,8 +1532,11 @@ def _parse_timestamp(value: Any) -> datetime | None:
         return None
     text = str(value).strip()
     try:
-        return datetime.fromtimestamp(float(text), tz=timezone.utc)
-    except ValueError:
+        numeric_timestamp = float(text)
+        while abs(numeric_timestamp) > 10_000_000_000:
+            numeric_timestamp /= 1000
+        return datetime.fromtimestamp(numeric_timestamp, tz=timezone.utc)
+    except (OSError, OverflowError, ValueError):
         pass
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))

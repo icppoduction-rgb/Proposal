@@ -212,3 +212,57 @@ If any lineage link is missing, `TraceabilityError` reports the missing link.
 - Model-ready creation exists as registry/writer services, but there is no full X/y build command for all branches.
 - `normalize-dns/host` legacy routes are less explicit than `normalize-format`.
 - Some Stage One docs may still show `NEEDS_CUSTOM_PARSER` even when Stage Two already has a parser class for part of a format. Active parser registry plus parser coverage is the authoritative current state.
+
+## Performance Execution Architecture
+
+Stage Two normalization now has a performance-oriented execution layer while preserving the normalized event contract.
+
+Main files:
+
+- `scripts/stage_two/execution/work_unit.py`;
+- `scripts/stage_two/execution/planner.py`;
+- `scripts/stage_two/execution/executor.py`;
+- `scripts/stage_two/execution/runtime_settings.py`;
+- `scripts/stage_two/execution/retry_policy.py`;
+- `scripts/stage_two/execution/progress.py`;
+- `scripts/stage_two/execution/format_policy.py`;
+- `scripts/stage_two/benchmark.py`;
+- `scripts/stage_two/quality/post_run_validation.py`.
+
+Key behavior:
+
+- `WorkUnitPlanner` builds work only for `dataset_files.status=READY_FOR_PARSING` and one exact `branch/role/source_format`.
+- `WorkUnitExecutor` uses `ProcessPoolExecutor` for CPU parsing and bounded future submission.
+- Workers do not share one SQLAlchemy session; each process opens its own DB/session context only where needed.
+- Resume skips successful normalized artifacts with matching parser/schema versions.
+- Parser failures are isolated to the file/chunk and can produce `PARTIAL_SUCCESS` for the command.
+- Parsers expose `parse_batches` for streaming/batch parsing where possible.
+- Line-based large files can be split into registered chunks with parent trace metadata.
+- Binary formats (`cap`, `pcap`, `pcapng`, `bson`) are not split by the line splitter.
+- `ParquetArtifactWriter` uses atomic temp-file writes and validates output before artifact registration.
+- `benchmark-normalization` measures throughput and estimates whether `17 GB <= 3 hours` is feasible.
+- `normalize-format` creates a post-run validation report for counts, reconciliation, split separation, leakage, and traceability.
+
+Resource profiles:
+
+| Profile | workers | batch_size | max_output_part_rows |
+| --- | ---: | ---: | ---: |
+| `safe` | 4 | 50000 | 100000 |
+| `balanced` | 8 | 100000 | 250000 |
+| `fast` | 12 | 200000 | 500000 |
+| `aggressive` | 14 | 300000 | 750000 |
+
+Format policy caps risky formats:
+
+- PCAP/PCAPNG/CAP: low workers and `packet-summary` by default.
+- BSON: low workers and moderate batches.
+- JSON/JSONL: moderate workers.
+- line-based logs/TXT/syscall traces: faster settings after benchmark validation.
+
+Operational target:
+
+- required throughput for 17 GB in 3 hours: about `5.67 GB/hour`;
+- target on i7-14700KF / 64 GB RAM / M.2 SSD: `10-20+ GB/hour` for line-based formats;
+- GPU remains an extension point for feature/model-ready/training, not a default raw parser engine.
+
+Safety invariants are unchanged: raw files are immutable, splits are separate, `TEST` is not used for training/fit/tuning, labels are not X features, missing labels/timestamps keep their explicit null/missing semantics, and traceability must remain complete.

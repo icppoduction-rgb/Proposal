@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ProcessPoolExecutor
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import inspect
 from typing import Any, Protocol
 
@@ -15,6 +14,7 @@ from config import (
     STAGE_TWO_DEFAULT_WORKERS,
     STAGE_TWO_HASH_OUTPUT_ARTIFACTS,
     STAGE_TWO_MAX_OUTPUT_PART_ROWS,
+    STAGE_TWO_PACKET_BATCH_SIZE,
     STAGE_TWO_PACKET_PARSE_MODE,
 )
 from scripts.db.models import DatasetFile, NormalizedArtifact
@@ -23,8 +23,16 @@ from scripts.db.models.constants import (
     ACTIVE_DATASET_ROLE_VALUES,
     BRANCH_VALUES,
 )
-from scripts.db.session import session_scope
 from scripts.db.repositories import DatasetFileRepository
+from scripts.stage_two.execution import (
+    ExecutionRuntimeSettings,
+    ProgressReporter,
+    RetryPolicy,
+    WorkUnit,
+    WorkUnitExecutor,
+    WorkUnitPlanner,
+    WorkUnitResult,
+)
 from scripts.stage_two.normalization.dns_service import DnsNormalizationService
 from scripts.stage_two.normalization.host_service import HostNormalizationService
 from scripts.stage_two.normalization.options import NormalizationOptions
@@ -54,10 +62,17 @@ class NormalizeFormatRequest:
     workers: int = STAGE_TWO_DEFAULT_WORKERS
     batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE
     max_output_part_rows: int = STAGE_TWO_MAX_OUTPUT_PART_ROWS
+    packet_batch_size: int = STAGE_TWO_PACKET_BATCH_SIZE
     resume: bool = False
     packet_mode: str = STAGE_TWO_PACKET_PARSE_MODE
     sample_size: int | None = None
     hash_outputs: bool = STAGE_TWO_HASH_OUTPUT_ARTIFACTS
+    resource_profile: str | None = None
+    engine: str = "cpu"
+    format_policy: str | None = field(default=None, compare=False)
+    format_policy_warnings: tuple[str, ...] = field(default_factory=tuple, compare=False)
+    runtime_facts: dict[str, Any] | None = field(default=None, compare=False)
+    explicit_runtime_overrides: tuple[str, ...] = field(default_factory=tuple, compare=False)
 
 
 @dataclass(frozen=True)
@@ -69,10 +84,13 @@ class NormalizeAllRequest:
     workers: int = STAGE_TWO_DEFAULT_WORKERS
     batch_size: int = STAGE_TWO_DEFAULT_BATCH_SIZE
     max_output_part_rows: int = STAGE_TWO_MAX_OUTPUT_PART_ROWS
+    packet_batch_size: int = STAGE_TWO_PACKET_BATCH_SIZE
     resume: bool = False
     packet_mode: str = STAGE_TWO_PACKET_PARSE_MODE
     sample_size: int | None = None
     hash_outputs: bool = STAGE_TWO_HASH_OUTPUT_ARTIFACTS
+    resource_profile: str | None = None
+    engine: str = "cpu"
 
 
 @dataclass(frozen=True)
@@ -94,14 +112,6 @@ class NormalizeParserDiagnostic:
     parser_class: str | None
     available: bool
     error: str | None = None
-
-
-@dataclass(frozen=True)
-class _WorkerNormalizeRequest:
-    """Pickle-safe worker payload for per-file normalization."""
-
-    branch: str
-    options: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -192,39 +202,37 @@ class NormalizeFormatRunner:
             "dns": DnsNormalizationService,
             "host": HostNormalizationService,
         }
+        self.executor = WorkUnitExecutor(progress=ProgressReporter(progress_callback))
 
     def normalize_format(self, request: NormalizeFormatRequest) -> NormalizeFormatResult:
         """Normalize only matching READY_FOR_PARSING files."""
         _validate_request(request)
         options = _options_from_request(request)
-        file_filters: dict[str, object] = {
-            "branch": request.branch,
-            "role": request.role,
-            "source_format": request.source_format,
-            "limit": request.limit,
-        }
-        if request.file_ids is not None:
-            file_filters["file_ids"] = request.file_ids
-        else:
-            file_filters["source_group"] = ACTIVE_CATALOG_SOURCE_GROUP
-        files = self.file_repository.get_files_ready_for_parsing(**file_filters)
+        planner = WorkUnitPlanner(
+            self.session,
+            file_repository=self.file_repository,
+            resolver=self.resolver,
+        )
+        plan = planner.build_format_plan(
+            branch=request.branch,
+            role=request.role,
+            source_format=request.source_format,
+            limit=request.limit,
+            file_ids=request.file_ids,
+            options=options,
+        )
+        total = len(plan.work_units) + len(plan.skipped_units) + len(plan.unsupported_files)
         self._emit(
             "batch_started",
             branch=request.branch,
             role=request.role,
             source_format=request.source_format,
-            total=len(files),
+            total=total,
         )
-        resolution = self.resolver.resolve_with_diagnostics(
-            branch=request.branch,
-            role=request.role,
-            source_format=request.source_format,
-        )
-        parser = resolution.parser
-        if parser is None:
+        if plan.parser_name is None:
             file_results = tuple(
-                self._mark_unsupported(file, index=index, total=len(files))
-                for index, file in enumerate(files, start=1)
+                self._mark_unsupported(file, index=index, total=total)
+                for index, file in enumerate(plan.unsupported_files, start=1)
             )
             return _build_result(
                 request=request,
@@ -232,59 +240,51 @@ class NormalizeFormatRunner:
                 parser_name=None,
                 parser_class=None,
                 file_results=file_results,
-                diagnostics=_parser_diagnostics(resolution.diagnostics),
+                diagnostics=_parser_diagnostics(plan.diagnostics),
             )
 
         service_factory = self.service_factories.get(request.branch)
         if service_factory is None:
             raise ValueError("normalize-format supports only dns and host branches")
 
+        skipped_results = tuple(
+            self._skipped_work_unit_result(unit, index=index, total=total)
+            for index, unit in enumerate(plan.skipped_units, start=1)
+        )
+        start_index = len(skipped_results)
         if request.workers > 1:
-            file_results = self._normalize_many_processes(
-                request,
-                files,
+            runtime_settings = ExecutionRuntimeSettings.from_options(
+                options,
+                selected_units=len(plan.work_units),
+            )
+            work_unit_results = self.executor.execute(
+                plan.work_units,
                 options=options,
+                runtime_settings=runtime_settings,
+                retry_policy=RetryPolicy(),
             )
         else:
             service = _create_service(service_factory, self.session, options=options)
-            file_results = tuple(
-                self._normalize_one(service, file, index=index, total=len(files))
-                for index, file in enumerate(files, start=1)
+            files_by_id = {int(file.id): file for file in plan.ready_files}
+            work_unit_results = tuple(
+                self._normalize_one_work_unit(
+                    service,
+                    unit,
+                    files_by_id,
+                    index=start_index + index,
+                    total=total,
+                )
+                for index, unit in enumerate(plan.work_units, start=1)
             )
+        file_results = tuple(_work_unit_to_file_result(result) for result in (*skipped_results, *work_unit_results))
         return _build_result(
             request=request,
             status="SUCCESS" if not _has_failed_file(file_results) else "PARTIAL_SUCCESS",
-            parser_name=parser.parser_name,
-            parser_class=parser.parser_class,
+            parser_name=plan.parser_name,
+            parser_class=plan.parser_class,
             file_results=file_results,
-            diagnostics=_parser_diagnostics(resolution.diagnostics),
+            diagnostics=_parser_diagnostics(plan.diagnostics),
         )
-
-    def _normalize_many_processes(
-        self,
-        request: NormalizeFormatRequest,
-        files: list[DatasetFile],
-        *,
-        options: NormalizationOptions,
-    ) -> tuple[NormalizeFileResult, ...]:
-        worker_request = _WorkerNormalizeRequest(
-            branch=request.branch,
-            options=_options_payload(options),
-        )
-        results: list[NormalizeFileResult] = []
-        max_workers = min(request.workers, len(files)) if files else request.workers
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for index, result in enumerate(
-                executor.map(
-                    _normalize_file_worker,
-                    [file.id for file in files],
-                    [worker_request] * len(files),
-                ),
-                start=1,
-            ):
-                results.append(result)
-                self._emit_file_processed(result, index=index, total=len(files))
-        return tuple(results)
 
     def _normalize_one(
         self,
@@ -310,6 +310,42 @@ class NormalizeFormatRunner:
             result = self._mark_failed(file, _exception_message(exc))
             self._emit_file_processed(result, index=index, total=total)
             return result
+
+    def _normalize_one_work_unit(
+        self,
+        service: BranchNormalizationService,
+        unit: WorkUnit,
+        files_by_id: dict[int, DatasetFile],
+        *,
+        index: int,
+        total: int,
+    ) -> WorkUnitResult:
+        file = files_by_id.get(unit.dataset_file_id)
+        if file is None:
+            result = WorkUnitResult(
+                work_unit=unit,
+                status="FAILED",
+                error="dataset file not found",
+            )
+            self._emit_file_processed(_work_unit_to_file_result(result), index=index, total=total)
+            return result
+        file_result = self._normalize_one(service, file, index=index, total=total)
+        return WorkUnitResult(
+            work_unit=unit,
+            status=file_result.status,
+            artifact_id=file_result.artifact_id,
+            error=file_result.error,
+            error_samples=(file_result.error,) if file_result.error else (),
+        )
+
+    def _skipped_work_unit_result(self, unit: WorkUnit, *, index: int, total: int) -> WorkUnitResult:
+        result = WorkUnitResult(
+            work_unit=unit,
+            status="SKIPPED",
+            error="resume skipped: successful normalized artifact already exists",
+        )
+        self._emit_file_processed(_work_unit_to_file_result(result), index=index, total=total)
+        return result
 
     def _mark_unsupported(self, file: DatasetFile, *, index: int, total: int) -> NormalizeFileResult:
         try:
@@ -396,23 +432,14 @@ def _options_from_request(request: NormalizeFormatRequest | NormalizeAllRequest)
         workers=request.workers,
         batch_size=request.batch_size,
         max_output_part_rows=request.max_output_part_rows,
+        packet_batch_size=request.packet_batch_size,
         resume=request.resume,
         packet_mode=request.packet_mode,
         sample_size=request.sample_size,
         hash_outputs=request.hash_outputs,
+        resource_profile=request.resource_profile,
+        engine=request.engine,
     )
-
-
-def _options_payload(options: NormalizationOptions) -> dict[str, Any]:
-    return {
-        "workers": options.workers,
-        "batch_size": options.batch_size,
-        "max_output_part_rows": options.max_output_part_rows,
-        "resume": options.resume,
-        "packet_mode": options.packet_mode,
-        "sample_size": options.sample_size,
-        "hash_outputs": options.hash_outputs,
-    }
 
 
 def _create_service(
@@ -425,53 +452,6 @@ def _create_service(
     if "options" in parameters:
         return factory(session, options=options)
     return factory(session)
-
-
-def _normalize_file_worker(
-    file_id: int | None,
-    request: _WorkerNormalizeRequest,
-) -> NormalizeFileResult:
-    if file_id is None:
-        return NormalizeFileResult(
-            file_id=None,
-            file_path="",
-            status="FAILED",
-            error="file id is missing",
-        )
-    options = NormalizationOptions(**request.options)
-    try:
-        with session_scope() as session:
-            repository = DatasetFileRepository(session)
-            file = repository.get(file_id)
-            if file is None:
-                return NormalizeFileResult(
-                    file_id=file_id,
-                    file_path="",
-                    status="FAILED",
-                    error="dataset file not found",
-                )
-            service_class: type[BranchNormalizationService]
-            if request.branch == "dns":
-                service_class = DnsNormalizationService
-            elif request.branch == "host":
-                service_class = HostNormalizationService
-            else:
-                raise ValueError("normalize-format supports only dns and host branches")
-            artifact = service_class(session, options=options).normalize_file(file)
-            return NormalizeFileResult(
-                file_id=file.id,
-                file_path=file.file_path,
-                status=file.status,
-                artifact_id=getattr(artifact, "id", None),
-                error=file.error_message,
-            )
-    except Exception as exc:
-        return NormalizeFileResult(
-            file_id=file_id,
-            file_path="",
-            status="FAILED",
-            error=_exception_message(exc),
-        )
 
 
 def _build_result(
@@ -512,7 +492,17 @@ def _build_result(
 
 
 def _has_failed_file(file_results: tuple[NormalizeFileResult, ...]) -> bool:
-    return any(file.status in {"FAILED", "SKIPPED", "UNSUPPORTED_FORMAT"} for file in file_results)
+    return any(file.status in {"FAILED", "UNSUPPORTED_FORMAT"} for file in file_results)
+
+
+def _work_unit_to_file_result(result: WorkUnitResult) -> NormalizeFileResult:
+    return NormalizeFileResult(
+        file_id=result.work_unit.dataset_file_id,
+        file_path=result.work_unit.source_path,
+        status=result.status,
+        artifact_id=result.artifact_id,
+        error=result.error,
+    )
 
 
 def _parser_diagnostics(
@@ -574,10 +564,13 @@ class NormalizeAllRunner:
                 workers=request.workers,
                 batch_size=request.batch_size,
                 max_output_part_rows=request.max_output_part_rows,
+                packet_batch_size=request.packet_batch_size,
                 resume=request.resume,
                 packet_mode=request.packet_mode,
                 sample_size=request.sample_size,
                 hash_outputs=request.hash_outputs,
+                resource_profile=request.resource_profile,
+                engine=request.engine,
             )
             self._emit(
                 "group_started",

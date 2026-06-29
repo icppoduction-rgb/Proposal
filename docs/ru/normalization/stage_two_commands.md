@@ -385,3 +385,107 @@ model_ready_artifacts.feature_artifact_id
 5. Отсутствующий label не означает benign.
 6. Отсутствующий timestamp нельзя заменять текущим временем.
 7. Все artifacts должны сохранять traceability `raw -> normalized -> features -> model-ready`.
+## Performance commands и profiles
+
+Текущий CLI также включает `benchmark-normalization` и resource profiles для `normalize-format` / `normalize-all`.
+
+### `benchmark-normalization`
+
+```bash
+python manage.py stage-two benchmark-normalization \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --limit 10000 \
+  --sample-ratio 0.10 \
+  --resource-profile fast
+```
+
+Поддерживаемые options:
+
+- `--branch`;
+- `--role`;
+- `--format`;
+- `--limit`;
+- `--sample-ratio`;
+- `--resource-profile`;
+- `--workers`;
+- `--batch-size`;
+- `--max-output-part-rows`;
+- `--resume`;
+- `--dry-run`.
+
+Report содержит `input_bytes`, `processed_bytes`, `processed_gb`, `elapsed_seconds`, `gb_per_hour`, rates по files/rows/events, failed/partial/skipped/unsupported files, Parquet output size, average parser/write time, `estimated_time_for_17gb` и `meets_3_hour_target`.
+
+Actual benchmark run включает safe resume behavior, если не указан `--dry-run`; повторный benchmark не должен создавать дубли successful normalized artifacts.
+
+### Resource profiles
+
+| Profile | workers | batch_size | max_output_part_rows | packet_batch_size |
+| --- | ---: | ---: | ---: | ---: |
+| `safe` | 4 | 50000 | 100000 | 50000 |
+| `balanced` | 8 | 100000 | 250000 | 50000 |
+| `fast` | 12 | 200000 | 500000 | 50000 |
+| `aggressive` | 14 | 300000 | 750000 | 50000 |
+
+CLI overrides имеют приоритет над profile и format policy. Пример:
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --resource-profile fast \
+  --workers 6 \
+  --resume
+```
+
+Итог: `workers=6`, остальные значения берутся из `fast`, если format policy не ограничит рискованный формат.
+
+### Безопасные PCAP/BSON примеры
+
+```bash
+python manage.py stage-two normalize-format \
+  --branch dns \
+  --role TRAIN \
+  --format pcap \
+  --resource-profile safe \
+  --workers 3 \
+  --packet-mode packet-summary \
+  --resume
+
+python manage.py stage-two normalize-format \
+  --branch host \
+  --role TEST \
+  --format bson \
+  --resource-profile safe \
+  --workers 3 \
+  --batch-size 75000 \
+  --resume
+```
+
+### Большие line-based files
+
+```bash
+python manage.py stage-two split-large-files \
+  --branch host \
+  --role TEST \
+  --format txt \
+  --max-part-size-mb 512 \
+  --apply \
+  --register
+```
+
+Не делите `cap`, `pcap`, `pcapng` или `bson` обычным line splitter.
+
+### Обязательные gates после performance runs
+
+`normalize-format` сохраняет post-run validation summary. После performance runs также запускайте:
+
+```bash
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+```
+
+Если `run-leakage-checks` возвращает CRITICAL, не используйте затронутые feature/model-ready artifacts.
