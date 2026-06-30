@@ -52,6 +52,7 @@ PCAP_MAGIC_PREFIXES = (
 )
 PCAPNG_MAGIC = b"\x0a\x0d\x0d\x0a"
 BASE64_ALPHABET_PATTERN = re.compile(rb"^[A-Za-z0-9+/=\s]+$")
+NUMERIC_TEXT_SEQUENCE_PATTERN = re.compile(rb"^[0-9\s]+$")
 BASE64_PAYLOAD_KEYS: frozenset[str] = frozenset({"payload"})
 TEXT_ENCODING_FALLBACKS: tuple[str, ...] = (
     "utf-8",
@@ -705,6 +706,8 @@ def _looks_like_base64_candidate(data: bytes) -> bool:
 
 def _looks_like_base64_signal(data: bytes) -> bool:
     stripped = b"".join(data.split())
+    if NUMERIC_TEXT_SEQUENCE_PATTERN.fullmatch(stripped) is not None:
+        return False
     return len(stripped) >= 8 and BASE64_ALPHABET_PATTERN.fullmatch(stripped) is not None
 
 

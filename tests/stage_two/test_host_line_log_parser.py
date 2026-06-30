@@ -91,6 +91,28 @@ class HostLineLogParserTest(unittest.TestCase):
         self.assertEqual(event["metadata_json"]["mail_queue_id"], "ABC123")
         self.assertEqual(event["metadata_json"]["mail_client"], "mx.example")
 
+    def test_apache_error_line_is_not_treated_as_json_array(self) -> None:
+        line = (
+            "[Sat Jan 15 06:25:11.555081 2022] [ssl:warn] [pid 29644] "
+            "AH01909: 000-catch-all:443:0 server certificate does NOT include an ID which matches the server name"
+        )
+        path = _write_temp_text(self, line + "\n", file_name="error.log.2")
+
+        result = _parser().parse(path, _context(path, source_format="log-2"))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "apache_warn")
+        self.assertEqual(event["modality"], "log")
+        self.assertEqual(event["process_name"], "apache2")
+        self.assertEqual(event["process_id"], "29644")
+        self.assertEqual(event["raw_event_name"], "ssl")
+        self.assertEqual(event["raw_fields_json"]["message"].startswith("AH01909:"), True)
+        self.assertEqual(event["metadata_json"]["apache_module"], "ssl")
+        self.assertEqual(event["metadata_json"]["apache_severity"], "warn")
+
     def test_bad_line_is_partial_success(self) -> None:
         good = "Jan 12 08:15:30 web01 sshd[1234]: Accepted password for alice from 10.0.0.5 port 54421 ssh2"
         bad = "\x00\x01\x02"
@@ -103,6 +125,41 @@ class HostLineLogParserTest(unittest.TestCase):
         self.assertEqual(result.rows_parsed, 2)
         self.assertEqual(result.rows_failed, 1)
         self.assertIn("invalid control-heavy line", result.error_samples[0])
+
+    def test_binary_systemd_journal_extracts_message_fields(self) -> None:
+        payload = (
+            b"LPKSHHRH\x00\x00\x00\x00"
+            b"PRIORITY=6\x00"
+            b"SYSLOG_IDENTIFIER=systemd\x00"
+            b"_PID=1032\x00"
+            b"_UID=1000\x00"
+            b"_HOSTNAME=aecid-samba-4\x00"
+            b"_SOURCE_REALTIME_TIMESTAMP=1642502664000000\x00"
+            b"_SYSTEMD_UNIT=user@1000.service\x00"
+            b"MESSAGE=Stopped target Default.\x00"
+            b"PRIORITY=3\x00"
+            b"SYSLOG_IDENTIFIER=kernel\x00"
+            b"MESSAGE=Kernel warning emitted.\x00"
+        )
+        path = _write_temp_bytes(self, payload, file_name="system.journal")
+
+        result = _parser().parse(path, _context(path, source_format="journal"))
+
+        self.assertEqual(result.rows_read, 2)
+        self.assertEqual(result.rows_parsed, 2)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "PARSED")
+        self.assertIn("systemd_journal_binary_fallback=True", result.warnings)
+        first = result.events[0]
+        self.assertEqual(first["event_type"], "journal_unit")
+        self.assertEqual(first["modality"], "journal")
+        self.assertEqual(first["host_name"], "aecid-samba-4")
+        self.assertEqual(first["process_name"], "systemd")
+        self.assertEqual(first["process_id"], "1032")
+        self.assertEqual(first["user_name"], "1000")
+        self.assertEqual(first["timestamp_type"], "absolute")
+        self.assertEqual(first["raw_fields_json"]["message"], "Stopped target Default.")
+        self.assertEqual(result.events[1]["event_type"], "journal_error")
 
 
 def _parser() -> HostLineLogParser:
@@ -119,6 +176,19 @@ def _write_temp_text(
     test_case.addCleanup(lambda: _cleanup_directory(directory))
     path = directory / file_name
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _write_temp_bytes(
+    test_case: unittest.TestCase,
+    content: bytes,
+    *,
+    file_name: str,
+) -> Path:
+    directory = Path(tempfile.mkdtemp(prefix="host-line-log-parser-"))
+    test_case.addCleanup(lambda: _cleanup_directory(directory))
+    path = directory / file_name
+    path.write_bytes(content)
     return path
 
 

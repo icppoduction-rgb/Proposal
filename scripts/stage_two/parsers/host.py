@@ -30,7 +30,7 @@ from scripts.stage_two.parsers.csv_utils import (
 )
 from scripts.stage_two.parsers.input_reader import UniversalInputReader
 from scripts.stage_two.parsers.json_utils import compact_json_row, flatten_json_object, loads_json_record
-from scripts.stage_two.parsers.logs import ParsedLogLine, parse_host_log_line
+from scripts.stage_two.parsers.logs import ParsedLogLine, _enrich_log_row, parse_host_log_line
 from scripts.stage_two.parsers.metrics import HOST_METRIC_SOURCE_FORMATS, HostMetricbeatParser
 from scripts.stage_two.parsers.netflow import HostNetflowParser
 from scripts.stage_two.parsers.xml import HostXmlParser
@@ -111,9 +111,15 @@ HOST_HEADER_FIELDS: frozenset[str] = frozenset(
         "event.code",
         "event_type",
         "event.action",
+        "event_label",
+        "host",
+        "ip",
         "label",
+        "name",
+        "short",
         "feature no",
         "feature name",
+        "time_label",
         "type",
         "metadata",
     }
@@ -151,6 +157,12 @@ GHC_MODULE_OFFSET_TOKEN_PATTERN = re.compile(
     r"^(?P<module>[A-Za-z0-9_.-]+\.(?:dll|exe|sys))\+0x(?P<offset>[0-9A-Fa-f]+)$",
     re.IGNORECASE,
 )
+SYSTEMD_JOURNAL_MAGIC = b"LPKSHHRH"
+SYSTEMD_JOURNAL_FIELD_PATTERN = re.compile(
+    rb"(?P<key>[A-Z_][A-Z0-9_]{1,63})=(?P<value>[^\x00\r\n]{0,4096})"
+)
+SYSTEMD_JOURNAL_CONTROL_CHARS_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]+")
+HOST_LOG_PREVIEW_CHARS = min(512, STAGE_TWO_MAX_RAW_PREVIEW_BYTES)
 
 
 class HostCsvParser(BaseParser):
@@ -530,6 +542,9 @@ class HostLineLogParser(BaseParser):
                 batch_size=batch_size,
             )
             return
+        if _is_systemd_journal_file(path):
+            yield from _parse_systemd_journal_batches(self, path, context, batch_size=batch_size)
+            return
 
         helper_decision = classify_helper_file(path, source_format=context.source_format)
         if helper_decision.is_helper and not helper_decision.emit_metadata_event:
@@ -651,6 +666,150 @@ def _host_line_record_to_event(
     )
 
 
+def _parse_systemd_journal_batches(
+    parser: BaseParser,
+    path: str | Path,
+    context: ParserContext,
+    *,
+    batch_size: int,
+) -> Iterator[ParserResult]:
+    events: list[dict[str, Any]] = []
+    rows_read = 0
+    rows_failed = 0
+    error_samples: list[str] = []
+    for row in _iter_systemd_journal_rows(path, source_format=context.source_format):
+        rows_read += 1
+        try:
+            events.append(_host_event_from_row(parser, row, rows_read - 1, context, modality="journal"))
+        except Exception as exc:
+            rows_failed += 1
+            error_samples.append(_error_sample(row, exc))
+        if len(events) >= batch_size:
+            result = ParserResult(
+                rows_read=rows_read,
+                rows_parsed=len(events),
+                rows_failed=rows_failed,
+                events=events,
+                error_samples=error_samples,
+            )
+            parser.validate_result(result)
+            yield result
+            events = []
+            rows_read = 0
+            rows_failed = 0
+            error_samples = []
+
+    status_override = None
+    status_reason = None
+    if rows_read == 0 and rows_failed == 0 and not events:
+        status_override = "FAILED"
+        status_reason = "systemd journal file has no extractable MESSAGE fields"
+    result = ParserResult(
+        rows_read=rows_read,
+        rows_parsed=len(events),
+        rows_failed=rows_failed,
+        events=events,
+        warnings=["systemd_journal_binary_fallback=True"],
+        bytes_read=_file_size_or_none(path),
+        error_samples=error_samples,
+        status_override=status_override,
+        status_reason=status_reason,
+    )
+    parser.validate_result(result)
+    yield result
+
+
+def _iter_systemd_journal_rows(path: str | Path, *, source_format: str) -> Iterator[dict[str, Any]]:
+    data = Path(path).read_bytes()
+    current: dict[str, Any] = {}
+    message_index = 0
+    for match in SYSTEMD_JOURNAL_FIELD_PATTERN.finditer(data):
+        key = match.group("key").decode("ascii", errors="ignore")
+        value = _decode_systemd_journal_value(match.group("value"))
+        if not key or value in ("", None):
+            continue
+        if key == "MESSAGE" and current.get("MESSAGE") not in ("", None):
+            message_index += 1
+            yield _systemd_journal_row(current, message_index, source_format=source_format)
+            current = {}
+        elif current.get("MESSAGE") not in ("", None) and key in current:
+            message_index += 1
+            yield _systemd_journal_row(current, message_index, source_format=source_format)
+            current = {}
+        current[key] = value
+    if current.get("MESSAGE") not in ("", None):
+        message_index += 1
+        yield _systemd_journal_row(current, message_index, source_format=source_format)
+
+
+def _systemd_journal_row(fields: dict[str, Any], index: int, *, source_format: str) -> dict[str, Any]:
+    message = _string_or_none(fields.get("MESSAGE")) or ""
+    timestamp = _systemd_journal_timestamp(fields)
+    process_name = first_present(
+        fields,
+        ("SYSLOG_IDENTIFIER", "_COMM", "_EXE", "_SYSTEMD_UNIT", "UNIT", "USER_UNIT"),
+    )
+    row = {
+        "_log_source_type": "systemd_journal_binary",
+        "line_number": index,
+        "event_index": index - 1,
+        "source_format": source_format,
+        "_raw_line_preview": message[:HOST_LOG_PREVIEW_CHARS],
+        "_raw_line_sha256": hashlib.sha256(message.encode("utf-8", errors="replace")).hexdigest(),
+        "_raw_line_length": len(message),
+        "event_type": _systemd_journal_event_type(fields),
+        "raw_event_name": process_name or "systemd_journal",
+        "message": message[:HOST_LOG_PREVIEW_CHARS],
+        "timestamp": timestamp,
+        "host_name": fields.get("_HOSTNAME"),
+        "process_name": process_name,
+        "process_id": fields.get("_PID") or fields.get("SYSLOG_PID"),
+        "user_name": fields.get("_UID"),
+        "command_line": fields.get("_CMDLINE"),
+        "file_path": fields.get("CODE_FILE") or fields.get("_EXE"),
+        "journal_priority": fields.get("PRIORITY"),
+        "journal_transport": fields.get("_TRANSPORT"),
+        "journal_systemd_unit": fields.get("_SYSTEMD_UNIT") or fields.get("UNIT") or fields.get("USER_UNIT"),
+        "journal_fields": dict(fields),
+    }
+    return _enrich_log_row(row)
+
+
+def _systemd_journal_event_type(fields: dict[str, Any]) -> str:
+    priority = _string_or_none(fields.get("PRIORITY"))
+    if priority in {"0", "1", "2", "3"}:
+        return "journal_error"
+    if fields.get("SYSLOG_IDENTIFIER") == "kernel":
+        return "journal_kernel"
+    if fields.get("_SYSTEMD_UNIT") or fields.get("UNIT") or fields.get("USER_UNIT"):
+        return "journal_unit"
+    return "journal_message"
+
+
+def _systemd_journal_timestamp(fields: dict[str, Any]) -> str | None:
+    raw_value = _string_or_none(fields.get("_SOURCE_REALTIME_TIMESTAMP") or fields.get("__REALTIME_TIMESTAMP"))
+    if raw_value is None or not raw_value.isdigit():
+        return None
+    try:
+        return datetime.fromtimestamp(int(raw_value) / 1_000_000, tz=timezone.utc).isoformat()
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def _decode_systemd_journal_value(value: bytes) -> str:
+    text = value.decode("utf-8", errors="replace")
+    text = SYSTEMD_JOURNAL_CONTROL_CHARS_PATTERN.sub(" ", text)
+    return " ".join(text.split())
+
+
+def _is_systemd_journal_file(path: str | Path) -> bool:
+    try:
+        with Path(path).open("rb") as stream:
+            return stream.read(len(SYSTEMD_JOURNAL_MAGIC)) == SYSTEMD_JOURNAL_MAGIC
+    except OSError:
+        return False
+
+
 class HostSyscallTraceParser(BaseParser):
     """Parser for syscall/API trace-like text streams."""
 
@@ -696,6 +855,10 @@ class HostSyscallTraceParser(BaseParser):
             )
             return
 
+        if _looks_like_txt_host_csv(path, source_format=context.source_format):
+            yield from HostCsvParser(self.label_resolver).parse_batches(path, context, batch_size=batch_size)
+            return
+
         events: list[dict[str, Any]] = []
         rows_read = 0
         rows_failed = 0
@@ -711,7 +874,14 @@ class HostSyscallTraceParser(BaseParser):
                     line_number=line_index + 1,
                     source_format=context.source_format,
                 )
-                if ghc_rows is None:
+                sequence_rows = ghc_rows
+                if sequence_rows is None:
+                    sequence_rows = _iter_numeric_syscall_sequence_rows(
+                        line,
+                        line_number=line_index + 1,
+                        source_format=context.source_format,
+                    )
+                if sequence_rows is None:
                     row, error = _parse_syscall_trace_line(
                         line,
                         line_number=line_index + 1,
@@ -724,7 +894,7 @@ class HostSyscallTraceParser(BaseParser):
                         continue
                     rows: Iterator[dict[str, Any]] = iter((row,))
                 else:
-                    rows = ghc_rows
+                    rows = sequence_rows
                 for row in rows:
                     rows_read += 1
                     try:
@@ -904,6 +1074,53 @@ def _iter_ghc_trace_sequence_rows(
                 "module_name": module_name,
                 "module_offset": offset,
                 "command_line": cleaned,
+            }
+
+    return rows()
+
+
+def _iter_numeric_syscall_sequence_rows(
+    line: str,
+    *,
+    line_number: int,
+    source_format: str,
+) -> Iterator[dict[str, Any]] | None:
+    if source_format.strip().lower() not in {"txt", "sc"}:
+        return None
+    text = line.strip()
+    if not text or _is_control_heavy_trace_line(text):
+        return None
+
+    sequence_length = 0
+    for token in _iter_trace_tokens(text):
+        cleaned = _clean_trace_token(token)
+        if not cleaned.isdigit():
+            return None
+        sequence_length += 1
+    if sequence_length == 0:
+        return None
+
+    line_hash = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+    raw_line_length = len(text)
+    raw_line_preview = _trace_line_preview(text)
+
+    def rows() -> Iterator[dict[str, Any]]:
+        for token_index, token in enumerate(_iter_trace_tokens(text)):
+            syscall_id = _clean_trace_token(token)
+            yield {
+                "_trace_source_type": "numeric_syscall_sequence",
+                "source_format": source_format,
+                "line_number": line_number,
+                "token_index": token_index,
+                "sequence_length": sequence_length,
+                "_raw_line_sha256": line_hash,
+                "_raw_line_length": raw_line_length,
+                "_raw_line_preview": raw_line_preview,
+                "raw_event_name": f"syscall_{syscall_id}",
+                "syscall_name": f"syscall_{syscall_id}",
+                "syscall_id": syscall_id,
+                "event_id": syscall_id,
+                "command_line": syscall_id,
             }
 
     return rows()
@@ -1185,7 +1402,7 @@ def _host_event_from_row(
 ) -> dict[str, Any]:
     label_fields = _resolve_host_labels(parser, row, context)
     timestamp_source, timestamp = _timestamp_from_host_row(row)
-    raw_event_name = _pick(row, "raw_event_name")
+    raw_event_name = _pick(row, "raw_event_name", "name", "message")
     event_type = (
         _pick(
             row,
@@ -1196,6 +1413,9 @@ def _host_event_from_row(
             "winlog.event_id",
             "EventID",
             "event_id",
+            "short",
+            "event_label",
+            "name",
             "syscall_name",
         )
         or modality
@@ -1274,7 +1494,7 @@ def _host_event_from_row(
             _pick(row, "parent_process_id", "process.parent.pid", "winlog.event_data.ParentProcessId")
         ),
         parent_process_name=_pick(row, "parent_process_name", "process.parent.name", "winlog.event_data.ParentImage"),
-        src_ip=_pick(row, "src_ip", "source.ip", "source.address", "SourceAddress", "SourceIp", "IpAddress"),
+        src_ip=_pick(row, "src_ip", "source.ip", "source.address", "SourceAddress", "SourceIp", "IpAddress", "ip"),
         dst_ip=_pick(row, "dst_ip", "destination.ip", "destination.address", "DestinationAddress", "DestinationIp"),
         syscall_name=syscall_name,
         event_id=_string_or_none(
@@ -1403,6 +1623,10 @@ def _timestamp_from_host_row(row: dict[str, Any]) -> tuple[str | None, datetime 
         timestamp = _parse_timestamp(f"{date_value} {time_value}")
         if timestamp is not None:
             return f"{date_field}+{time_field}", timestamp
+    if date_value in ("", None) and _looks_like_epoch_timestamp(time_value):
+        timestamp = _parse_timestamp(time_value)
+        if timestamp is not None:
+            return time_field, timestamp
 
     timestamp_field, timestamp_value = first_present_with_name(row, HOST_TIMESTAMP_FIELDS)
     timestamp = _parse_timestamp(timestamp_value)
@@ -1421,6 +1645,7 @@ def _has_host_csv_signal(row: dict[str, Any]) -> bool:
             HOST_EVENT_ID_FIELDS,
             HOST_TIMESTAMP_FIELDS,
             HOST_DATE_FIELDS,
+            HOST_TIME_FIELDS,
         )
     )
 
@@ -1430,6 +1655,24 @@ def _host_event_type(row: dict[str, Any], selected_event_type: str, modality: st
     if schema == "adfa_9_column" or first_present(row, HOST_SYSCALL_FIELDS) not in ("", None):
         return "host_syscall"
     return selected_event_type if selected_event_type else modality
+
+
+def _looks_like_txt_host_csv(path: str | Path, *, source_format: str) -> bool:
+    if source_format.strip().lower() != "txt":
+        return False
+    try:
+        with Path(path).open("r", encoding="utf-8-sig", errors="replace", newline="") as stream:
+            sample = stream.readline(4096)
+    except OSError:
+        return False
+    if not sample.strip() or "," not in sample:
+        return False
+    try:
+        header = next(csv.reader([sample]))
+    except csv.Error:
+        return False
+    tokens = {value.strip().lower() for value in header if value.strip()}
+    return {"time", "name", "ip", "host"}.issubset(tokens)
 
 
 def _host_csv_metadata(
@@ -1513,6 +1756,9 @@ def _host_log_metadata(row: dict[str, Any], *, modality: str) -> dict[str, Any] 
         "timestamp_parse_status": row.get("timestamp_parse_status"),
         "journal_monotonic_seconds": _float_or_none(row.get("journal_monotonic_seconds")),
         "auth_method": row.get("auth_method"),
+        "apache_module": row.get("apache_module"),
+        "apache_severity": row.get("apache_severity"),
+        "thread_id": row.get("thread_id"),
         "mail_queue_id": row.get("mail_queue_id"),
         "mail_client": row.get("mail_client"),
         "mail_recipient": row.get("mail_recipient"),
@@ -1640,6 +1886,13 @@ def _parse_timestamp(value: Any) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _looks_like_epoch_timestamp(value: Any) -> bool:
+    if value in ("", None):
+        return False
+    text = str(value).strip()
+    return bool(re.fullmatch(r"\d{9,16}(?:\.\d+)?", text))
 
 
 def _float_or_none(value: Any) -> float | None:

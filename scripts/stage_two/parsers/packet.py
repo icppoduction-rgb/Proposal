@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import struct
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -266,7 +267,10 @@ def _iter_capture_records(
     binary_type = input_reader.detect_binary_type()
     with input_reader.open_binary() as stream:
         if binary_type == "pcap":
-            yield from _iter_pcap_records_stream(stream)
+            yield from _iter_pcap_records_stream(
+                stream,
+                warning_callback=input_reader.metadata.warnings.append,
+            )
             return
         if binary_type == "pcapng":
             yield from _iter_pcapng_records_stream(stream)
@@ -293,7 +297,11 @@ def _iter_pcap_records(data: bytes) -> Iterator[PacketRecord]:
         yield PacketRecord(timestamp, captured_len, original_len, linktype, payload)
 
 
-def _iter_pcap_records_stream(stream: BinaryIO) -> Iterator[PacketRecord]:
+def _iter_pcap_records_stream(
+    stream: BinaryIO,
+    *,
+    warning_callback: Callable[[str], None] | None = None,
+) -> Iterator[PacketRecord]:
     header = _read_exact_or_eof(stream, 24)
     if header is None:
         raise ValueError("truncated PCAP global header")
@@ -302,13 +310,24 @@ def _iter_pcap_records_stream(stream: BinaryIO) -> Iterator[PacketRecord]:
     endian, timestamp_scale = PCAP_MAGIC_ENDIAN[header[:4]]
     linktype = struct.unpack(f"{endian}I", header[20:24])[0]
     while True:
-        record_header = _read_exact_or_eof(stream, 16)
-        if record_header is None:
+        record_header = stream.read(16)
+        if not record_header:
+            break
+        if len(record_header) != 16:
+            if warning_callback is not None:
+                warning_callback(f"ignored_truncated_pcap_record_header_tail_bytes={len(record_header)}")
             break
         ts_sec, ts_frac, captured_len, original_len = struct.unpack(f"{endian}IIII", record_header)
         if captured_len > MAX_CAPTURED_PACKET_BYTES:
             raise ValueError(f"PCAP packet payload is too large: {captured_len} bytes")
-        payload = _read_exact(stream, captured_len, "truncated PCAP packet payload")
+        payload = stream.read(captured_len)
+        if len(payload) != captured_len:
+            if warning_callback is not None:
+                warning_callback(
+                    "ignored_truncated_pcap_packet_payload="
+                    f"expected:{captured_len}:actual:{len(payload)}"
+                )
+            break
         timestamp = datetime.fromtimestamp(ts_sec + (ts_frac / timestamp_scale), tz=timezone.utc)
         yield PacketRecord(timestamp, captured_len, original_len, linktype, payload)
 

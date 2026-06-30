@@ -102,6 +102,30 @@ class PacketCaptureParserTest(unittest.TestCase):
         self.assertEqual(event["modality"], "host_network_packet")
         self.assertEqual(event["query_domain"], "cap.example")
 
+    def test_pcap_with_truncated_tail_keeps_valid_records(self) -> None:
+        packet = _ethernet_ipv4_udp_packet(
+            src_ip="10.1.1.10",
+            dst_ip="10.1.1.53",
+            src_port=40000,
+            dst_port=53,
+            payload=_dns_query("tail.example"),
+        )
+        path = _write_binary(self, "truncated-tail.cap", _pcap_file([packet]) + b"\x00")
+
+        result = HostPacketCaptureParser(UnlabeledLabelResolver()).parse(
+            path,
+            _context(path, branch="host", source_format="cap"),
+        )
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "PARSED")
+        self.assertTrue(
+            any("ignored_truncated_pcap_record_header_tail_bytes=1" in warning for warning in result.warnings)
+        )
+        self.assertEqual(result.events[0]["query_domain"], "tail.example")
+
     def test_packet_parser_can_stream_batches_without_changing_parse_contract(self) -> None:
         packets = [
             _ethernet_ipv4_udp_packet(

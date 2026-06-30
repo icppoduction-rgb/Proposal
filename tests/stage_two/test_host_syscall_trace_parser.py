@@ -94,6 +94,40 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertEqual(event["file_path"], r"C:\tmp\a.txt")
         self.assertEqual(event["raw_fields_json"]["arguments"], "GENERIC_READ")
 
+    def test_txt_numeric_syscall_sequence_expands_without_base64_decode(self) -> None:
+        path = _write_temp_text(self, "168 265 3 168\n", file_name="adfa-sequence.txt")
+
+        result = _parser().parse(path, _context(path, source_format="txt"))
+
+        self.assertEqual(result.rows_read, 4)
+        self.assertEqual(result.rows_parsed, 4)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertNotIn("base64_detected=True", result.warnings)
+        self.assertEqual([event["syscall_name"] for event in result.events], ["syscall_168", "syscall_265", "syscall_3", "syscall_168"])
+        self.assertEqual(result.events[1]["event_id"], "265")
+        self.assertEqual(result.events[1]["metadata_json"]["sequence_length"], 4)
+        self.assertEqual(result.events[1]["metadata_json"]["token_index"], 1)
+
+    def test_txt_alert_csv_delegates_to_host_csv_parser(self) -> None:
+        content = (
+            "time,name,ip,host,short,time_label,event_label\n"
+            "1643932807,Suricata: Alert - ET INFO Observed DNS Query,192.168.131.109,internal_share,S-Dns-Qry3,false_positive,dnsteal\n"
+        )
+        path = _write_temp_text(self, content, file_name="alerts.txt")
+
+        result = _parser().parse(path, _context(path, source_format="txt"))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "S-Dns-Qry3")
+        self.assertEqual(event["raw_event_name"], "Suricata: Alert - ET INFO Observed DNS Query")
+        self.assertEqual(event["host_name"], "internal_share")
+        self.assertEqual(event["src_ip"], "192.168.131.109")
+        self.assertEqual(event["timestamp_type"], "absolute")
+        self.assertEqual(event["metadata_json"]["csv_schema"], "host_csv")
+
     def test_base64_line_is_decoded_safely(self) -> None:
         decoded = "pid=9 uid=1000 close(3) = 0"
         encoded = base64.b64encode(decoded.encode("utf-8")).decode("ascii")

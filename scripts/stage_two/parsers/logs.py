@@ -27,6 +27,13 @@ ISO_PREFIX_RE = re.compile(
     r"(?P<message>.*)$"
 )
 JOURNAL_MONOTONIC_RE = re.compile(r"^\[(?P<monotonic>\d+(?:\.\d+)?)\]\s*(?P<message>.+)$")
+APACHE_ERROR_RE = re.compile(
+    r"^\[(?P<timestamp>[A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d{1,2}\s+"
+    r"\d{2}:\d{2}:\d{2}(?:\.\d+)?\s+\d{4})\]\s+"
+    r"\[(?P<module>[A-Za-z0-9_]+):(?P<severity>[A-Za-z0-9_]+)\]\s+"
+    r"(?:\[pid\s+(?P<pid>\d+)(?::tid\s+(?P<tid>\d+))?\]\s+)?"
+    r"(?P<message>.*)$"
+)
 AUTH_ACCEPT_RE = re.compile(
     r"\bAccepted\s+(?P<method>\w+)\s+for\s+(?P<user>\S+)\s+from\s+(?P<src_ip>[0-9A-Fa-f:.]+)"
 )
@@ -68,10 +75,14 @@ def parse_host_log_line(
     if _looks_like_bad_line(stripped):
         return ParsedLogLine(row=base, source_type="invalid", error=f"line {line_number}: invalid control-heavy line")
 
-    if stripped[0] in "{[":
+    if stripped[0] == "{" or _looks_like_json_array(stripped):
         try:
             payload = loads_json_record(stripped)
         except ValueError as exc:
+            if stripped[0] == "[":
+                row = _parse_prefixed_line(stripped, base)
+                row = _enrich_log_row(row)
+                return ParsedLogLine(row=row, source_type=str(row.get("_log_source_type") or "raw_line"))
             return ParsedLogLine(
                 row=base,
                 source_type="json_line",
@@ -98,6 +109,28 @@ def _base_line_fields(line: str, *, line_number: int, source_format: str) -> dic
 
 
 def _parse_prefixed_line(line: str, base: dict[str, Any]) -> dict[str, Any]:
+    apache_error_match = APACHE_ERROR_RE.match(line)
+    if apache_error_match:
+        row = dict(base)
+        parts = apache_error_match.groupdict()
+        message = parts.get("message") or ""
+        row.update(
+            {
+                "_log_source_type": "apache_error",
+                "partial_timestamp": parts.get("timestamp"),
+                "timestamp_parse_status": "apache_error_timestamp",
+                "process_name": "apache2",
+                "process_id": parts.get("pid"),
+                "message": message[:RAW_LINE_PREVIEW_CHARS],
+                "raw_event_name": parts.get("module"),
+                "event_type": f"apache_{parts.get('severity') or 'error'}",
+                "apache_module": parts.get("module"),
+                "apache_severity": parts.get("severity"),
+                "thread_id": parts.get("tid"),
+            }
+        )
+        return row
+
     iso_match = ISO_PREFIX_RE.match(line)
     if iso_match:
         row = dict(base)
@@ -244,3 +277,14 @@ def _looks_like_bad_line(value: str) -> bool:
         return True
     control_count = len(CONTROL_CHAR_RE.findall(value))
     return control_count / max(len(value), 1) > 0.1
+
+
+def _looks_like_json_array(value: str) -> bool:
+    if not value.startswith("["):
+        return False
+    stripped = value.lstrip()
+    if stripped in {"[]", "["}:
+        return True
+    if len(stripped) < 2:
+        return False
+    return stripped[1] in '{["-0123456789tfn'
