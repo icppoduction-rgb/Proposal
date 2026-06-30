@@ -213,7 +213,7 @@ class ParquetArtifactWriter:
                 required_columns=required_columns,
                 allow_empty=allow_empty,
             )
-            temp_path.replace(absolute_path)
+            self._replace_with_retry(temp_path, absolute_path)
         except Exception:
             temp_path.unlink(missing_ok=True)
             raise
@@ -270,10 +270,11 @@ class ParquetArtifactWriter:
         if not path.exists():
             raise ParquetWriteError(f"temporary Parquet artifact was not created: {path}")
         try:
-            table = pq.read_table(path)
+            metadata = pq.read_metadata(path)
+            schema = pq.read_schema(path)
         except Exception as exc:
             raise ParquetWriteError(f"temporary Parquet artifact is not readable: {path}") from exc
-        actual_rows = table.num_rows
+        actual_rows = metadata.num_rows
         if actual_rows != expected_rows:
             raise ParquetWriteError(
                 f"Parquet row count mismatch: expected {expected_rows}, got {actual_rows}"
@@ -281,12 +282,27 @@ class ParquetArtifactWriter:
         if actual_rows == 0 and not allow_empty:
             raise ParquetWriteError("refusing to finalize empty Parquet artifact")
         if required_columns is not None:
-            missing = sorted(required_columns.difference(table.column_names))
+            missing = sorted(required_columns.difference(schema.names))
             if missing:
                 raise ParquetWriteError(
                     "Parquet artifact is missing required normalized columns: "
                     + ", ".join(missing)
                 )
+
+    @staticmethod
+    def _replace_with_retry(temp_path: Path, final_path: Path) -> None:
+        """Finalize a temp artifact, tolerating short Windows filesystem locks."""
+        delay_seconds = 0.1
+        attempts = 6
+        for attempt in range(1, attempts + 1):
+            try:
+                temp_path.replace(final_path)
+                return
+            except OSError as exc:
+                if attempt >= attempts or not _is_retryable_replace_error(exc):
+                    raise
+                time.sleep(delay_seconds)
+                delay_seconds *= 2
 
     @staticmethod
     def _sha256(path: Path) -> str:
@@ -328,3 +344,8 @@ def _json_safe_value(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)
+
+
+def _is_retryable_replace_error(exc: OSError) -> bool:
+    """Return True for transient file-lock errors seen during Windows replace()."""
+    return getattr(exc, "winerror", None) in {32, 33}

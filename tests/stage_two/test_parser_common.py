@@ -156,6 +156,14 @@ class ParserCommonTest(unittest.TestCase):
         self.assertIn("parser_report_status=SKIPPED", warning)
         self.assertIn("helper_type=readme_like", warning)
 
+    def test_syscall_reference_txt_is_helper_file(self) -> None:
+        helper = classify_helper_file("ADFA-LD+Syscall+List.txt", source_format="txt")
+
+        self.assertTrue(helper.is_helper)
+        self.assertEqual(helper.helper_type, "syscall_reference")
+        self.assertFalse(helper.emit_metadata_event)
+        self.assertIn("syscall reference list", helper.reason or "")
+
 
 def _context() -> ParserContext:
     return ParserContext(

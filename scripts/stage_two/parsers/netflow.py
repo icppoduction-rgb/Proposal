@@ -317,6 +317,14 @@ def _netflow_row_to_event(
     event_index: int,
     context: ParserContext,
 ) -> dict[str, Any]:
+    if row.get("_netflow_schema") == "netflow_day_11_column":
+        return _netflow_day_row_to_event(
+            parser,
+            row,
+            event_index=event_index,
+            context=context,
+        )
+
     timestamp_source, timestamp, timestamp_type, relative_time = _timestamp_from_row(row)
     src_ip = _string_or_none(
         _pick(
@@ -450,6 +458,113 @@ def _normalize_header(values: list[str]) -> list[str]:
     return [value.strip().lstrip("\ufeff") or f"column_{index}" for index, value in enumerate(values, start=1)]
 
 
+def _netflow_day_row_to_event(
+    parser: BaseParser,
+    row: dict[str, Any],
+    *,
+    event_index: int,
+    context: ParserContext,
+) -> dict[str, Any]:
+    timestamp_source, timestamp, timestamp_type, relative_time = _netflow_day_timestamp(row)
+    src_ip = _string_or_none(row.get("src_host"))
+    dst_ip = _string_or_none(row.get("dst_host"))
+    src_port = _int_or_none(row.get("src_port"))
+    dst_port = _int_or_none(row.get("dst_port"))
+    protocol = _protocol_from_value(row.get("protocol"))
+    bytes_total = _sum_optional_numbers(row.get("src_bytes"), row.get("dst_bytes"))
+    packets_total = _sum_optional_numbers(row.get("src_packets"), row.get("dst_packets"))
+    duration = _float_or_none(row.get("duration"))
+    modality = "network_flow"
+    event_type = "network_flow"
+    raw_event_name = "network_flow"
+    entity_id = _entity_id(
+        modality=modality,
+        src_ip=src_ip,
+        dst_ip=dst_ip,
+        host_name=None,
+        event_id=None,
+        raw_event_name=raw_event_name,
+    )
+    label_fields = _resolve_netflow_labels(parser, row, context)
+
+    return parser.base_event(
+        context,
+        event_uid=_event_uid(context, event_index, entity_id or event_type),
+        timestamp=timestamp,
+        timestamp_source=timestamp_source if timestamp else None,
+        timestamp_type=timestamp_type,
+        event_index=event_index,
+        entity_type="network_flow",
+        entity_id=entity_id,
+        event_type=event_type,
+        raw_event_name=raw_event_name,
+        modality=modality,
+        src_ip=src_ip,
+        dst_ip=dst_ip,
+        src_port=src_port,
+        dst_port=dst_port,
+        protocol=protocol,
+        raw_fields_json=compact_json_row(row),
+        features_json=_flow_features(
+            bytes_total=bytes_total,
+            packets_total=packets_total,
+            duration=duration,
+            direction=None,
+            protocol=protocol,
+        ),
+        metadata_json=_netflow_day_metadata(
+            row,
+            context,
+            relative_time=relative_time,
+            bytes_total=bytes_total,
+            packets_total=packets_total,
+            duration=duration,
+        ),
+        created_at=datetime.now(timezone.utc),
+        **label_fields,
+    )
+
+
+def _netflow_day_timestamp(row: dict[str, Any]) -> tuple[str | None, datetime | None, str, Any]:
+    value = row.get("time")
+    timestamp = _parse_absolute_timestamp(value, allow_numeric_epoch=False)
+    if timestamp is not None:
+        return "time", timestamp, "absolute", None
+    if value not in ("", None):
+        return "time", None, "relative", _float_or_text(value)
+    return None, None, "event_order", None
+
+
+def _netflow_day_metadata(
+    row: dict[str, Any],
+    context: ParserContext,
+    *,
+    relative_time: Any,
+    bytes_total: float | None,
+    packets_total: float | None,
+    duration: float | None,
+) -> dict[str, Any] | None:
+    return merge_json_objects(
+        {
+            "source_format": context.source_format,
+            "netflow_schema": row.get("_netflow_schema"),
+            "record_source_type": row.get("_record_source_type"),
+            "line_number": row.get("_line_number"),
+            "raw_line_sha256": row.get("_raw_line_sha256"),
+            "raw_line_length": row.get("_raw_line_length"),
+            "raw_line_preview_truncated": _line_preview_truncated(row),
+            "modality": "network_flow",
+            "event_type": "network_flow",
+            "relative_time": relative_time,
+            "bytes": bytes_total,
+            "packets": packets_total,
+            "duration": duration,
+            "catalog_metadata": context.metadata or None,
+        },
+        empty_as_none=True,
+    )
+
+
 def _timestamp_from_row(row: dict[str, Any]) -> tuple[str | None, datetime | None, str, Any]:
     date_field, date_value = _first_present_with_name(row, DATE_FIELDS)
     time_field, time_value = _first_present_with_name(row, TIME_FIELDS)
@@ -522,6 +637,10 @@ def _parse_absolute_timestamp(value: Any, *, allow_numeric_epoch: bool) -> datet
 
 def _protocol(row: dict[str, Any]) -> str | None:
     value = _pick(row, "protocol", "proto", "app_proto", "transport", "Protocol")
+    return _protocol_from_value(value)
+
+
+def _protocol_from_value(value: Any) -> str | None:
     if value in ("", None):
         return None
     text = str(value).strip()
@@ -751,6 +870,14 @@ def _sum_first_available(
     if len(present_direct) > 1:
         return float(sum(present_direct))
     return present_direct[0] if present_direct else None
+
+
+def _sum_optional_numbers(*values: Any) -> float | None:
+    present = [_float_or_none(value) for value in values]
+    numbers = [value for value in present if value is not None]
+    if not numbers:
+        return None
+    return float(sum(numbers))
 
 
 def _float_or_none(value: Any) -> float | None:

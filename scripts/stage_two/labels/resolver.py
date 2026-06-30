@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, Sequence
 
 from sqlalchemy.orm import Session
 
@@ -152,6 +152,7 @@ class LabelResolver:
         self.config_path = Path(config_path) if config_path is not None else DEFAULT_CONFIG_PATH
         self.config_rules = [rule_from_mapping(row) for row in (config_rules or [])]
         self.enable_filename_heuristics = enable_filename_heuristics
+        self._rules_cache: dict[tuple[str, str, str], tuple[LabelRule, ...]] = {}
 
     def resolve(self, row: dict[str, Any], context: ParserContext) -> dict[str, Any]:
         """Return canonical label fields for one source row."""
@@ -172,7 +173,12 @@ class LabelResolver:
             candidates.extend(resolve_ids_alert(row))
         return candidates
 
-    def _load_rules(self, context: ParserContext) -> list[LabelRule]:
+    def _load_rules(self, context: ParserContext) -> tuple[LabelRule, ...]:
+        cache_key = (context.branch, context.dataset_role, context.source_format)
+        cached_rules = self._rules_cache.get(cache_key)
+        if cached_rules is not None:
+            return cached_rules
+
         rules = list(self.config_rules)
         rules.extend(load_config_rules(self.config_path))
         if self.session is not None:
@@ -183,13 +189,15 @@ class LabelResolver:
                 source_format=context.source_format,
             )
             rules.extend(rule_from_orm(rule) for rule in db_rules)
-        return [
+        matching_rules = tuple(
             rule
             for rule in rules
             if rule.branch == context.branch
             and (rule.role is None or rule.role == context.dataset_role)
             and (rule.source_format is None or rule.source_format == context.source_format)
-        ]
+        )
+        self._rules_cache[cache_key] = matching_rules
+        return matching_rules
 
 
 def resolve_embedded(row: dict[str, Any]) -> list[LabelResolution]:
@@ -211,7 +219,7 @@ def resolve_embedded(row: dict[str, Any]) -> list[LabelResolution]:
     return candidates
 
 
-def resolve_rules(row: dict[str, Any], context: ParserContext, rules: list[LabelRule]) -> list[LabelResolution]:
+def resolve_rules(row: dict[str, Any], context: ParserContext, rules: Sequence[LabelRule]) -> list[LabelResolution]:
     """Resolve labels from matching DB/config mapping rules."""
     candidates: list[LabelResolution] = []
     for rule in sorted(rules, key=lambda item: (SOURCE_PRIORITY.get(item.label_source, 50), item.priority)):

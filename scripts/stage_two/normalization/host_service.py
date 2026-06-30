@@ -183,6 +183,8 @@ class HostNormalizationService:
         warnings: list[str] = []
         error_samples: list[str] = []
         bytes_read: int | None = None
+        status_override: str | None = None
+        status_reason: str | None = None
         existing_parts = _existing_parts_by_index(
             self.artifact_repository.get_normalized_artifacts_for_run(parser_run_id)
         ) if self.options.resume else {}
@@ -217,6 +219,9 @@ class HostNormalizationService:
             warnings.extend(batch_result.warnings)
             error_samples.extend(batch_result.error_samples)
             bytes_read = batch_result.bytes_read
+            if batch_result.status_override is not None:
+                status_override = batch_result.status_override
+                status_reason = batch_result.status_reason
             if not batch_result.events:
                 continue
             batch_modality = batch_result.events[0]["modality"]
@@ -279,6 +284,9 @@ class HostNormalizationService:
                 performance.output_parts_count += 1
 
         performance.output_parts_count = len(output_paths)
+        if events_emitted or rows_read > 0 or rows_failed > 0:
+            status_override = None
+            status_reason = None
         return (
             ParserResult(
                 rows_read=rows_read,
@@ -289,6 +297,8 @@ class HostNormalizationService:
                 bytes_read=bytes_read,
                 error_samples=error_samples,
                 emitted_events_count=events_emitted,
+                status_override=status_override,
+                status_reason=status_reason,
             ),
             artifact,
             _batched_output_path(output_paths, parser_run_id),

@@ -154,6 +154,22 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertEqual(result.file_status, "SKIPPED")
         self.assertTrue(any("parser_report_status=SKIPPED" in warning for warning in result.warnings))
 
+    def test_syscall_reference_txt_is_skipped_with_parser_report(self) -> None:
+        content = (
+            "#if !defined(_ASM_GENERIC_UNISTD_H) || defined(__SYSCALL)\n"
+            "#define __NR_io_setup 0\n"
+            "__SYSCALL(__NR_io_setup, sys_io_setup)\n"
+        )
+        path = _write_temp_text(self, content, file_name="ADFA-LD+Syscall+List.txt")
+
+        result = _parser().parse(path, _context(path, source_format="txt"))
+
+        self.assertEqual(result.rows_read, 0)
+        self.assertEqual(result.rows_parsed, 0)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "SKIPPED")
+        self.assertTrue(any("helper_type=syscall_reference" in warning for warning in result.warnings))
+
     def test_empty_trace_file_returns_empty_file_status(self) -> None:
         path = _write_temp_text(self, "", file_name="empty.txt")
 

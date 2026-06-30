@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pyarrow.parquet as pq
 
@@ -72,6 +73,28 @@ class ParquetArtifactWriterTest(unittest.TestCase):
             )
 
         self.assertEqual(len(result.content_hash_sha256), 64)
+
+    def test_writer_validates_parquet_metadata_without_materializing_table(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            writer = ParquetArtifactWriter(Path(directory))
+            with patch(
+                "scripts.stage_two.parquet.writer.pq.read_table",
+                side_effect=AssertionError("writer validation must not materialize parquet data"),
+            ):
+                result = writer.write_normalized(
+                    [_event("one")],
+                    branch="dns",
+                    role="TRAIN",
+                    modality="dns",
+                    dataset_slug="metadata-validation",
+                    schema_version="v1",
+                    run_id="metadata",
+                )
+
+            table = pq.read_table(result.absolute_path)
+
+        self.assertEqual(result.row_count, 1)
+        self.assertEqual(table.num_rows, 1)
 
     def test_empty_artifact_is_rejected_without_explicit_allow_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

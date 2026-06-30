@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from scripts.stage_two.labels import LabelResolver
 from scripts.stage_two.parser_registry.seed import expand_parser_seed, validate_parser_registry_row
@@ -44,6 +45,22 @@ class HostNetflowParserTest(unittest.TestCase):
         self.assertEqual(event["features_json"]["packets"], 30.0)
         self.assertEqual(event["features_json"]["duration"], 2.0)
         self.assertEqual(event["metadata_json"]["netflow_schema"], "netflow_day_11_column")
+
+    def test_netflow_day_headerless_uses_fast_path_without_generic_pick(self) -> None:
+        path = _write_temp_text(
+            self,
+            "1,2,Comp1,Comp2,6,Port12345,Port80,10,20,1000,2000\n",
+            file_name="netflow_day",
+        )
+
+        with patch(
+            "scripts.stage_two.parsers.netflow._pick",
+            side_effect=AssertionError("netflow_day fast path should not use generic _pick"),
+        ):
+            result = _parser().parse(path, _context(path, source_format="netflow_day"))
+
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.events[0]["features_json"]["bytes"], 3000.0)
 
     def test_headered_whitespace_flow_record(self) -> None:
         path = _write_temp_text(

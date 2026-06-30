@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from scripts.stage_two.labels import LabelResolver, label_hints_allowed
 from scripts.stage_two.parsers.base import ParserContext
@@ -82,6 +84,16 @@ class LabelResolverTest(unittest.TestCase):
         self.assertEqual(fields["label_source"], "none")
         self.assertEqual(fields["label_status"], "unlabeled")
         self.assertEqual(fields["label_confidence"], None)
+
+    def test_rules_are_loaded_once_per_context(self) -> None:
+        resolver = LabelResolver(config_path=Path("label-rules.json"), enable_filename_heuristics=False)
+        context = _context(role="TRAIN")
+
+        with patch("scripts.stage_two.labels.resolver.load_config_rules", return_value=[]) as load_rules:
+            resolver.resolve({"query_domain": "one.example"}, context)
+            resolver.resolve({"query_domain": "two.example"}, context)
+
+        self.assertEqual(load_rules.call_count, 1)
 
 
 def _context(

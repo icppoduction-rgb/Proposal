@@ -42,6 +42,7 @@ README_HEADING_TOKENS: tuple[str, ...] = (
     "license",
     "citation",
 )
+SYSCALL_REFERENCE_NAME_TOKENS: tuple[str, ...] = ("syscall", "list")
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,13 @@ def classify_helper_file(
             reason=f"{file_name} is context metadata, not a telemetry event stream",
             emit_metadata_event=True,
         )
+    if _is_syscall_reference_file_name(lower_name, source_format=source_format):
+        return HelperFileDecision(
+            is_helper=True,
+            helper_type="syscall_reference",
+            reason=f"{file_name} is a syscall reference list, not a telemetry event stream",
+            emit_metadata_event=False,
+        )
     if is_readme_like_file(path, source_format=source_format, sample_text=sample_text):
         return HelperFileDecision(
             is_helper=True,
@@ -217,6 +225,12 @@ def is_readme_like_file(
         return False
     first_text = " ".join(first_lines)
     return any(token in first_text for token in README_HEADING_TOKENS)
+
+
+def _is_syscall_reference_file_name(lower_name: str, *, source_format: str | None) -> bool:
+    if source_format not in {None, "txt"}:
+        return False
+    return lower_name.endswith(".txt") and all(token in lower_name for token in SYSCALL_REFERENCE_NAME_TOKENS)
 
 
 def parser_report_warning(

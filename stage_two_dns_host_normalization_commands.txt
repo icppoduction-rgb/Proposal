@@ -147,14 +147,9 @@ python manage.py stage-two normalize-format --branch <branch> --role <role> --fo
 - TEST: bson, csv, json, log, netflow_day, txt, wls_day
 
 
-HOST VALIDATION json
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --dry-run
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format json --apply
-python manage.py stage-two split-large-files --branch host --role VALIDATION --format json --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format json --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
 
 HOST VALIDATION netflow_day
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --dry-run
+python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --dry-runs
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --apply
 python manage.py stage-two split-large-files --branch host --role VALIDATION --format netflow_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
