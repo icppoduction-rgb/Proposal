@@ -146,6 +146,7 @@ TRACE_ISO_TIMESTAMP_PREFIX_PATTERN = re.compile(
 )
 TRACE_RELATIVE_TIMESTAMP_PREFIX_PATTERN = re.compile(r"^(?P<relative_timestamp>\d+\.\d+)\s+(?P<body>.+)$")
 TRACE_NAME_PATTERN = re.compile(r"^[A-Za-z_][\w.$:@/-]*$")
+TRACE_TOKEN_PATTERN = re.compile(r"\S+")
 GHC_MODULE_OFFSET_TOKEN_PATTERN = re.compile(
     r"^(?P<module>[A-Za-z0-9_.-]+\.(?:dll|exe|sys))\+0x(?P<offset>[0-9A-Fa-f]+)$",
     re.IGNORECASE,
@@ -705,12 +706,12 @@ class HostSyscallTraceParser(BaseParser):
             for line_index, line in enumerate(lines):
                 if not line.strip():
                     continue
-                rows = _parse_ghc_trace_sequence_line(
+                ghc_rows = _iter_ghc_trace_sequence_rows(
                     line,
                     line_number=line_index + 1,
                     source_format=context.source_format,
                 )
-                if not rows:
+                if ghc_rows is None:
                     row, error = _parse_syscall_trace_line(
                         line,
                         line_number=line_index + 1,
@@ -721,7 +722,9 @@ class HostSyscallTraceParser(BaseParser):
                         rows_failed += 1
                         error_samples.append(error)
                         continue
-                    rows = [row]
+                    rows: Iterator[dict[str, Any]] = iter((row,))
+                else:
+                    rows = ghc_rows
                 for row in rows:
                     rows_read += 1
                     try:
@@ -851,48 +854,59 @@ def _parse_syscall_trace_line(
     return row, None
 
 
-def _parse_ghc_trace_sequence_line(
+def _iter_ghc_trace_sequence_rows(
     line: str,
     *,
     line_number: int,
     source_format: str,
-) -> list[dict[str, Any]]:
+) -> Iterator[dict[str, Any]] | None:
     if source_format.strip().lower() != "ghc":
-        return []
+        return None
     text = line.strip()
     if not text or _is_control_heavy_trace_line(text):
-        return []
-    raw_tokens = _trace_tokens(text)
-    parsed_tokens: list[tuple[str, str, str]] = []
-    for token in raw_tokens:
+        return None
+
+    sequence_length = 0
+    for token in _iter_trace_tokens(text):
         cleaned = _clean_trace_token(token)
         match = GHC_MODULE_OFFSET_TOKEN_PATTERN.match(cleaned)
         if match is None:
-            return []
-        parsed_tokens.append((cleaned, match.group("module"), f"0x{match.group('offset').lower()}"))
+            return None
+        sequence_length += 1
+    if sequence_length == 0:
+        return None
 
     line_hash = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
-    sequence_length = len(parsed_tokens)
-    return [
-        {
-            "_trace_source_type": "ghc_module_offset_sequence",
-            "source_format": source_format,
-            "line_number": line_number,
-            "token_index": token_index,
-            "sequence_length": sequence_length,
-            "_raw_line_sha256": line_hash,
-            "_raw_line_length": len(text),
-            "_raw_line_preview": _trace_line_preview(text),
-            "raw_event_name": token,
-            "syscall_name": token,
-            "event_id": offset,
-            "process_name": module_name,
-            "module_name": module_name,
-            "module_offset": offset,
-            "command_line": token,
-        }
-        for token_index, (token, module_name, offset) in enumerate(parsed_tokens)
-    ]
+    raw_line_length = len(text)
+    raw_line_preview = _trace_line_preview(text)
+
+    def rows() -> Iterator[dict[str, Any]]:
+        for token_index, token in enumerate(_iter_trace_tokens(text)):
+            cleaned = _clean_trace_token(token)
+            match = GHC_MODULE_OFFSET_TOKEN_PATTERN.match(cleaned)
+            if match is None:
+                continue
+            module_name = match.group("module")
+            offset = f"0x{match.group('offset').lower()}"
+            yield {
+                "_trace_source_type": "ghc_module_offset_sequence",
+                "source_format": source_format,
+                "line_number": line_number,
+                "token_index": token_index,
+                "sequence_length": sequence_length,
+                "_raw_line_sha256": line_hash,
+                "_raw_line_length": raw_line_length,
+                "_raw_line_preview": raw_line_preview,
+                "raw_event_name": cleaned,
+                "syscall_name": cleaned,
+                "event_id": offset,
+                "process_name": module_name,
+                "module_name": module_name,
+                "module_offset": offset,
+                "command_line": cleaned,
+            }
+
+    return rows()
 
 
 def _trace_key_values(text: str) -> dict[str, str]:
@@ -924,7 +938,12 @@ def _syscall_id_and_name_from_fields(fields: dict[str, str]) -> tuple[str | None
 
 
 def _trace_tokens(text: str) -> list[str]:
-    return [token for token in re.split(r"\s+", text.strip()) if token]
+    return list(_iter_trace_tokens(text.strip()))
+
+
+def _iter_trace_tokens(text: str) -> Iterator[str]:
+    for match in TRACE_TOKEN_PATTERN.finditer(text):
+        yield match.group(0)
 
 
 def _trace_name_from_tokens(tokens: list[str], *, syscall_id: str | None) -> tuple[str | None, int | None]:

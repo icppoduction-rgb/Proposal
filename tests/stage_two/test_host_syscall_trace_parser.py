@@ -50,6 +50,19 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertEqual(result.events[2]["metadata_json"]["sequence_length"], 3)
         self.assertEqual(result.events[2]["metadata_json"]["token_index"], 2)
 
+    def test_ghc_module_offset_sequence_is_batched_from_single_long_line(self) -> None:
+        line = " ".join(f"kernel32.dll+0x{index:x}" for index in range(7))
+        path = _write_temp_text(self, line + "\n", file_name="trace.GHC")
+
+        batches = list(_parser().parse_batches(path, _context(path, source_format="ghc"), batch_size=3))
+
+        self.assertEqual([len(batch.events) for batch in batches], [3, 3, 1])
+        self.assertEqual(sum(batch.rows_read for batch in batches), 7)
+        self.assertEqual(sum(batch.rows_parsed for batch in batches), 7)
+        self.assertEqual(sum(batch.rows_failed for batch in batches), 0)
+        self.assertEqual(batches[-1].events[-1]["event_index"], 6)
+        self.assertEqual(batches[-1].events[-1]["metadata_json"]["sequence_length"], 7)
+
     def test_sc_like_numeric_syscall_id_line(self) -> None:
         line = "pid=7 syscall=59 args=/bin/sh"
         path = _write_temp_text(self, line + "\n", file_name="trace.sc")
