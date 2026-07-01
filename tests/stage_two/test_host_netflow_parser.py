@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from scripts.stage_two.labels import LabelResolver
 from scripts.stage_two.parser_registry.seed import expand_parser_seed, validate_parser_registry_row
-from scripts.stage_two.parsers.base import ParserContext
+from scripts.stage_two.parsers.base import REQUIRED_NORMALIZED_FIELDS, ParserContext
 from scripts.stage_two.parsers.host import HostNetflowParser
 
 
@@ -45,6 +45,10 @@ class HostNetflowParserTest(unittest.TestCase):
         self.assertEqual(event["features_json"]["packets"], 30.0)
         self.assertEqual(event["features_json"]["duration"], 2.0)
         self.assertEqual(event["metadata_json"]["netflow_schema"], "netflow_day_11_column")
+        self.assertTrue(REQUIRED_NORMALIZED_FIELDS.issubset(event))
+        self.assertEqual(event["label_status"], "unlabeled")
+        self.assertNotIn("_raw_line_sha256", event["raw_fields_json"])
+        self.assertNotIn("raw_line_sha256", event["metadata_json"])
 
     def test_netflow_day_headerless_uses_fast_path_without_generic_pick(self) -> None:
         path = _write_temp_text(
@@ -146,6 +150,54 @@ class HostNetflowParserTest(unittest.TestCase):
         self.assertEqual(event["timestamp_type"], "relative")
         self.assertEqual(event["metadata_json"]["relative_time"], 42.0)
         self.assertEqual(event["metadata_json"]["logon_id"], "0x123")
+
+    def test_wls_day_json_line_uses_fast_path_without_generic_pick(self) -> None:
+        row = {
+            "EventID": 4688,
+            "UserName": "alice",
+            "LogHost": "host01",
+            "DomainName": "EXAMPLE",
+            "ParentProcessName": "services",
+            "ParentProcessID": "0x2ac",
+            "ProcessName": "svchost.exe",
+            "Time": 1,
+        }
+        path = _write_json_lines(self, [row], file_name="wls_day")
+
+        with patch(
+            "scripts.stage_two.parsers.netflow._pick",
+            side_effect=AssertionError("wls_day fast path should not use generic _pick"),
+        ):
+            result = _parser().parse(path, _context(path, source_format="wls_day", role="VALIDATION"))
+
+        self.assertEqual(result.rows_parsed, 1)
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "windows_event_4688")
+        self.assertEqual(event["process_name"], "svchost.exe")
+        self.assertEqual(event["parent_process_id"], "0x2ac")
+        self.assertEqual(event["metadata_json"]["record_source_type"], "json_line_fast")
+        self.assertNotIn("_line_number", event["raw_fields_json"])
+
+    def test_wls_day_batches_keep_global_event_order(self) -> None:
+        rows = [
+            {"EventID": 4624, "UserName": "alice", "LogHost": "host01", "Time": 1},
+            {"EventID": 4672, "UserName": "alice", "LogHost": "host01", "Time": 2},
+            {"EventID": 4688, "UserName": "alice", "LogHost": "host01", "Time": 3},
+        ]
+        path = _write_json_lines(self, rows, file_name="wls_day")
+
+        batches = list(
+            _parser().parse_batches(
+                path,
+                _context(path, source_format="wls_day", role="VALIDATION"),
+                batch_size=2,
+            )
+        )
+        events = [event for batch in batches for event in batch.events]
+
+        self.assertEqual([len(batch.events) for batch in batches if batch.events], [2, 1])
+        self.assertEqual([event["event_index"] for event in events], [0, 1, 2])
+        self.assertEqual(len({event["event_uid"] for event in events}), 3)
 
     def test_base64_wrapped_netflow_text(self) -> None:
         content = "1,2,Comp1,Comp2,17,Port53,Port53000,1,2,64,128\n"

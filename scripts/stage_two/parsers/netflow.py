@@ -186,6 +186,10 @@ class HostNetflowParser(BaseParser):
         error_samples: list[str] = []
         header: tuple[str, ...] | None = None
         reader = UniversalInputReader(path)
+        fast_label_fields: dict[str, Any] | None = None
+        event_index = 0
+        if context.source_format == "netflow_day":
+            fast_label_fields = self.label_resolver.resolve({}, context)
 
         with reader.iter_lines(keepends=False, skip_empty=False) as lines:
             for line_number, line in enumerate(lines, start=1):
@@ -194,6 +198,80 @@ class HostNetflowParser(BaseParser):
                     continue
                 if text.startswith("#"):
                     comment_rows += 1
+                    continue
+
+                if context.source_format == "netflow_day" and header is None and not text.startswith("{"):
+                    values = _split_netflow_day_fast_values(text)
+                    if values is not None:
+                        if _looks_like_netflow_header(values):
+                            header = tuple(_normalize_header(values))
+                            header_rows += 1
+                            continue
+                        rows_read += 1
+                        try:
+                            events.append(
+                                _netflow_day_values_to_event(
+                                    self,
+                                    values,
+                                    event_index=event_index,
+                                    context=context,
+                                    line_number=line_number,
+                                    label_fields=fast_label_fields or {},
+                                )
+                            )
+                            event_index += 1
+                        except Exception as exc:
+                            rows_failed += 1
+                            error_samples.append(f"line {line_number}: {exc}")
+                        if len(events) >= batch_size:
+                            result = ParserResult(
+                                rows_read=rows_read,
+                                rows_parsed=len(events),
+                                rows_failed=rows_failed,
+                                events=events,
+                                error_samples=error_samples,
+                            )
+                            self.validate_result(result)
+                            yield result
+                            events = []
+                            rows_read = 0
+                            rows_failed = 0
+                            error_samples = []
+                        continue
+
+                if context.source_format == "wls_day" and text.startswith("{"):
+                    rows_read += 1
+                    try:
+                        events.append(
+                            _wls_json_line_to_event(
+                                self,
+                                text,
+                                event_index=event_index,
+                                context=context,
+                                line_number=line_number,
+                            )
+                        )
+                        event_index += 1
+                    except json.JSONDecodeError as exc:
+                        rows_failed += 1
+                        error_samples.append(f"line {line_number}: json line: {exc.msg}")
+                    except Exception as exc:
+                        rows_failed += 1
+                        error_samples.append(f"line {line_number}: {exc}")
+                    if len(events) >= batch_size:
+                        result = ParserResult(
+                            rows_read=rows_read,
+                            rows_parsed=len(events),
+                            rows_failed=rows_failed,
+                            events=events,
+                            error_samples=error_samples,
+                        )
+                        self.validate_result(result)
+                        yield result
+                        events = []
+                        rows_read = 0
+                        rows_failed = 0
+                        error_samples = []
                     continue
 
                 parsed = _parse_netflow_line(text, context, header=header)
@@ -219,10 +297,11 @@ class HostNetflowParser(BaseParser):
                         _netflow_row_to_event(
                             self,
                             row,
-                            event_index=len(events),
+                            event_index=event_index,
                             context=context,
                         )
                     )
+                    event_index += 1
                 except Exception as exc:
                     rows_failed += 1
                     error_samples.append(_error_sample(row, exc))
@@ -308,6 +387,248 @@ def _parse_netflow_line(
         return ParsedNetflowLine(row, None, None, "delimited_headerless")
 
     return ParsedNetflowLine(None, None, f"not enough fields for {context.source_format}: {values!r}", "unknown")
+
+
+def _split_netflow_day_fast_values(text: str) -> list[str] | None:
+    if text.count(",") < len(NETFLOW_DAY_COLUMNS) - 1 or '"' in text:
+        return None
+    values = [value.strip() for value in text.split(",")]
+    if len(values) < len(NETFLOW_DAY_COLUMNS):
+        return None
+    return values
+
+
+def _netflow_day_values_to_event(
+    parser: BaseParser,
+    values: list[str],
+    *,
+    event_index: int,
+    context: ParserContext,
+    line_number: int,
+    label_fields: dict[str, Any],
+) -> dict[str, Any]:
+    time_value = values[0]
+    duration_value = values[1]
+    src_host = _string_or_none(values[2])
+    dst_host = _string_or_none(values[3])
+    protocol = _protocol_from_value(values[4])
+    src_port = _int_or_none(values[5])
+    dst_port = _int_or_none(values[6])
+    src_packets = _float_or_none(values[7])
+    dst_packets = _float_or_none(values[8])
+    src_bytes = _float_or_none(values[9])
+    dst_bytes = _float_or_none(values[10])
+    if _looks_like_relative_number(time_value):
+        timestamp = None
+        timestamp_source = "time"
+        timestamp_type = "relative"
+        relative_time = _float_or_text(time_value)
+    else:
+        timestamp = _parse_absolute_timestamp(time_value, allow_numeric_epoch=False)
+        timestamp_source = "time" if timestamp else None
+        timestamp_type = "absolute" if timestamp else "event_order"
+        relative_time = None
+    if timestamp is not None:
+        timestamp_source = "time"
+        timestamp_type = "absolute"
+        relative_time = None
+    elif time_value not in ("", None) and timestamp_type != "relative":
+        timestamp_source = "time"
+        timestamp_type = "relative"
+        relative_time = _float_or_text(time_value)
+    bytes_total = _sum_present_numbers(src_bytes, dst_bytes)
+    packets_total = _sum_present_numbers(src_packets, dst_packets)
+    duration = _float_or_none(duration_value)
+    entity_id = f"{src_host}->{dst_host}" if src_host and dst_host else src_host or dst_host
+    return parser.base_event(
+        context,
+        event_uid=_fast_line_event_uid(context, line_number),
+        timestamp=timestamp,
+        timestamp_source=timestamp_source if timestamp else None,
+        timestamp_type=timestamp_type,
+        event_index=event_index,
+        entity_type="network_flow",
+        entity_id=entity_id,
+        event_type="network_flow",
+        raw_event_name="network_flow",
+        modality="network_flow",
+        src_ip=src_host,
+        dst_ip=dst_host,
+        src_port=src_port,
+        dst_port=dst_port,
+        protocol=protocol,
+        raw_fields_json={
+            "time": time_value,
+            "duration": duration_value,
+            "src_host": values[2],
+            "dst_host": values[3],
+            "protocol": values[4],
+            "src_port": values[5],
+            "dst_port": values[6],
+            "src_packets": values[7],
+            "dst_packets": values[8],
+            "src_bytes": values[9],
+            "dst_bytes": values[10],
+        },
+        features_json=_flow_features(
+            bytes_total=bytes_total,
+            packets_total=packets_total,
+            duration=duration,
+            direction=None,
+            protocol=protocol,
+        ),
+        metadata_json=merge_json_objects(
+            {
+                "source_format": context.source_format,
+                "netflow_schema": "netflow_day_11_column",
+                "record_source_type": "delimited_headerless_fast",
+                "line_number": line_number,
+                "modality": "network_flow",
+                "event_type": "network_flow",
+                "relative_time": relative_time,
+                "bytes": bytes_total,
+                "packets": packets_total,
+                "duration": duration,
+                "catalog_metadata": context.metadata or None,
+            },
+            empty_as_none=True,
+        ),
+        created_at=datetime.now(timezone.utc),
+        **label_fields,
+    )
+
+
+def _fast_line_event_uid(context: ParserContext, line_number: int) -> str:
+    source_id = context.file_id or context.source_file_hash or context.source_file_path
+    return f"{source_id}:{line_number}"
+
+
+def _wls_json_line_to_event(
+    parser: BaseParser,
+    text: str,
+    *,
+    event_index: int,
+    context: ParserContext,
+    line_number: int,
+) -> dict[str, Any]:
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise ValueError("json line: expected JSON object")
+    if not _is_flat_json_object(payload):
+        row = flatten_json_object(payload)
+        row["_netflow_schema"] = "wls_day_json_line"
+        row["_line_number"] = line_number
+        row["_record_source_type"] = "json_line"
+        row["_raw_line_sha256"] = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+        row["_raw_line_length"] = len(text)
+        row["_raw_line_preview"] = _raw_preview(text)
+        return _netflow_row_to_event(
+            parser,
+            row,
+            event_index=event_index,
+            context=context,
+        )
+
+    lookup = _lowercase_lookup(payload)
+    timestamp_source, timestamp, timestamp_type, relative_time = _wls_timestamp(payload, lookup)
+    event_id = _string_or_none(_field_value(payload, lookup, "EventID", "EventId", "event_id", "event.code"))
+    host_name = _string_or_none(_field_value(payload, lookup, "LogHost", "loghost", "Computer", "computer_name"))
+    user_name = _string_or_none(_field_value(payload, lookup, "UserName", "username", "user", "SubjectUserName"))
+    source = _string_or_none(_field_value(payload, lookup, "Source", "source", "Provider.Name"))
+    raw_event_name = source or event_id or "host_eventlog"
+    event_type = f"windows_event_{event_id}" if event_id else "host_eventlog"
+    entity_id = f"{host_name}:{event_id}" if host_name and event_id else host_name or raw_event_name or event_id
+    label_fields = _resolve_netflow_labels(parser, payload, context)
+
+    raw_line_length = len(text)
+    raw_line_preview = _raw_preview(text)
+    return parser.base_event(
+        context,
+        event_uid=_fast_line_event_uid(context, line_number),
+        timestamp=timestamp,
+        timestamp_source=timestamp_source if timestamp else None,
+        timestamp_type=timestamp_type,
+        event_index=event_index,
+        entity_type="host",
+        entity_id=entity_id,
+        event_type=event_type,
+        raw_event_name=raw_event_name,
+        modality="host_eventlog",
+        host_name=host_name,
+        user_name=user_name,
+        event_id=event_id,
+        process_id=_string_or_none(_field_value(payload, lookup, "process_id", "ProcessId", "ProcessID", "PID")),
+        process_name=_string_or_none(_field_value(payload, lookup, "process_name", "ProcessName", "Image")),
+        parent_process_id=_string_or_none(
+            _field_value(payload, lookup, "parent_process_id", "ParentProcessId", "ParentProcessID")
+        ),
+        parent_process_name=_string_or_none(_field_value(payload, lookup, "parent_process_name", "ParentProcessName")),
+        command_line=_string_or_none(_field_value(payload, lookup, "command_line", "CommandLine")),
+        file_path=_string_or_none(_field_value(payload, lookup, "file_path", "path", "TargetFilename", "Image")),
+        raw_fields_json=compact_json_row(payload),
+        features_json=None,
+        metadata_json=merge_json_objects(
+            {
+                "source_format": context.source_format,
+                "netflow_schema": "wls_day_json_line",
+                "record_source_type": "json_line_fast",
+                "line_number": line_number,
+                "raw_line_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
+                "raw_line_length": raw_line_length,
+                "raw_line_preview_truncated": raw_line_length > len(raw_line_preview),
+                "modality": "host_eventlog",
+                "event_type": event_type,
+                "relative_time": relative_time,
+                "loghost": host_name,
+                "source": source,
+                "domain_name": _field_value(payload, lookup, "DomainName", "domain"),
+                "logon_id": _field_value(payload, lookup, "LogonID", "logon_id"),
+                "catalog_metadata": context.metadata or None,
+            },
+            empty_as_none=True,
+        ),
+        created_at=datetime.now(timezone.utc),
+        **label_fields,
+    )
+
+
+def _is_flat_json_object(payload: dict[Any, Any]) -> bool:
+    return not any(isinstance(value, (dict, list)) for value in payload.values())
+
+
+def _lowercase_lookup(row: dict[Any, Any]) -> dict[str, Any]:
+    return {str(key).lower(): value for key, value in row.items()}
+
+
+def _field_value(row: dict[Any, Any], lookup: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in row and row[key] not in ("", None):
+            return row[key]
+        value = lookup.get(key.lower())
+        if value not in ("", None):
+            return value
+    return None
+
+
+def _wls_timestamp(
+    row: dict[Any, Any],
+    lookup: dict[str, Any],
+) -> tuple[str | None, datetime | None, str, Any]:
+    for field in ABSOLUTE_TIMESTAMP_FIELDS:
+        value = _field_value(row, lookup, field)
+        timestamp = _parse_absolute_timestamp(value, allow_numeric_epoch=True)
+        if timestamp is not None:
+            return field, timestamp, "absolute", None
+        if value not in ("", None) and _looks_like_relative_number(value):
+            return field, None, "relative", _float_or_text(value)
+
+    value = _field_value(row, lookup, "Time", "time", "relative_time", "relative_timestamp", "elapsed")
+    timestamp = _parse_absolute_timestamp(value, allow_numeric_epoch=False)
+    if timestamp is not None:
+        return "Time", timestamp, "absolute", None
+    if value not in ("", None):
+        return "Time", None, "relative", _float_or_text(value)
+    return None, None, "event_order", None
 
 
 def _netflow_row_to_event(
@@ -875,6 +1196,13 @@ def _sum_first_available(
 def _sum_optional_numbers(*values: Any) -> float | None:
     present = [_float_or_none(value) for value in values]
     numbers = [value for value in present if value is not None]
+    if not numbers:
+        return None
+    return float(sum(numbers))
+
+
+def _sum_present_numbers(*values: float | None) -> float | None:
+    numbers = [value for value in values if value is not None]
     if not numbers:
         return None
     return float(sum(numbers))

@@ -54,6 +54,24 @@ class FormatPolicyTest(unittest.TestCase):
         self.assertEqual(decision.options.batch_size, 150_000)
         self.assertTrue(any("large JSON" in warning for warning in decision.warnings))
 
+    def test_wls_day_uses_eventlog_policy(self) -> None:
+        decision = resolve_format_policy(
+            NormalizationOptions(),
+            FormatRuntimeFacts(
+                branch="host",
+                role="VALIDATION",
+                source_format="wls_day",
+                file_count=3,
+                total_size_bytes=45 * 1024 * 1024 * 1024,
+            ),
+        )
+
+        self.assertEqual(decision.policy_name, "wls_eventlog")
+        self.assertEqual(decision.options.workers, 8)
+        self.assertEqual(decision.options.batch_size, 100_000)
+        self.assertEqual(decision.options.max_output_part_rows, 100_000)
+        self.assertTrue(any("150 MB" in warning for warning in decision.warnings))
+
     def test_bson_caps_workers_and_part_rows(self) -> None:
         decision = resolve_format_policy(
             NormalizationOptions(workers=14, batch_size=300_000, max_output_part_rows=750_000),

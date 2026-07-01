@@ -232,9 +232,14 @@ class ParquetArtifactWriter:
         rows: list[dict[str, Any]],
         columns: list[str] | None,
     ) -> list[dict[str, Any]]:
-        selected_rows = rows if columns is None else [
-            {column: row.get(column) for column in columns} for row in rows
-        ]
+        if columns is None:
+            for row in rows:
+                for column, value in tuple(row.items()):
+                    normalized = _normalize_parquet_value(column, value)
+                    if normalized is not value:
+                        row[column] = normalized
+            return rows
+        selected_rows = [{column: row.get(column) for column in columns} for row in rows]
         return [
             {
                 column: _normalize_parquet_value(column, value)

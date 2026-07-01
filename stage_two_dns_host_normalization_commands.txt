@@ -150,11 +150,6 @@ python manage.py stage-two normalize-format --branch host --role VALIDATION --fo
 
 python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 2 --workers 2 --batch-size 100000 --max-output-part-rows 200000 --resume
 
-HOST VALIDATION txt
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --dry-run
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format txt --apply
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format txt --limit 3000 --workers 6 --batch-size 100000 --max-output-part-rows 200000 --resume
-
 HOST VALIDATION wls_day
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --apply
