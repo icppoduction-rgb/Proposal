@@ -153,6 +153,17 @@ TRACE_ISO_TIMESTAMP_PREFIX_PATTERN = re.compile(
 TRACE_RELATIVE_TIMESTAMP_PREFIX_PATTERN = re.compile(r"^(?P<relative_timestamp>\d+\.\d+)\s+(?P<body>.+)$")
 TRACE_NAME_PATTERN = re.compile(r"^[A-Za-z_][\w.$:@/-]*$")
 TRACE_TOKEN_PATTERN = re.compile(r"\S+")
+SYSDIG_TRACE_PREFIX_PATTERN = re.compile(
+    r"^(?P<event_index>\d+)\s+"
+    r"(?P<time>\d{2}:\d{2}:\d{2}\.\d+)\s+"
+    r"(?P<cpu>\d+)\s+"
+    r"(?P<user_id>\d+)\s+"
+    r"(?P<process_name>\S+)\s+"
+    r"(?P<pid>\d+)\s+"
+    r"(?P<direction>[<>])\s+"
+    r"(?P<syscall_name>\S+)"
+    r"(?:\s+(?P<arguments>.*))?$"
+)
 GHC_MODULE_OFFSET_TOKEN_PATTERN = re.compile(
     r"^(?P<module>[A-Za-z0-9_.-]+\.(?:dll|exe|sys))\+0x(?P<offset>[0-9A-Fa-f]+)$",
     re.IGNORECASE,
@@ -882,11 +893,21 @@ class HostSyscallTraceParser(BaseParser):
                         source_format=context.source_format,
                     )
                 if sequence_rows is None:
+                    row, error = _parse_sysdig_trace_line(
+                        line,
+                        line_number=line_index + 1,
+                        source_format=context.source_format,
+                    )
+                    sysdig_fast_path = error is None
+                else:
+                    sysdig_fast_path = False
+                if sequence_rows is None and error is not None:
                     row, error = _parse_syscall_trace_line(
                         line,
                         line_number=line_index + 1,
                         source_format=context.source_format,
                     )
+                    sysdig_fast_path = False
                     if error is not None:
                         rows_read += 1
                         rows_failed += 1
@@ -894,11 +915,14 @@ class HostSyscallTraceParser(BaseParser):
                         continue
                     rows: Iterator[dict[str, Any]] = iter((row,))
                 else:
-                    rows = sequence_rows
+                    rows = sequence_rows if sequence_rows is not None else iter((row,))
                 for row in rows:
                     rows_read += 1
                     try:
-                        events.append(_host_event_from_row(self, row, event_index, context, modality="syscall"))
+                        if sysdig_fast_path:
+                            events.append(_sysdig_trace_row_to_event(self, row, event_index, context))
+                        else:
+                            events.append(_host_event_from_row(self, row, event_index, context, modality="syscall"))
                         event_index += 1
                     except Exception as exc:
                         rows_failed += 1
@@ -943,6 +967,82 @@ class HostSyscallTraceParser(BaseParser):
         )
         self.validate_result(result)
         yield result
+
+
+def _parse_sysdig_trace_line(
+    line: str,
+    *,
+    line_number: int,
+    source_format: str,
+) -> tuple[dict[str, Any], str | None]:
+    if source_format.strip().lower() != "txt":
+        return {}, "not a txt sysdig trace source"
+    text = line.strip()
+    if _is_control_heavy_trace_line(text):
+        return {}, f"line {line_number}: invalid control-heavy trace line"
+    match = SYSDIG_TRACE_PREFIX_PATTERN.match(text)
+    if match is None:
+        return {}, f"line {line_number}: not a sysdig trace line"
+
+    arguments = match.group("arguments") or None
+    trace_fields = _trace_key_values(arguments or "")
+    return_value = _trace_first_field(trace_fields, ("res", "return_value", "retval", "ret", "return", "result"))
+    row = {
+        "_trace_source_type": "sysdig_trace",
+        "source_format": source_format,
+        "line_number": line_number,
+        "_raw_line_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
+        "_raw_line_length": len(text),
+        "_raw_line_preview": _trace_line_preview(text),
+        "raw_event_name": match.group("syscall_name"),
+        "syscall_name": match.group("syscall_name"),
+        "event_id": match.group("syscall_name"),
+        "process_id": match.group("pid"),
+        "process_name": match.group("process_name"),
+        "user_name": match.group("user_id"),
+        "arguments": arguments,
+        "return_value": return_value,
+        "relative_timestamp": match.group("time"),
+        "sysdig_event_index": match.group("event_index"),
+        "sysdig_cpu": match.group("cpu"),
+        "sysdig_direction": match.group("direction"),
+        "trace_fields": trace_fields,
+        "command_line": _trace_line_preview(arguments or match.group("syscall_name")),
+    }
+    return row, None
+
+
+def _sysdig_trace_row_to_event(
+    parser: BaseParser,
+    row: dict[str, Any],
+    index: int,
+    context: ParserContext,
+) -> dict[str, Any]:
+    syscall_name = _string_or_none(row.get("syscall_name"))
+    label_fields = _resolve_host_labels(parser, row, context)
+    return parser.base_event(
+        context,
+        event_uid=_event_uid(context, index, syscall_name),
+        timestamp=None,
+        timestamp_source=None,
+        timestamp_type="relative",
+        event_index=index,
+        entity_type="syscall",
+        entity_id=row.get("process_name") or syscall_name,
+        event_type="host_syscall",
+        raw_event_name=syscall_name,
+        modality="syscall",
+        user_name=_string_or_none(row.get("user_name")),
+        process_id=_string_or_none(row.get("process_id")),
+        process_name=_string_or_none(row.get("process_name")),
+        syscall_name=syscall_name,
+        event_id=_string_or_none(row.get("event_id")),
+        command_line=row.get("command_line"),
+        raw_fields_json=compact_row(row),
+        metadata_json=_host_trace_metadata(row, modality="syscall"),
+        created_at=datetime.now(timezone.utc),
+        **label_fields,
+    )
 
 
 def _parse_syscall_trace_line(

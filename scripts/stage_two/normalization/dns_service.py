@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from scripts.db.models import DatasetFile, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository, DatasetFileRepository, ParserRepository
 from scripts.stage_two.labels import LabelResolver
+from scripts.stage_two.normalization.checkpoint import checkpoint_catalog_session
 from scripts.stage_two.normalization.options import NormalizationOptions, batch_size_for_source_format
 from scripts.stage_two.normalization.performance import MemoryTracker, NormalizationPerformance, PerfTimer
 from scripts.stage_two.parquet import ParquetArtifactWriter
@@ -280,6 +281,8 @@ class DnsNormalizationService:
                     )
                 artifact = artifact or registered
                 performance.output_parts_count += 1
+                with PerfTimer(performance, "catalog_seconds"):
+                    checkpoint_catalog_session(self.session)
 
         performance.output_parts_count = len(output_paths)
         if events_emitted or rows_read > 0 or rows_failed > 0:

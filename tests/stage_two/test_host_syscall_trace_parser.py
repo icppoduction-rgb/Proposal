@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.stage_two.labels import LabelResolver
 from scripts.stage_two.parsers.base import ParserContext
@@ -93,6 +94,31 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertEqual(event["process_name"], "python")
         self.assertEqual(event["file_path"], r"C:\tmp\a.txt")
         self.assertEqual(event["raw_fields_json"]["arguments"], "GENERIC_READ")
+
+    def test_txt_sysdig_trace_line_uses_fast_path(self) -> None:
+        line = "811 21:13:19.498051939 3 0 apache2 7149 > wait4 res=0"
+        path = _write_temp_text(self, line + "\n", file_name="sysdig.txt")
+
+        with patch(
+            "scripts.stage_two.parsers.host._host_event_from_row",
+            side_effect=AssertionError("sysdig txt fast path should not use generic host row mapping"),
+        ):
+            result = _parser().parse(path, _context(path, source_format="txt", role="VALIDATION"))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        event = result.events[0]
+        self.assertEqual(event["timestamp_type"], "relative")
+        self.assertEqual(event["event_type"], "host_syscall")
+        self.assertEqual(event["modality"], "syscall")
+        self.assertEqual(event["process_name"], "apache2")
+        self.assertEqual(event["process_id"], "7149")
+        self.assertEqual(event["user_name"], "0")
+        self.assertEqual(event["syscall_name"], "wait4")
+        self.assertEqual(event["metadata_json"]["trace_source_type"], "sysdig_trace")
+        self.assertEqual(event["metadata_json"]["relative_timestamp"], "21:13:19.498051939")
+        self.assertEqual(event["metadata_json"]["return_value"], "0")
 
     def test_txt_numeric_syscall_sequence_expands_without_base64_decode(self) -> None:
         path = _write_temp_text(self, "168 265 3 168\n", file_name="adfa-sequence.txt")

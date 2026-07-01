@@ -20,6 +20,7 @@ from config import (
     PARQUET_NORMALIZED_RELATIVE,
     PATH_DATA_STORAGE,
     STAGE_TWO_HASH_OUTPUT_ARTIFACTS,
+    STAGE_TWO_PARQUET_COMPRESSION,
 )
 from scripts.db.models import FeatureArtifact, ModelReadyArtifact, NormalizedArtifact
 from scripts.db.repositories import ArtifactRepository
@@ -52,7 +53,7 @@ class ParquetArtifactWriter:
         self,
         storage_root: str | Path | None = None,
         *,
-        compression: str = "zstd",
+        compression: str = STAGE_TWO_PARQUET_COMPRESSION,
         hash_outputs: bool = STAGE_TWO_HASH_OUTPUT_ARTIFACTS,
     ) -> None:
         """Initialize the writer with PATH_DATA_STORAGE or an explicit storage root."""

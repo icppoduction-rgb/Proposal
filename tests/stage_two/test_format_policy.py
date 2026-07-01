@@ -7,7 +7,7 @@ from scripts.stage_two.normalization.options import NormalizationOptions
 
 
 class FormatPolicyTest(unittest.TestCase):
-    def test_txt_uses_fast_line_policy(self) -> None:
+    def test_txt_uses_syscall_trace_policy(self) -> None:
         decision = resolve_format_policy(
             NormalizationOptions(),
             FormatRuntimeFacts(
@@ -19,11 +19,12 @@ class FormatPolicyTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.policy_name, "line_fast")
-        self.assertEqual(decision.options.workers, 12)
-        self.assertEqual(decision.options.batch_size, 250_000)
-        self.assertEqual(decision.options.max_output_part_rows, 750_000)
+        self.assertEqual(decision.policy_name, "syscall_trace")
+        self.assertEqual(decision.options.workers, 6)
+        self.assertEqual(decision.options.batch_size, 100_000)
+        self.assertEqual(decision.options.max_output_part_rows, 200_000)
         self.assertEqual(decision.options.engine, "cpu")
+        self.assertTrue(any("syscall trace" in warning for warning in decision.warnings))
 
     def test_csv_uses_csv_netflow_policy(self) -> None:
         decision = resolve_format_policy(

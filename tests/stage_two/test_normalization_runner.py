@@ -248,10 +248,10 @@ class NormalizeFormatCliTest(unittest.TestCase):
         with patch("scripts.stage_two.cli.DatasetFileRepository", _FakePolicyRepository):
             resolved = _resolve_format_policy_for_request(object(), request)
 
-        self.assertEqual(resolved.format_policy, "line_fast")
+        self.assertEqual(resolved.format_policy, "syscall_trace")
         self.assertEqual(resolved.workers, 6)
-        self.assertEqual(resolved.batch_size, 250_000)
-        self.assertEqual(resolved.max_output_part_rows, 750_000)
+        self.assertEqual(resolved.batch_size, 100_000)
+        self.assertEqual(resolved.max_output_part_rows, 200_000)
         self.assertEqual(resolved.runtime_facts["file_count"], 2)
         self.assertEqual(resolved.runtime_facts["total_size_bytes"], 3072)
 

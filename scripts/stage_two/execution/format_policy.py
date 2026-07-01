@@ -10,9 +10,6 @@ from scripts.stage_two.normalization.options import NormalizationOptions
 
 LINE_FAST_FORMATS: frozenset[str] = frozenset(
     {
-        "txt",
-        "sc",
-        "ghc",
         "log",
         "log-1",
         "log-2",
@@ -35,6 +32,7 @@ LINE_FAST_FORMATS: frozenset[str] = frozenset(
         "mail-warn-1",
     }
 )
+SYSCALL_TRACE_FORMATS: frozenset[str] = frozenset({"txt", "sc", "ghc"})
 CSV_NETFLOW_FORMATS: frozenset[str] = frozenset({"csv", "pcap.csv", "netflow_day", "netflow_ids"})
 JSON_FORMATS: frozenset[str] = frozenset({"json", "json-1"})
 BSON_FORMATS: frozenset[str] = frozenset({"bson"})
@@ -197,6 +195,14 @@ def _policy_values(facts: FormatRuntimeFacts) -> dict[str, int | str]:
             "max_output_part_rows": 500_000,
             "engine": "cpu",
         }
+    if source_format in SYSCALL_TRACE_FORMATS:
+        return {
+            "workers": 6,
+            "batch_size": 100_000,
+            "packet_batch_size": 50_000,
+            "max_output_part_rows": 200_000,
+            "engine": "cpu",
+        }
     if source_format in LINE_FAST_FORMATS or source_format in METRIC_LOG_FORMATS:
         return {
             "workers": 12,
@@ -229,6 +235,8 @@ def _policy_name(facts: FormatRuntimeFacts) -> str:
         return "json"
     if source_format in CSV_NETFLOW_FORMATS:
         return "csv_netflow"
+    if source_format in SYSCALL_TRACE_FORMATS:
+        return "syscall_trace"
     if source_format in LINE_FAST_FORMATS or source_format in METRIC_LOG_FORMATS:
         return "line_fast"
     return "conservative_unknown"
@@ -242,6 +250,10 @@ def _policy_warnings(facts: FormatRuntimeFacts) -> tuple[str, ...]:
         return ("BSON parsing is binary and parser-risky; policy caps workers and output part size",)
     if source_format in JSON_FORMATS and facts.average_file_size > 256 * 1024 * 1024:
         return ("large JSON files may include materialized arrays/objects; consider split-large-files only for JSONL-style sources",)
-    if source_format not in LINE_FAST_FORMATS | CSV_NETFLOW_FORMATS | JSON_FORMATS | BSON_FORMATS | PACKET_FORMATS | METRIC_LOG_FORMATS:
+    if source_format in SYSCALL_TRACE_FORMATS:
+        return (
+            "syscall trace parsing is CPU/IO sensitive at high file counts; policy caps workers and output part size",
+        )
+    if source_format not in LINE_FAST_FORMATS | SYSCALL_TRACE_FORMATS | CSV_NETFLOW_FORMATS | JSON_FORMATS | BSON_FORMATS | PACKET_FORMATS | METRIC_LOG_FORMATS:
         return ("unknown source_format uses conservative runtime policy",)
     return ()
