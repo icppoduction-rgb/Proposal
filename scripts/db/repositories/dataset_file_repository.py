@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from scripts.db.models import Dataset, DatasetFile
 from scripts.db.models.constants import ACTIVE_DATASET_ROLE_VALUES
 from scripts.db.repositories.base_repository import BaseRepository
+from scripts.stage_two.catalog_exclusions import is_excluded_dataset_file
 
 
 MAX_BULK_UPSERT_ROWS = 1000
@@ -115,9 +116,9 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         if role is None:
             statement = statement.where(DatasetFile.role.in_(ACTIVE_DATASET_ROLE_VALUES))
         statement = statement.order_by(DatasetFile.id)
-        if limit is not None:
-            statement = statement.limit(limit)
-        return list(self.session.execute(statement).scalars())
+        files = list(self.session.execute(statement).scalars())
+        filtered_files = [file for file in files if not is_excluded_dataset_file(file)]
+        return filtered_files[:limit] if limit is not None else filtered_files
 
     def get_ready_file_groups(
         self,
@@ -149,7 +150,7 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
         )
         if source_group is not None:
             statement = statement.join(Dataset).where(Dataset.source_group == source_group)
-        return [
+        groups = [
             {
                 "role": role,
                 "source_format": source_format,
@@ -157,6 +158,27 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
             }
             for role, source_format, files_count in self.session.execute(statement).all()
         ]
+        if branch == "host":
+            groups = [
+                group
+                for group in groups
+                if not (group["role"] == "VALIDATION" and group["source_format"] == "wls_day")
+            ]
+            ready_wls_day_files = self.get_files_ready_for_parsing(
+                branch=branch,
+                role="VALIDATION",
+                source_format="wls_day",
+                source_group=source_group,
+            )
+            if ready_wls_day_files:
+                groups.append(
+                    {
+                        "role": "VALIDATION",
+                        "source_format": "wls_day",
+                        "files_count": len(ready_wls_day_files),
+                    }
+                )
+        return groups
 
     def mark_file_status(
         self,

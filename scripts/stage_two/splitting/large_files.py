@@ -16,6 +16,7 @@ from config import PATH_FOLDER_DATASETS_FILTER
 from scripts.db.models import Dataset, DatasetFile
 from scripts.db.models.constants import ACTIVE_CATALOG_SOURCE_GROUP, ACTIVE_DATASET_ROLE_VALUES, BRANCH_VALUES
 from scripts.db.repositories import DatasetFileRepository
+from scripts.stage_two.catalog_exclusions import is_excluded_dataset_file
 
 
 HeaderMode = Literal["auto", "yes", "no"]
@@ -205,10 +206,13 @@ class SplitLargeFilesService:
         )
         if request.min_file_size_bytes > 0:
             statement = statement.where(DatasetFile.file_size_bytes >= request.min_file_size_bytes)
-        if request.limit is not None:
-            statement = statement.limit(request.limit)
         files = list(self.session.execute(statement).scalars())
-        return [file for file in files if not _is_chunk_path(Path(file.file_path))]
+        filtered_files = [
+            file
+            for file in files
+            if not _is_chunk_path(Path(file.file_path)) and not is_excluded_dataset_file(file)
+        ]
+        return filtered_files[: request.limit] if request.limit is not None else filtered_files
 
     def _split_one(self, file: DatasetFile, request: SplitLargeFilesRequest) -> SplitFileResult:
         path = Path(file.file_path)

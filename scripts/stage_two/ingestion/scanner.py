@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.db.models.constants import ACTIVE_DATASET_ROLE_VALUES, BRANCH_VALUES
+from scripts.stage_two.catalog_exclusions import is_excluded_raw_bucket
 
 
 KNOWN_SOURCE_FORMATS: tuple[str, ...] = (
@@ -104,6 +105,13 @@ class DatasetFileScanner:
             if role is None:
                 continue
             source_format = self.infer_source_format(path, relative_path=relative)
+            if is_excluded_raw_bucket(
+                branch=branch,
+                role=role,
+                source_format=source_format,
+                relative_path=relative,
+            ):
+                continue
             dataset_name = self.infer_dataset_name(relative, branch, role, source_format)
             candidates.append(
                 DatasetFileCandidate(

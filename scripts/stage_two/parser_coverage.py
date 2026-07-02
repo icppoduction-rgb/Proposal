@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config import SORT_PATH_DNS_FILE, SORT_PATH_HOST_FILE
@@ -19,6 +19,7 @@ from scripts.db.models.constants import (
     ACTIVE_DATASET_ROLE_VALUES,
     BRANCH_VALUES,
 )
+from scripts.stage_two.catalog_exclusions import is_excluded_dataset_file
 from scripts.stage_two.parser_registry import ParserResolver, validate_parser_registry_row
 from scripts.stage_two.reports.parser_reports import save_parser_coverage_reports
 
@@ -93,13 +94,8 @@ class ParserCoverageService:
     def _catalog_file_counts(self, *, branch: str | None) -> dict[CoverageKey, int]:
         statement = (
             select(
-                DatasetFile.branch,
-                DatasetFile.role,
-                DatasetFile.source_format,
-                func.count().label("files_count"),
+                DatasetFile,
             )
-            .group_by(DatasetFile.branch, DatasetFile.role, DatasetFile.source_format)
-            .order_by(DatasetFile.branch, DatasetFile.role, DatasetFile.source_format)
             .join(Dataset)
             .where(
                 Dataset.source_group == ACTIVE_CATALOG_SOURCE_GROUP,
@@ -108,11 +104,12 @@ class ParserCoverageService:
         )
         if branch is not None:
             statement = statement.where(DatasetFile.branch == branch)
-        rows = self.session.execute(statement).all()
-        return {
-            (row.branch, row.role, row.source_format): int(row.files_count)
-            for row in rows
-        }
+        counts: dict[CoverageKey, int] = defaultdict(int)
+        for file in self.session.execute(statement).scalars():
+            if is_excluded_dataset_file(file):
+                continue
+            counts[(file.branch, file.role, file.source_format)] += 1
+        return dict(counts)
 
     def _registry_rows(self, *, branch: str | None) -> tuple[ParserRegistry, ...]:
         statement = select(ParserRegistry).order_by(

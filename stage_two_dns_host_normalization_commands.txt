@@ -140,21 +140,14 @@ python manage.py stage-two normalize-format --branch <branch> --role <role> --fo
 - VALIDATION: cap, csv, json, netflow_day, pcap, pcapng, txt, wls_day
 - TEST: bson, csv, json, log, netflow_day, txt, wls_day
 
-
-
-HOST VALIDATION netflow_day
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --dry-runs
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format netflow_day --apply
-python manage.py stage-two split-large-files --branch host --role VALIDATION --format netflow_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format netflow_day --limit 2 --workers 2 --batch-size 100000 --max-output-part-rows 200000 --resume
-
 HOST VALIDATION wls_day
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --dry-run
 python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --apply
 python manage.py stage-two split-large-files --branch host --role VALIDATION --format wls_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
+
+python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 20 --workers 8 --batch-size 120000 --max-output-part-rows 120000 --resume 
+4 запуск
 
 HOST TEST bson
 python manage.py stage-two mark-ready --branch host --role TEST --format bson --dry-run

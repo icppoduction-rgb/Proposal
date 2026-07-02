@@ -193,6 +193,8 @@ python manage.py stage-two split-large-files \
 
 **PostgreSQL:** with `--register`, registers chunks in `dataset_files` with status `READY_FOR_PARSING`; the source file may be moved to `SKIPPED` unless `--keep-source-ready` is used.
 
+**Host VALIDATION `wls_day`:** the original raw bucket `host/VALIDATION/wls_day` is intentionally excluded after chunk registration. Continue normalization from `chunked/host/VALIDATION/wls_day/...` records only; do not re-promote the original three large files.
+
 **Possible errors:** `--register` without `--apply`, unsupported binary format, missing source file, output directory already exists without `--overwrite`, invalid `--header`.
 
 **How to verify:** CLI prints `status=SUCCESS`, `chunks_created > 0`, `registered > 0`; `normalize-format` then selects chunks rather than the original large file.

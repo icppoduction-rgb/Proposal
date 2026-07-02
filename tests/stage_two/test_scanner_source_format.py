@@ -104,6 +104,23 @@ class DatasetFileScannerSourceFormatTest(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].role, "TRAIN")
 
+    def test_host_validation_wls_day_raw_bucket_is_excluded_but_chunks_remain(self) -> None:
+        scanner = DatasetFileScanner()
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw_bucket = root / "host" / "VALIDATION" / "wls_day"
+            raw_bucket.mkdir(parents=True)
+            (raw_bucket / "wls_day-01").write_text("raw", encoding="utf-8")
+            chunk_bucket = root / "chunked" / "host" / "VALIDATION" / "wls_day" / "wls_day-01.parts"
+            chunk_bucket.mkdir(parents=True)
+            (chunk_bucket / "wls_day-01.part-000001").write_text("chunk", encoding="utf-8")
+
+            candidates = scanner.scan(root)
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].source_format, "wls_day")
+        self.assertEqual(candidates[0].relative_path.parts[0], "chunked")
+
 
 if __name__ == "__main__":
     unittest.main()

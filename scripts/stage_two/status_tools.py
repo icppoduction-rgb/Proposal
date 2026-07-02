@@ -21,6 +21,7 @@ from scripts.db.models.constants import (
     ACTIVE_DATASET_ROLE_VALUES,
     BRANCH_VALUES,
 )
+from scripts.stage_two.catalog_exclusions import is_excluded_dataset_file
 from scripts.stage_two.parser_registry.resolver import ParserResolver
 from scripts.stage_two.parser_registry.seed import ParserClassValidationResult
 
@@ -217,7 +218,8 @@ class MarkReadyService:
             statement = statement.join(Dataset).where(
                 Dataset.source_group == ACTIVE_CATALOG_SOURCE_GROUP
             )
-        return list(self.session.execute(statement).scalars().all())
+        files = list(self.session.execute(statement).scalars().all())
+        return [file for file in files if not is_excluded_dataset_file(file)]
 
     def _emit(self, event: str, **payload: Any) -> None:
         if self.progress_callback is not None:
