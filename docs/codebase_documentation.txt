@@ -1,0 +1,1655 @@
+Документация по коду проекта Proposal
+Дата снимка: 2026-07-04
+Репозиторий: C:\Users\Public\PythonProjects\Proposal
+
+Назначение файла
+================
+
+Этот файл — единая техническая документация по коду репозитория в формате .txt.
+Это не простая склейка исходников, а структурированное описание архитектуры,
+точек входа, модулей, потоков данных, контрактов, CLI-команд, тестов,
+ограничений и зон развития.
+
+На момент анализа в репозитории:
+
+- 236 Python-файлов кода и тестов;
+- 37 Python-файлов тестов, почти все относятся к Stage Two;
+- JSON-схемы для normalized, feature и model-ready артефактов;
+- русская и английская документация в docs/;
+- planning-материалы по Stage One и Stage Two.
+
+Главная логика проекта делится на два этапа:
+
+1. Stage One — поиск, фильтрация, сортировка, инвентаризация и анализ
+   DNS/Host датасетов.
+2. Stage Two — catalog-backed нормализация данных: PostgreSQL Catalog,
+   parser registry, нормализация в Parquet, DuckDB/data quality checks,
+   leakage checks, traceability и базовые contracts для feature/model-ready
+   слоев.
+
+
+1. Текущее состояние реализации
+===============================
+
+Готово и подтверждено кодом:
+
+- CLI через manage.py и scripts/router_script.py.
+- Stage One handlers для анализа, фильтрации, сортировки, экспорта путей и
+  генерации отчетов по DNS/Host форматам.
+- SQLAlchemy-модели PostgreSQL Catalog.
+- Repository layer для datasets, files, parser runs, artifacts, labels,
+  schemas, preprocessing и quality reports.
+- Alembic migration для Stage Two catalog schema.
+- Storage bootstrap для PATH_DATA_STORAGE.
+- Catalog ingestion из PATH_FOLDER_DATASETS_FILTER.
+- Parser registry seed и resolver.
+- Parser coverage и mark-ready workflow.
+- Нормализация точного bucket через normalize-format.
+- Batch-нормализация ветки через normalize-all.
+- Legacy normalize-dns / normalize-host.
+- Benchmark normalization.
+- Splitter больших line-based файлов.
+- Набор Stage Two parser implementations.
+- Parquet writer.
+- DuckDB analytics layer.
+- DataQualityChecker / LeakageChecker.
+- Post-run validation.
+- Traceability service.
+- Readiness check и e2e dry-run.
+- Feature/model-ready contracts и writer/registry services.
+
+Не готово как полный end-to-end ML pipeline:
+
+- полноценный CLI для feature extraction;
+- полноценный CLI для model-ready build;
+- preprocessing fit/transform orchestration;
+- обучение RF/XGBoost/CNN/LSTM;
+- SHAP/explainability pipeline;
+- финальные experiment/evaluation reports.
+
+Практический вывод:
+
+Код сейчас наиболее готов для воспроизводимой подготовки данных,
+нормализации, каталогизации, проверки качества и контроля leakage. ML-слой
+после model-ready contracts пока остается follow-up/proposal work.
+
+
+2. Точки входа и маршрутизация
+==============================
+
+2.1 manage.py
+-------------
+
+Назначение:
+
+- главная CLI-точка входа;
+- принимает positional arguments:
+  - module;
+  - service;
+  - action;
+  - extra_args;
+- передает управление в scripts.router_script.router_commands().
+
+Форма запуска:
+
+python manage.py <module> <service> <action> [extra args]
+
+Примеры:
+
+python manage.py handlers analyze-dataset dns-dataset-handler
+python manage.py handlers sort sort-host-dataset-handler
+python manage.py stage-two bootstrap-storage
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --resume
+
+2.2 scripts/router_script.py
+----------------------------
+
+Назначение:
+
+- верхнеуровневый router;
+- module == handlers отправляет в scripts.handlers.router_handler;
+- module == stage-two отправляет в scripts.stage_two.cli.router_stage_two;
+- неизвестный module печатает fallback help из config.manage_commands.
+
+Важное ограничение:
+
+config.manage_commands — не полный источник правды по Stage Two. Для Stage Two
+актуальный источник команд — scripts/stage_two/cli.py.
+
+2.3 config.py
+-------------
+
+Назначение:
+
+- загружает .env через python-dotenv;
+- определяет PROJECT_ROOT;
+- определяет пути к датасетам, storage, reports, temp_data, schemas и docs;
+- хранит Stage Two runtime defaults;
+- хранит DATABASE_URL;
+- хранит fallback help manage_commands.
+
+Ключевые переменные окружения:
+
+- PATH_DATA_STORAGE;
+- PATH_FOLDER_DATASETS;
+- PATH_FOLDER_DATASETS_FILTER;
+- DATABASE_URL;
+- STAGE_TWO_PARQUET_COMPRESSION.
+
+Ключевые Stage Two defaults:
+
+- STAGE_TWO_DEFAULT_WORKERS = 1;
+- STAGE_TWO_DEFAULT_BATCH_SIZE = 50000;
+- STAGE_TWO_MAX_OUTPUT_PART_ROWS = 50000;
+- STAGE_TWO_PACKET_BATCH_SIZE = 50000;
+- STAGE_TWO_PACKET_PARSE_MODE = packet-summary;
+- STAGE_TWO_TEXT_ENCODINGS включает utf-8, utf-16, cp1251, latin-1.
+
+Безопасность:
+
+- .env в документацию не переносится;
+- реальные секреты, URL БД и пароли не должны попадать в docs или git.
+
+
+3. Зависимости
+==============
+
+requirements.txt:
+
+- alembic==1.18.4;
+- duckdb==1.5.2;
+- psycopg[binary]==3.3.4;
+- pyarrow==16.1.0;
+- python-dotenv==1.1.1;
+- rich==15.0.0;
+- sqlalchemy==2.0.50.
+
+Назначение зависимостей:
+
+- SQLAlchemy + psycopg — работа с PostgreSQL Catalog;
+- Alembic — миграции БД;
+- PyArrow — запись Parquet;
+- DuckDB — аналитические SQL-проверки поверх Parquet;
+- Rich — удобный CLI output;
+- python-dotenv — загрузка локального окружения.
+
+Отдельно:
+
+- pytest используется тестами, но не указан в requirements.txt.
+
+
+4. Общая структура репозитория
+==============================
+
+Корень:
+
+- manage.py — CLI entrypoint;
+- config.py — конфигурация путей, storage, DB, defaults;
+- docker-compose.yml — локальная инфраструктура;
+- requirements.txt — зависимости;
+- stage_two_dns_host_normalization_commands.txt — операционный runbook.
+
+Основной код:
+
+- scripts/ — весь application code;
+- scripts/handlers/ — Stage One handlers;
+- scripts/db/ — DB config, session, SQLAlchemy models, repositories, migrations;
+- scripts/stage_two/ — Stage Two normalization/catalog pipeline.
+
+Контракты:
+
+- schemas/normalized/normalized_event_v1.json;
+- schemas/features/feature_artifact_v1.json;
+- schemas/model_ready/model_ready_v1.json.
+
+Тесты:
+
+- tests/stage_two/.
+
+Документация:
+
+- docs/ru/;
+- docs/en/;
+- docs/ru/code-documentation/;
+- docs/ru/normalization/.
+
+Planning:
+
+- planning/stage-one/;
+- planning/stage-two/.
+
+
+5. Stage One: handlers
+======================
+
+Stage One отвечает за подготовку файловой структуры и первичный анализ
+датасетов. Этот слой не обучает модели и не создает normalized Parquet.
+
+5.1 scripts/handlers/router_handler.py
+--------------------------------------
+
+Назначение:
+
+- dispatch для service-веток:
+  - analyze-dataset;
+  - filter-dataset;
+  - sort;
+  - save-sort;
+  - dns-analyze;
+  - host-analyze.
+
+5.2 scripts/handlers/json_handler/json_data.py
+----------------------------------------------
+
+Главный класс:
+
+- JsonDataManager.
+
+Назначение:
+
+- создает директории под JSON;
+- проверяет существование файла;
+- читает JSON с default fallback;
+- пишет и обновляет JSON.
+
+Используется Stage One handlers как общий utility для temp_data JSON maps.
+
+5.3 scripts/handlers/analyze_dataset/
+-------------------------------------
+
+Файлы:
+
+- dns_dataset_handler.py;
+- host_dataset_handler.py;
+- router_analyze.py.
+
+Классы:
+
+- DNSDatasetHandler;
+- HostDatasetHandler;
+- DNSAnalysisResult;
+- HostAnalysisResult.
+
+Назначение:
+
+- пройти raw DNS/Host dataset roots;
+- определить role по path tokens;
+- сгруппировать файлы по TRAIN / VALIDATION / TEST;
+- сохранить JSON-карты путей в temp_data.
+
+Важные свойства:
+
+- валидирует наличие корневых директорий;
+- не меняет raw-файлы;
+- готовит вход для дальнейших filter/sort/save-sort шагов.
+
+5.4 scripts/handlers/filter_dataset/
+------------------------------------
+
+Файлы:
+
+- filter_host_dataset_handler.py;
+- router_filter.py.
+
+Классы:
+
+- HostDatasetFilterHandler;
+- HostFilterResult.
+
+Назначение:
+
+- фильтрует Host datasets;
+- оставляет допустимые файлы;
+- фиксирует причины исключений;
+- сохраняет отфильтрованные role maps.
+
+Важное:
+
+- фильтр является audit-friendly: код отслеживает exclusion reasons;
+- используется до сортировки Host datasets.
+
+5.5 scripts/handlers/sort/
+--------------------------
+
+Файлы:
+
+- sort_dns_dataset_handler.py;
+- sort_host_dataset_handler.py;
+- router_sort.py.
+
+Классы:
+
+- DNSDatasetSortHandler;
+- HostDatasetSortHandler;
+- DNSDatasetSortResult;
+- HostDatasetSortResult.
+
+Назначение:
+
+- материализовать sorted dataset tree;
+- разложить файлы по role и source_format;
+- строить deterministic destination paths;
+- избегать конфликтов имен через hash-based suffix.
+
+Важное:
+
+- DNS и Host имеют разные правила format detection;
+- существующие идентичные файлы обрабатываются идемпотентно.
+
+5.6 scripts/handlers/save_sort/
+-------------------------------
+
+Файлы:
+
+- save_sort_dns_path_handler.py;
+- save_sort_host_path_handler.py;
+- router_save.py.
+
+Классы:
+
+- DNSSortedPathExportHandler;
+- HostSortedPathExportHandler;
+- DNSSortedPathExportResult;
+- HostSortedPathExportResult.
+
+Назначение:
+
+- сканировать sorted tree;
+- экспортировать role/format/path maps;
+- подготовить JSON-индекс для analysis и Stage Two catalog ingestion.
+
+5.7 scripts/handlers/dns_analyze/
+---------------------------------
+
+Назначение:
+
+- анализировать DNS buckets;
+- генерировать JSON summaries и Markdown reports;
+- оценивать schema, labels, timestamps, limitations.
+
+Основные анализаторы:
+
+- DNSTrainCSVContentAnalysisHandler;
+- DNSTrainPCAPContentAnalysisHandler;
+- DNSTrainPCAPCSVContentAnalysisHandler;
+- DNSTestCSVContentAnalysisHandler;
+- DNSTestPCAPContentAnalysisHandler;
+- DNSTestPCAPCSVContentAnalysisHandler;
+- DNSValidationPCAPContentAnalysisHandler;
+- DNSValidationTXTContentAnalysisHandler.
+
+Общий паттерн:
+
+1. Прочитать sorted-path JSON.
+2. Вытащить пути конкретного role/format.
+3. Взять bounded samples.
+4. Проанализировать строки/поля/типы/labels/timestamps.
+5. Сформировать RU/EN Markdown и reports.
+
+5.8 scripts/handlers/host_analyze/
+----------------------------------
+
+Назначение:
+
+- анализировать Host buckets;
+- покрывать TRAIN / VALIDATION / TEST;
+- генерировать документацию и summaries по множеству Host форматов.
+
+В директории 61 Python-файл, потому что Host datasets сильно неоднородны.
+
+Покрываемые семейства форматов:
+
+- csv;
+- auth.log;
+- cpu.log;
+- diskio.log;
+- filesystem.log;
+- fsstat.log;
+- ghc;
+- info;
+- journal / journal~;
+- json / json-1;
+- load.log;
+- log / log-1 / log-2 / log-3;
+- mail-info-1 / mail-warn-1;
+- mainlog variants;
+- memory.log;
+- messages variants;
+- netflow_ids;
+- network.log;
+- pcap;
+- process.log;
+- process.summary.log;
+- sc;
+- service.log;
+- socket.summary.log;
+- syslog variants;
+- txt;
+- uptime.log;
+- xml;
+- TEST bson/csv/json/log/netflow_day/txt/wls_day;
+- VALIDATION cap/csv/json/netflow_day/pcap/pcapng/txt/wls_day.
+
+Общий паттерн файлов:
+
+- dataclass Result;
+- Handler class;
+- analyze_and_generate_docs();
+- чтение source JSON;
+- выбор sample paths;
+- сбор schema/statistics;
+- генерация RU/EN Markdown/report.
+
+Важно:
+
+- Stage One host_analyze файлы — это analysis/report-generation code;
+- production normalization parsers находятся не здесь, а в
+  scripts/stage_two/parsers/.
+
+
+6. DB layer
+===========
+
+6.1 scripts/db/config.py
+-----------------------
+
+Класс:
+
+- DatabaseSettings.
+
+Назначение:
+
+- загрузить настройки PostgreSQL;
+- контролировать SQL echo и параметры engine/pool.
+
+6.2 scripts/db/session.py
+-------------------------
+
+Функции:
+
+- get_engine();
+- create_session_factory();
+- session_scope().
+
+Назначение:
+
+- создать SQLAlchemy Engine;
+- создать sessionmaker;
+- дать transaction-scoped context manager;
+- делать rollback на ошибках;
+- закрывать session в finally.
+
+6.3 scripts/db/models/
+---------------------
+
+Основные модели:
+
+- Dataset — metadata датасета на уровне source group и split role.
+- DatasetFile — один raw-файл в catalog: путь, hash, размер, role, branch,
+  source_format, status, hints и metadata.
+- IngestionRun — история запуска catalog ingestion.
+- ParserRegistry — registry parser metadata по branch/source_format/role.
+- ParserRun — один запуск parser/normalization по конкретному file_id.
+- SchemaVersion — зарегистрированные схемы.
+- LabelMappingRule — правила label mapping.
+- NormalizedArtifact — Parquet artifact после parser run.
+- FeatureArtifact — Parquet artifact после feature extraction.
+- ModelReadyArtifact — X/y/sequence/split/preprocessing metadata artifact.
+- PreprocessingArtifact — scaler/encoder/imputer artifact, fit только на TRAIN.
+- DataQualityReport — результаты quality/leakage/check reports.
+
+Важные constraints:
+
+- branch, role, status, severity и data_type ограничены allowed values;
+- Dataset уникален по name/branch/role и slug/branch/role;
+- DatasetFile уникален по dataset_id/file_path;
+- PreprocessingArtifact имеет CHECK fitted_on_role = TRAIN.
+
+6.4 scripts/db/repositories/
+----------------------------
+
+Классы:
+
+- BaseRepository;
+- DatasetRepository;
+- DatasetFileRepository;
+- IngestionRepository;
+- ParserRepository;
+- SchemaRepository;
+- LabelRepository;
+- ArtifactRepository;
+- PreprocessingRepository;
+- DataQualityRepository.
+
+Назначение:
+
+- инкапсулировать SQLAlchemy-запросы;
+- централизовать upsert/status lifecycle;
+- управлять parser run lifecycle;
+- регистрировать artifacts;
+- искать label rules;
+- сохранять quality reports.
+
+Важные детали:
+
+- DatasetFileRepository умеет bulk upsert и выбор READY_FOR_PARSING файлов;
+- ParserRepository создает/resume/finish/fail parser_runs;
+- ArtifactRepository регистрирует normalized/feature/model-ready artifacts;
+- DataQualityRepository хранит результаты проверок.
+
+6.5 scripts/db/migrations/
+--------------------------
+
+Назначение:
+
+- Alembic environment;
+- schema migration для Stage Two catalog.
+
+Главная migration:
+
+- 5a38996dff5f_create_stage_two_catalog_schema.py.
+
+Команда:
+
+alembic -c scripts/db/migrations/alembic.ini upgrade head
+
+6.6 scripts/db/smoke_check.py
+-----------------------------
+
+Назначение:
+
+- быстрая проверка DB foundation;
+- проверяет constraints и базовое поведение catalog layer.
+
+
+7. Stage Two CLI
+================
+
+Файл:
+
+- scripts/stage_two/cli.py.
+
+Назначение:
+
+- основной router Stage Two;
+- парсит команды;
+- строит typed request dataclasses;
+- открывает DB sessions;
+- вызывает нужный service;
+- печатает JSON/progress output.
+
+Реализованные команды:
+
+- bootstrap-storage;
+- catalog-ingest;
+- seed-parser-registry;
+- parser-coverage;
+- mark-ready;
+- normalize-format;
+- normalize-all;
+- benchmark-normalization;
+- split-large-files;
+- normalize-dns;
+- normalize-host;
+- run-duckdb-checks;
+- run-leakage-checks;
+- trace-artifact.
+
+Рекомендуемый production route:
+
+python manage.py stage-two normalize-format --branch <branch> --role <role> --format <format> --resume
+
+Почему:
+
+- явно фиксирует branch;
+- явно фиксирует role;
+- явно фиксирует source_format;
+- снижает риск смешивания split/format;
+- поддерживает runtime options и resource profiles.
+
+
+8. Stage Two storage and ingestion
+==================================
+
+8.1 scripts/stage_two/storage/bootstrap.py
+------------------------------------------
+
+Назначение:
+
+- идемпотентно создать структуру PATH_DATA_STORAGE.
+
+Создаваемые области:
+
+- postgres/;
+- pgadmin/;
+- parquet/normalized/;
+- parquet/features/;
+- parquet/model_ready/;
+- duckdb/sql/;
+- duckdb/exports/;
+- logs/stage-two/;
+- backups/;
+- temp_data/;
+- schemas/;
+- reports/ru/stage-two/;
+- reports/en/stage-two/;
+- config/.
+
+8.2 scripts/stage_two/ingestion/
+--------------------------------
+
+Файлы:
+
+- scanner.py;
+- file_hash_service.py;
+- catalog_ingestion_service.py.
+
+Назначение:
+
+- сканировать PATH_FOLDER_DATASETS_FILTER;
+- определить branch, role, source_format, dataset_name, dataset_slug;
+- посчитать stat и SHA-256;
+- зарегистрировать datasets и dataset_files в PostgreSQL Catalog.
+
+Важные статусы:
+
+- REGISTERED — новый обычный файл;
+- EMPTY_FILE — файл нулевого размера;
+- UNSUPPORTED_FORMAT — неподдержанный inferred format;
+- CHANGED/DISCOVERED — статусы для повторного ingest/update.
+
+Raw-файлы ingestion не изменяет.
+
+8.3 scripts/stage_two/catalog_exclusions.py
+-------------------------------------------
+
+Назначение:
+
+- исключать известные raw/helper/duplicate buckets;
+- не допускать ошибочную нормализацию того, что не является telemetry stream.
+
+
+9. Parser registry и readiness
+==============================
+
+9.1 scripts/stage_two/parser_registry/
+--------------------------------------
+
+Файлы:
+
+- parser_registry_seed.json;
+- seed.py;
+- resolver.py.
+
+Назначение:
+
+- загрузить parser registry seed;
+- зарегистрировать schema_versions;
+- зарегистрировать parser_registry rows;
+- проверить parser_module/parser_class;
+- выбирать active parser по branch/source_format/role.
+
+Поведение resolver:
+
+branch + source_format + (supported_role == role OR supported_role IS NULL)
+ORDER BY priority ASC, id ASC
+
+Если parser class отсутствует или невалиден:
+
+- строка может быть сохранена как inactive;
+- диагностика попадает в config_json.
+
+9.2 scripts/stage_two/parser_coverage.py
+----------------------------------------
+
+Назначение:
+
+- построить matrix catalog buckets vs parser registry;
+- показать missing parser rows;
+- показать catalog gaps;
+- использовать перед массовым mark-ready/normalize.
+
+9.3 scripts/stage_two/status_tools.py
+-------------------------------------
+
+Классы:
+
+- MarkReadyRequest;
+- MarkReadyDiagnostic;
+- MarkReadyCandidate;
+- MarkReadyResult;
+- MarkReadyService.
+
+Назначение:
+
+- dry-run/apply workflow для READY_FOR_PARSING;
+- проверка parser availability;
+- перевод eligible files в READY_FOR_PARSING.
+
+Безопасный порядок:
+
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --apply
+
+
+10. Stage Two parsers
+=====================
+
+10.1 scripts/stage_two/parsers/base.py
+--------------------------------------
+
+Классы:
+
+- BaseParser;
+- ParserContext;
+- ParserResult;
+- ParserCounters;
+- ParserStatusDecision.
+
+Назначение:
+
+- общий contract для всех parser implementations;
+- поддержка parse() и streaming parse_batches();
+- единый расчет parser/file statuses;
+- валидация required normalized fields.
+
+Маппинг статусов:
+
+- SUCCESS -> parser_runs.SUCCESS, dataset_files.PARSED;
+- PARTIAL_SUCCESS -> parser_runs.PARTIAL_SUCCESS, dataset_files.PARTIALLY_PARSED;
+- FAILED -> parser_runs.FAILED, dataset_files.FAILED;
+- EMPTY_FILE -> parser_runs.SKIPPED, dataset_files.EMPTY_FILE;
+- UNSUPPORTED_FORMAT -> parser_runs.SKIPPED, dataset_files.UNSUPPORTED_FORMAT;
+- SKIPPED -> parser_runs.SKIPPED, dataset_files.SKIPPED.
+
+10.2 scripts/stage_two/parsers/common.py
+----------------------------------------
+
+Назначение:
+
+- build_normalized_event();
+- deterministic event_uid;
+- traceability fields;
+- timestamp fields;
+- default label fields;
+- helper file classification.
+
+Важное:
+
+- отсутствующий timestamp остается missing;
+- current runtime time не используется как timestamp события;
+- helper files могут быть SKIPPED или metadata events.
+
+10.3 scripts/stage_two/parsers/input_reader.py
+----------------------------------------------
+
+Классы:
+
+- UniversalInputReader;
+- ReaderMetadata;
+- InputReaderError.
+
+Назначение:
+
+- безопасное чтение text/binary/compressed/base64-like файлов;
+- detection encoding/compression/binary type;
+- bounded base64 decode;
+- safe ZIP member selection.
+
+10.4 DNS parsers
+----------------
+
+Файл:
+
+- scripts/stage_two/parsers/dns.py.
+
+Классы:
+
+- DnsCsvParser;
+- DnsPcapCsvParser;
+- DnsTxtDomainListParser.
+
+Назначение:
+
+- нормализация DNS CSV;
+- нормализация DNS pcap.csv;
+- нормализация TXT domain lists;
+- обработка header/headerless CSV;
+- извлечение domain из URL-like values;
+- timestamp parsing;
+- label-safe поведение.
+
+10.5 Host parsers
+-----------------
+
+Файл:
+
+- scripts/stage_two/parsers/host.py.
+
+Классы:
+
+- HostCsvParser;
+- HostJsonLinesParser;
+- HostLineLogParser;
+- HostSyscallTraceParser.
+
+Назначение:
+
+- Host CSV;
+- JSON Lines;
+- mixed line logs;
+- systemd journal-like rows;
+- syscall/API traces;
+- GHC/numeric syscall sequences;
+- host sample name files;
+- helper/reference files.
+
+Важные свойства:
+
+- рассчитан на streaming/batch parsing;
+- сохраняет unknown source fields в raw_fields_json или metadata_json;
+- TEST labels обрабатываются консервативно;
+- syscall reference/helper files не считаются telemetry.
+
+10.6 Packet parsers
+-------------------
+
+Файл:
+
+- scripts/stage_two/parsers/packet.py.
+
+Классы:
+
+- PacketRecord;
+- PacketSummary;
+- PacketCaptureParser;
+- DnsPacketCaptureParser;
+- HostPacketCaptureParser.
+
+Назначение:
+
+- PCAP/CAP/PCAPNG summary parsing;
+- IPv4/IPv6 metadata;
+- TCP/UDP protocol info;
+- TCP flags;
+- DNS payload summary.
+
+Важное:
+
+- binary packet files нельзя делить line splitter-ом;
+- default packet mode — packet-summary.
+
+10.7 BSON parser
+----------------
+
+Файл:
+
+- scripts/stage_two/parsers/bson.py.
+
+Классы:
+
+- BsonDecodeError;
+- Descriptor;
+- HostBsonSandboxParser.
+
+Назначение:
+
+- BSON sandbox parsing;
+- descriptor/event join;
+- nested events;
+- process context;
+- event arguments;
+- timestamp extraction.
+
+10.8 Netflow parser
+-------------------
+
+Файл:
+
+- scripts/stage_two/parsers/netflow.py.
+
+Классы:
+
+- ParsedNetflowLine;
+- HostNetflowParser.
+
+Назначение:
+
+- netflow_day;
+- netflow_ids;
+- WLS-like JSON lines;
+- flow/IDS/eventlog signal extraction;
+- protocol/entity/timestamp/features metadata.
+
+10.9 Metrics parser
+-------------------
+
+Файл:
+
+- scripts/stage_two/parsers/metrics.py.
+
+Классы:
+
+- MetricPoint;
+- HostMetricbeatParser.
+
+Назначение:
+
+- metricbeat-like host metrics;
+- metric point extraction;
+- annotation row handling;
+- metric unit metadata.
+
+10.10 XML parser
+----------------
+
+Файл:
+
+- scripts/stage_two/parsers/xml.py.
+
+Класс:
+
+- HostXmlParser.
+
+Назначение:
+
+- XML event parsing;
+- flatten XML nodes/attributes;
+- event/timestamp/label/metadata extraction.
+
+10.11 Shared parser utilities
+-----------------------------
+
+Файлы:
+
+- logs.py;
+- json_utils.py;
+- csv_utils.py.
+
+Назначение:
+
+- parsing host log lines;
+- Mongo-style JSON wrapper normalization;
+- flatten JSON objects;
+- CSV header detection;
+- CSV row cleanup;
+- compact row utilities.
+
+
+11. Normalization services
+==========================
+
+Директория:
+
+- scripts/stage_two/normalization/.
+
+Файлы:
+
+- runner.py;
+- dns_service.py;
+- host_service.py;
+- checkpoint.py;
+- options.py;
+- performance.py;
+- schema_contracts.py.
+
+Основные контракты:
+
+- NormalizeFormatRequest;
+- NormalizeAllRequest;
+- NormalizeFileResult;
+- NormalizeFormatResult;
+- NormalizeAllGroupResult;
+- NormalizeAllResult;
+- NormalizationOptions.
+
+Назначение:
+
+- выбрать READY_FOR_PARSING files;
+- разрешить parser через registry;
+- получить schema version;
+- создать/resume parser_run;
+- собрать ParserContext;
+- вызвать parse_batches();
+- записать normalized Parquet parts;
+- зарегистрировать normalized_artifacts;
+- обновить dataset_files.status;
+- сохранить parser reports.
+
+Поведение:
+
+- normalize-format работает с одним branch/role/source_format;
+- normalize-all группирует ready files внутри branch по role/source_format;
+- resume пропускает уже успешные matching artifacts;
+- failures изолируются по file/chunk, насколько позволяет формат.
+
+
+12. Execution/performance layer
+===============================
+
+Директория:
+
+- scripts/stage_two/execution/.
+
+Файлы:
+
+- work_unit.py;
+- planner.py;
+- executor.py;
+- runtime_settings.py;
+- retry_policy.py;
+- progress.py;
+- format_policy.py.
+
+Назначение:
+
+- планировать work units;
+- применять resource profiles;
+- применять format-specific policy;
+- выполнять bounded multiprocessing;
+- не разделять SQLAlchemy session между workers;
+- поддерживать progress и retry semantics.
+
+Resource profiles:
+
+- safe;
+- balanced;
+- fast;
+- aggressive.
+
+Format policy:
+
+- PCAP/PCAPNG/CAP/BSON ограничиваются более осторожными параметрами;
+- line-based logs/TXT/syscall traces могут использовать fast/aggressive только
+  после benchmark validation.
+
+
+13. Parquet, DuckDB, quality, leakage
+=====================================
+
+13.1 scripts/stage_two/parquet/writer.py
+----------------------------------------
+
+Класс:
+
+- ParquetArtifactWriter.
+
+Назначение:
+
+- писать normalized/features/model_ready rows в Parquet;
+- использовать compression, по умолчанию zstd;
+- писать через temp-file/atomic flow;
+- валидировать output перед catalog registration.
+
+13.2 scripts/stage_two/duckdb/
+------------------------------
+
+Файлы:
+
+- service.py;
+- sql/create_views.sql.
+
+Назначение:
+
+- создать DuckDB views:
+  - normalized_all;
+  - features_all;
+  - model_ready_all;
+- запускать SQL analytics checks поверх Parquet.
+
+13.3 scripts/stage_two/quality/
+-------------------------------
+
+Файлы:
+
+- checks.py;
+- checkers.py;
+- post_run_validation.py.
+
+Назначение:
+
+- DataQualityChecker;
+- LeakageChecker;
+- post-run validation для normalize-format.
+
+Проверки:
+
+- row counts;
+- required columns;
+- split contamination;
+- schema drift;
+- nulls/duplicates;
+- forbidden X columns;
+- TEST contamination;
+- traceability errors;
+- reconciliation между catalog/parser/artifacts.
+
+Важное:
+
+- leakage severity CRITICAL означает, что затронутые artifacts нельзя
+  использовать downstream.
+
+
+14. Feature/model-ready слой
+============================
+
+14.1 scripts/stage_two/features/
+--------------------------------
+
+Файлы:
+
+- contracts.py;
+- writer.py.
+
+Ключевые элементы:
+
+- FEATURE_GROUPS;
+- X_EXCLUDED_COLUMNS;
+- REQUIRED_TRACEABILITY_FIELDS;
+- FeatureArtifactContract.
+
+Назначение:
+
+- contract feature artifacts;
+- список колонок, запрещенных для X;
+- запись/регистрация prepared feature rows.
+
+Текущий статус:
+
+- contracts и writer есть;
+- полного feature extraction CLI pipeline пока нет.
+
+14.2 scripts/stage_two/model_ready/
+-----------------------------------
+
+Файлы:
+
+- contracts.py;
+- registry.py.
+
+Ключевые элементы:
+
+- MODEL_READY_DATA_TYPES: X, y, sequence, split_index, preprocessing_metadata;
+- TRAIN_FIT_ROLE = TRAIN;
+- X_FORBIDDEN_COLUMNS;
+- ModelReadyRegistryService.
+
+Назначение:
+
+- validate model-ready data type;
+- reject forbidden leakage columns in X;
+- register model-ready artifacts;
+- register preprocessing artifacts.
+
+Текущий статус:
+
+- registry/contract services есть;
+- полного CLI для сборки X/y/model-ready artifacts пока нет.
+
+
+15. Labels и traceability
+=========================
+
+15.1 scripts/stage_two/labels/resolver.py
+-----------------------------------------
+
+Назначение:
+
+- резолвить canonical label fields;
+- сохранять unlabeled как явный статус;
+- не считать missing label benign;
+- ограничивать filename/embedded hints для TEST.
+
+15.2 scripts/stage_two/traceability/service.py
+----------------------------------------------
+
+Классы:
+
+- TraceabilityService;
+- TraceabilityChain;
+- TraceabilityError.
+
+Назначение:
+
+- восстановить lineage от model-ready artifact до raw dataset file.
+
+Цепочка:
+
+model_ready_artifacts
+-> feature_artifacts
+-> normalized_artifacts
+-> parser_runs
+-> dataset_files
+-> datasets
+
+CLI:
+
+python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
+
+
+16. Reports, splitting, benchmark, readiness
+============================================
+
+16.1 scripts/stage_two/reports/parser_reports.py
+------------------------------------------------
+
+Назначение:
+
+- parser coverage reports;
+- parser run reports;
+- diagnostics/warnings/counters/schema mismatch summaries.
+
+16.2 scripts/stage_two/splitting/large_files.py
+-----------------------------------------------
+
+Назначение:
+
+- split больших line-based files;
+- регистрация chunks в catalog;
+- перевод source file в SKIPPED при необходимости.
+
+Подходит для:
+
+- csv;
+- txt;
+- json/json-like;
+- log formats;
+- ghc;
+- sc;
+- netflow_day;
+- netflow_ids;
+- wls_day.
+
+Не использовать для:
+
+- cap;
+- pcap;
+- pcapng;
+- bson.
+
+16.3 scripts/stage_two/benchmark.py
+-----------------------------------
+
+Назначение:
+
+- выбрать benchmark files;
+- выполнить controlled normalization benchmark;
+- посчитать GB/hour, rows/events rates, parser/write timing;
+- оценить estimated time for 17GB;
+- записать JSON/Markdown reports.
+
+16.4 scripts/stage_two/readiness_check.py
+-----------------------------------------
+
+Назначение:
+
+- проверить migrations;
+- storage paths;
+- catalog counts;
+- schema versions;
+- parser coverage;
+- normalized artifacts;
+- artifact registrations;
+- quality/leakage state;
+- traceability;
+- raw file hashes.
+
+Команда:
+
+python -m scripts.stage_two.readiness_check
+
+16.5 scripts/stage_two/e2e_dry_run.py
+-------------------------------------
+
+Назначение:
+
+- создать small sample scenario;
+- зарегистрировать sample files;
+- выполнить sample normalization;
+- зарегистрировать sample feature/model-ready artifacts;
+- проверить end-to-end contracts.
+
+Команда:
+
+python -m scripts.stage_two.e2e_dry_run
+
+16.6 scripts/stage_two/cli_operational_smoke.py
+-----------------------------------------------
+
+Назначение:
+
+- smoke-test CLI behavior;
+- patched runtime/session/writer;
+- проверка scoping, rollback, parser coverage reports и artifact roles.
+
+
+17. JSON-схемы
+==============
+
+17.1 schemas/normalized/normalized_event_v1.json
+------------------------------------------------
+
+Назначение:
+
+- контракт normalized_event/v1;
+- все Stage Two parsers должны emit events по этому контракту.
+
+Группы полей:
+
+- traceability fields;
+- timestamp fields;
+- entity/event fields;
+- label fields;
+- features_json;
+- raw_fields_json;
+- metadata_json.
+
+17.2 schemas/features/feature_artifact_v1.json
+----------------------------------------------
+
+Назначение:
+
+- контракт feature artifacts;
+- allowed feature groups;
+- traceability requirements;
+- x_excluded_columns.
+
+17.3 schemas/model_ready/model_ready_v1.json
+--------------------------------------------
+
+Назначение:
+
+- контракт model-ready artifacts;
+- типы X/y/sequence/split_index/preprocessing_metadata;
+- forbidden X columns;
+- TRAIN-only preprocessing fit.
+
+
+18. Полный поток данных
+=======================
+
+18.1 Stage One
+--------------
+
+Raw datasets
+-> analyze_dataset handlers
+-> temp JSON maps
+-> Host filtering
+-> DNS/Host sorting
+-> sorted path export
+-> per-format content analysis docs
+-> PATH_FOLDER_DATASETS_FILTER
+
+18.2 Stage Two
+--------------
+
+PATH_FOLDER_DATASETS_FILTER
+-> catalog-ingest
+-> datasets / ingestion_runs / dataset_files
+-> seed-parser-registry
+-> schema_versions / parser_registry
+-> parser-coverage
+-> mark-ready
+-> READY_FOR_PARSING
+-> normalize-format / normalize-all
+-> parser_runs
+-> parquet/normalized
+-> normalized_artifacts
+-> DuckDB views/checks
+-> leakage checks
+-> readiness_check
+
+18.3 Future ML-facing flow
+--------------------------
+
+normalized_artifacts
+-> feature extraction
+-> feature_artifacts
+-> preprocessing artifacts fitted on TRAIN only
+-> model_ready_artifacts: X/y/sequence/split_index
+-> model training/evaluation
+
+Этот flow пока не реализован полностью как CLI pipeline.
+
+
+19. Инварианты безопасности и корректности
+==========================================
+
+Raw safety:
+
+- raw-файлы не изменяются;
+- Stage Two создает metadata и artifacts;
+- большие таблицы хранятся в Parquet;
+- PostgreSQL хранит metadata/status/path/hash/report/lineage.
+
+Split safety:
+
+- TRAIN, VALIDATION и TEST не смешиваются;
+- TEST не используется для training;
+- TEST не используется для fit preprocessing/scaler/encoder;
+- TEST не используется для feature selection;
+- TEST не используется для threshold tuning/model selection.
+
+Label safety:
+
+- labels не являются input features;
+- missing label не означает benign;
+- filename/scenario/path hints требуют audit trail;
+- TEST label hints ограничены.
+
+Leakage safety:
+
+- label/source/path/scenario/traceability fields не должны попадать в X;
+- contracts и LeakageChecker контролируют forbidden columns.
+
+Timestamp safety:
+
+- missing timestamp остается missing;
+- current time нельзя подставлять как event timestamp;
+- event_order используется только как порядок событий, а не абсолютное время.
+
+Traceability:
+
+- raw -> normalized -> features -> model-ready должна оставаться восстанавливаемой.
+
+
+20. Основные команды
+====================
+
+Stage Two setup:
+
+python manage.py stage-two bootstrap-storage
+alembic -c scripts/db/migrations/alembic.ini upgrade head
+python manage.py stage-two catalog-ingest
+python manage.py stage-two seed-parser-registry
+python manage.py stage-two parser-coverage
+
+Подготовить bucket:
+
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --apply
+
+Benchmark:
+
+python manage.py stage-two benchmark-normalization --branch host --role TEST --format txt --limit 10000 --sample-ratio 0.10 --resource-profile fast
+
+Нормализовать точный bucket:
+
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --resource-profile fast --resume
+
+Нормализовать все ready buckets в branch:
+
+python manage.py stage-two normalize-all --branch host --resource-profile balanced --resume
+
+Post-run gates:
+
+python manage.py stage-two run-duckdb-checks
+python manage.py stage-two run-leakage-checks
+python -m scripts.stage_two.readiness_check
+
+Traceability:
+
+python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
+
+Legacy:
+
+python manage.py stage-two normalize-dns 10
+python manage.py stage-two normalize-host 10
+
+Практическое правило:
+
+- для production runs использовать normalize-format;
+- перед apply делать mark-ready --dry-run;
+- перед batch runs запускать parser-coverage;
+- после normalization запускать DuckDB/leakage/readiness checks.
+
+
+21. Тесты
+=========
+
+Директория:
+
+- tests/stage_two/.
+
+Покрытые области:
+
+- catalog exclusions;
+- scanner source_format inference;
+- catalog ingestion;
+- dataset repositories;
+- parser registry seed;
+- parser coverage;
+- parser common/base contracts;
+- parser batch contracts;
+- parser smoke/input smoke/catalog smoke;
+- DNS CSV/TXT parser;
+- Host CSV/JSON/log/metricbeat/netflow/syscall/XML/BSON parsers;
+- packet capture parser;
+- normalization runner;
+- execution planner/executor;
+- format policy;
+- benchmark normalization;
+- large-file splitter;
+- Parquet writer;
+- DuckDB service;
+- leakage contracts;
+- post-run validation;
+- status tools;
+- label resolver.
+
+Команда, если pytest установлен:
+
+python -m pytest tests/stage_two
+
+Важно:
+
+- pytest не указан в requirements.txt;
+- если команда не запускается, нужен dev dependency pytest.
+
+
+22. Основные риски и technical debt
+===================================
+
+Code/runtime risks:
+
+- Host datasets сильно неоднородны;
+- большие txt/log/syscall/netflow files требуют streaming;
+- PCAP/PCAPNG/CAP/BSON требуют специализированной обработки;
+- mixed JSON/log schemas могут drift-ить;
+- Stage One analyzer files крупные и повторяющиеся.
+
+Docs/runtime risks:
+
+- config.manage_commands устарел относительно Stage Two CLI;
+- актуальный Stage Two help нужно брать из scripts/stage_two/cli.py;
+- часть docs описывает proposal-level планы, а не готовый ML pipeline.
+
+ML gaps:
+
+- нет полного feature extraction CLI;
+- нет полного model-ready build CLI;
+- нет preprocessing fit/transform orchestration;
+- нет training code для RF/XGBoost/CNN/LSTM;
+- нет SHAP/evaluation reports.
+
+Leakage risks:
+
+- TEST contamination;
+- filename/source/scenario leakage;
+- labels случайно попадают в X;
+- weak labels трактуются как ground truth без confidence/audit.
+
+
+23. Точки расширения
+====================
+
+Добавить новый Stage Two parser:
+
+1. Реализовать BaseParser в scripts/stage_two/parsers/.
+2. Emit normalized_event/v1 через base_event().
+3. Сохранять unknown source fields в raw_fields_json/metadata_json.
+4. Для больших файлов реализовать parse_batches().
+5. Добавить parser_registry_seed.json entry.
+6. Добавить smoke/unit tests.
+7. Запустить seed-parser-registry и parser-coverage.
+
+Добавить feature group:
+
+1. Обновить schemas/features/feature_artifact_v1.json.
+2. При необходимости обновить scripts/stage_two/features/contracts.py.
+3. Сохранить traceability fields.
+4. Проверить forbidden leakage columns.
+5. Добавить tests для contracts/leakage.
+
+Добавить model-ready build:
+
+1. Собрать X/y/sequence/split artifacts из feature_artifacts.
+2. Fit preprocessing только на TRAIN.
+3. Зарегистрировать PreprocessingArtifact.
+4. Зарегистрировать ModelReadyArtifact.
+5. Запустить run-leakage-checks и trace-artifact.
+6. Добавить tests на TEST isolation и forbidden X columns.
+
+Добавить CLI route:
+
+1. Добавить route в scripts/stage_two/cli.py.
+2. Добавить strict args parsing.
+3. Использовать typed request dataclass, если команда имеет параметры.
+4. DB work выполнять через session_scope.
+5. Добавить CLI parser tests.
+6. Обновить docs/ru/normalization/stage_two_commands.md.
+
+
+24. Практические правила поддержки
+==================================
+
+- Не менять raw dataset files.
+- Не использовать TEST для fit/training/tuning.
+- Не считать missing label benign.
+- Не подставлять current time вместо отсутствующего timestamp.
+- Не добавлять label/source/path/scenario fields в X.
+- Не полагаться на config.manage_commands как полный Stage Two help.
+- Перед mark-ready запускать parser-coverage.
+- Перед apply запускать dry-run.
+- Для повторных запусков использовать --resume.
+- Для risky formats использовать safe/balanced resource profile.
+- Для line-based больших файлов сначала benchmark, потом fast/aggressive.
+- После normalization запускать DuckDB/leakage/readiness gates.
+
+
+25. Итог
+========
+
+Проект Proposal — Python data engineering кодовая база для подготовки DNS/Host
+датасетов, нормализации heterogeneous raw-файлов и подготовки контролируемой
+основы для ML.
+
+Stage One готовит файловую структуру и документацию по данным. Stage Two
+реализует backend-подобный pipeline: PostgreSQL Catalog, parser registry,
+streaming-aware parsers, normalized Parquet artifacts, performance controls,
+quality checks, leakage checks и traceability.
+
+Код уже пригоден для контролируемых normalization runs по точным
+branch/role/source_format buckets. Полный ML слой — feature extraction,
+model-ready build, preprocessing, training, evaluation и explainability —
+требует дальнейшей реализации.
