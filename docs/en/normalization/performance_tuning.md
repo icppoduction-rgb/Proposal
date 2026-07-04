@@ -13,6 +13,17 @@ This document describes only implemented runtime options from `scripts/stage_two
 | `--hash-output-artifacts` | `false` | Compute SHA-256 for output Parquet artifacts. |
 | `--packet-mode` | `packet-summary` | Packet parsing mode: `packet-summary`, `dns-only`, `sample`. |
 | `--sample-size` | unset | Required for `--packet-mode sample`. |
+| `--resource-profile` | unset | Optional preset: `safe`, `balanced`, `fast`, or `aggressive`. |
+| `--engine` | `cpu` | Accepted values are `cpu`, `gpu`, `auto`; raw Stage Two parsers still run on CPU unless a parser-specific backend is implemented. |
+
+Resolution order:
+
+1. Start with constants from `config.py`.
+2. Apply `--resource-profile` values when a profile is provided.
+3. Apply explicit CLI overrides such as `--workers` and `--batch-size`.
+4. For `normalize-format` and `benchmark-normalization`, apply format policy for values that were not explicitly overridden.
+
+`normalize-all` resolves the shared runtime options from defaults/profile/explicit flags, but the current CLI route does not apply per-format policy to each group before calling the runner.
 
 Example:
 
@@ -132,7 +143,7 @@ The CLI prints `resolved_runtime_settings` before normalization. Treat `aggressi
 
 ### Format Policy
 
-When explicit CLI values are not provided, `normalize-format` applies a format policy after resource profile resolution:
+When explicit CLI values are not provided, `normalize-format` and `benchmark-normalization` apply a format policy after resource profile resolution:
 
 - line-based fast formats (`txt`, `sc`, `ghc`, log/syslog/messages/mainlog, `wls_day`, metric logs): higher workers and larger batches;
 - CSV / `pcap.csv` / NetFlow: moderate-high workers and large batches;
@@ -140,7 +151,7 @@ When explicit CLI values are not provided, `normalize-format` applies a format p
 - BSON: low workers;
 - PCAP / PCAPNG / CAP: low workers, `packet_batch_size=50000`, default `packet_mode=packet-summary`.
 
-Explicit CLI values still win over policy.
+Explicit CLI values still win over policy. `normalize-all` should be run with conservative explicit settings or a conservative profile when the ready groups include mixed/risky formats.
 
 ### Recommended Sequence
 

@@ -6,7 +6,7 @@
 
 Старые per-format отчеты были полезны как сырые заметки, но создавали дубли:
 
-- `dns/<role>/<format>.md` и `host/<role>/<format>.md` повторяли одну и ту же структуру для 66 format buckets;
+- `dns/<role>/<format>.md` и `host/<role>/<format>.md` повторяли одну и ту же структуру для 64 format buckets;
 - `general_dns_*` и `general_host_*` агрегировали те же сведения повторно;
 - `analysis-dataset.md` и `dataset_labels_availability_and_recommendations.md` частично пересекались с normalization/label docs.
 
@@ -16,7 +16,7 @@
 | --- | --- |
 | [dns_datasets.md](dns_datasets.md) | DNS TRAIN/VALIDATION/TEST: форматы, количество файлов, labels, timestamp/readiness, parser notes. |
 | [host_datasets.md](host_datasets.md) | Host TRAIN/VALIDATION/TEST: семейства данных, количество файлов, quality risks, parser notes. |
-| [format_status_matrix.md](format_status_matrix.md) | Единая таблица 66 format buckets со статусом readiness и ключевыми фактами. |
+| [format_status_matrix.md](format_status_matrix.md) | Единая таблица 64 format buckets со статусом readiness и ключевыми фактами. |
 | [labels_and_readiness.md](labels_and_readiness.md) | Label availability, canonical label rules, readiness statuses и anti-leakage правила. |
 | [parser_feature_recommendations.md](parser_feature_recommendations.md) | Рекомендации для Stage Two parser implementations и feature extraction. |
 | [source_inventory.md](source_inventory.md) | Индекс старых файлов, которые были объединены в новую структуру. |
@@ -39,14 +39,14 @@
 | `dns/TEST` | 3 | 1 | DNS test: фактически доступен только CSV. |
 | `host/TRAIN` | 43 | 60365 | Host train: telemetry, logs, JSON/JSON-lines, traces, flows, pcap. |
 | `host/VALIDATION` | 8 | 6686 | Host validation: metadata, JSON-lines, flows, traces, packet captures. |
-| `host/TEST` | 7 | 294589 | Host test: BSON, JSON, logs, traces, flows, WLS. |
-| **Итого** | **66** | **361675** | DNS и Host источники для feature extraction. |
+| `host/TEST` | 5 | 294584 | Host test: BSON, CSV, JSON, logs, traces. |
+| **Итого** | **64** | **361670** | DNS и Host источники для feature extraction. |
 
 ## Статусы готовности
 
 | Статус | Format buckets | Файлов | Значение |
 | --- | ---: | ---: | --- |
-| `READY_FOR_FEATURE_EXTRACTION` | 44 | 288871 | Формат можно подключать к feature extraction после streaming/schema-aware normalization. |
+| `READY_FOR_FEATURE_EXTRACTION` | 42 | 288866 | Формат можно подключать к feature extraction после streaming/schema-aware normalization. |
 | `NEEDS_CUSTOM_PARSER` | 14 | 72666 | Нужен специализированный parser или decoder. |
 | `PARTIALLY_SUPPORTED` | 6 | 138 | Формат частично пригоден, но содержит под-схемы, служебные файлы или требует fixed schema. |
 | `BROKEN_OR_EMPTY` | 2 | 0 | В подготовленном bucket нет входных файлов. |

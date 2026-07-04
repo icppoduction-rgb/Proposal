@@ -8,6 +8,8 @@ from typing import Any
 
 EXCLUDED_RAW_BUCKETS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("host", "VALIDATION", "wls_day", ("host", "VALIDATION", "wls_day")),
+    ("host", "TEST", "netflow_day", ("host", "TEST", "netflow_day")),
+    ("host", "TEST", "wls_day", ("host", "TEST", "wls_day")),
 )
 
 

@@ -16,8 +16,10 @@
 | DNS datasets | `CIC-Bell-DNS-2021` (`TRAIN` + `VALIDATION`), `CIC-Bell-DNS-EXF-2021` (`TRAIN`), `Mendeley-DNS-Exfiltration-Dataset` (`TEST`). |
 | Host datasets | `TRAIN`: ADFA IDS, LID-DS 2021, Maintainable Log Dataset; `VALIDATION`: LID-DS 2019, LANL, Windows Event Log / OTRF; `TEST`: Dynamic Malware Analysis, ISOT Cloud IDS, Unified Host-Network / LANL. |
 | Pipeline separation | DNS и Host обрабатываются отдельными ветками. |
-| Confirmed volumes | DNS sorted/exported files: 35; Host filtered kept paths: 361646 в старом QA, 361675 total files по актуальной analysis-dataset сводке с 66 buckets. |
-| Current docs | Stage One/Stage Two architecture, normalization, parser strategy, labels, leakage и traceability задокументированы в `analysis-dataset/`, `normalization/`, `code-documentation/`. |
+| Confirmed volumes | DNS sorted/exported files: 35; Host filtered kept paths: 361646 в старом QA, 361670 total files по актуальной analysis-dataset сводке с 64 buckets. |
+| Stage Two normalization | Реализованные CLI routes покрывают storage bootstrap, catalog ingestion, parser registry seed, parser coverage, mark-ready, normalization точного bucket, benchmark runs, splitting больших line-based files, DuckDB checks, leakage checks и traceability. |
+| Feature/model-ready services | Contracts и writer/registry services есть в `scripts/stage_two/features` и `scripts/stage_two/model_ready`, но полный end-to-end orchestration не опубликован через `manage.py`. |
+| Current docs | Stage One/Stage Two architecture, normalization, parser strategy, labels, leakage, performance controls и traceability задокументированы в `analysis-dataset/`, `normalization/`, `code-documentation/`. |
 
 ## Что является proposal/планом, а не подтвержденной реализацией
 
@@ -32,6 +34,15 @@
 | SHAP | Feature attribution and rank stability. | TreeSHAP/DeepSHAP/KernelSHAP не выбраны и не реализованы. |
 | Evaluation | Stratified k-fold CV, ablation, baseline comparisons. | Значение `k`, statistical tests, seeds и reports не зафиксированы. |
 | Runtime environment | Cloud fallback, hardware assumptions. | Hardware, Python/lib versions для ML stack не указаны; `requirements.txt` содержит только `python-dotenv` и `rich` без версий. |
+
+## Текущие замечания по реализации
+
+Сверено с кодом 2026-07-04:
+
+- Stage Two routing находится в `scripts/stage_two/cli.py`; `config.manage_commands` является старым печатным списком команд и не полон для текущего Stage Two.
+- `normalize-format` и `benchmark-normalization` перед запуском применяют resource profiles и format-specific runtime policy. `normalize-all` получает общие runtime options, но не применяет per-format policy на уровне CLI route.
+- Реализованные quality gates: parser reports, post-run validation для `normalize-format`, DuckDB checks, leakage checks и traceability lookup. Это проверки вокруг normalized/features/model-ready artifacts, а не полный ML experiment pipeline.
+- Репозиторий по-прежнему не подтверждает RF/XGBoost/CNN/LSTM training, preprocessing fit/transform orchestration, feature extraction CLI, model-ready build CLI, SHAP analysis или evaluation reports.
 
 ## QA по разделам proposal 3.3-3.8
 

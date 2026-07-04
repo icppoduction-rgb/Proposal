@@ -13,6 +13,17 @@
 | `--hash-output-artifacts` | `false` | Считать SHA-256 для output Parquet artifacts. |
 | `--packet-mode` | `packet-summary` | Режим packet parsing: `packet-summary`, `dns-only`, `sample`. |
 | `--sample-size` | unset | Обязателен для `--packet-mode sample`. |
+| `--resource-profile` | unset | Optional preset: `safe`, `balanced`, `fast` или `aggressive`. |
+| `--engine` | `cpu` | Допустимые значения: `cpu`, `gpu`, `auto`; raw Stage Two parsers все равно работают на CPU, пока не реализован отдельный parser-specific backend. |
+
+Порядок resolution:
+
+1. Стартовые значения берутся из constants в `config.py`.
+2. Если указан `--resource-profile`, применяются значения profile.
+3. Явные CLI overrides вроде `--workers` и `--batch-size` имеют приоритет над profile.
+4. Для `normalize-format` и `benchmark-normalization` затем применяется format policy к тем значениям, которые пользователь явно не переопределил.
+
+`normalize-all` получает общие runtime options из defaults/profile/explicit flags, но текущий CLI route не применяет per-format policy к каждой группе перед вызовом runner.
 
 Пример:
 
@@ -131,7 +142,7 @@ CLI печатает `resolved_runtime_settings` перед запуском nor
 
 ### Format policy
 
-Если пользователь явно не указал runtime параметры, `normalize-format` применяет format policy после profile resolution:
+Если пользователь явно не указал runtime параметры, `normalize-format` и `benchmark-normalization` применяют format policy после profile resolution:
 
 - быстрые line-based formats (`txt`, `sc`, `ghc`, log/syslog/messages/mainlog, `wls_day`, metric logs): больше workers и batch size;
 - CSV / `pcap.csv` / NetFlow: умеренно высокие workers и большие batches;
@@ -139,7 +150,7 @@ CLI печатает `resolved_runtime_settings` перед запуском nor
 - BSON: низкое число workers;
 - PCAP / PCAPNG / CAP: низкое число workers, `packet_batch_size=50000`, default `packet_mode=packet-summary`.
 
-Явные CLI значения не перезаписываются policy.
+Явные CLI значения не перезаписываются policy. Для `normalize-all` с mixed/risky ready groups используйте conservative explicit settings или conservative profile.
 
 ### Рекомендуемый порядок
 

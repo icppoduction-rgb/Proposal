@@ -94,9 +94,7 @@ Labels:
 | `csv` | 3 | `PARTIALLY_SUPPORTED` | `HostCsvParser` | отдельные label CSV maps; только TEST evaluation |
 | `json` | 7071 | `NEEDS_CUSTOM_PARSER` | `HostJsonLinesParser` | TEST не используется для training; external labels |
 | `log` | 4086 | `READY_FOR_FEATURE_EXTRACTION` | `HostLineLogParser` | external labels по умолчанию отсутствуют |
-| `netflow_day` | 2 | `READY_FOR_FEATURE_EXTRACTION` | `HostNetflowParser` | external labels по умолчанию отсутствуют |
 | `txt` | 274419 | `READY_FOR_FEATURE_EXTRACTION` | `HostSyscallTraceParser` | TEST не используется для training |
-| `wls_day` | 3 | `READY_FOR_FEATURE_EXTRACTION` | `HostNetflowParser` в текущем seed; WLS JSON-lines semantics отмечены |
 
 Ограничения:
 

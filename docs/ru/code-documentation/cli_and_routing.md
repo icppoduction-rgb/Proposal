@@ -24,6 +24,8 @@ manage.py
 
 Если `module` неизвестен, печатается `config.manage_commands`.
 
+Сверка с кодом от 2026-07-04: `config.manage_commands` является fallback-строкой для вывода в консоль и старше текущего Stage Two router. Для Stage Two используйте `scripts/stage_two/cli.py` и этот документ как актуальный список команд.
+
 ## Маршруты Stage One
 
 Файл: `scripts/handlers/router_handler.py`.
@@ -84,6 +86,7 @@ Host content actions включают `analyze-csv-content`, `analyze-auth-log-c
 | `mark-ready` | flags или fallback | перевести выбранные файлы в `READY_FOR_PARSING` |
 | `normalize-format` | flags или fallback | нормализовать одну группу `branch/role/source_format` |
 | `normalize-all` | flags или fallback | нормализовать все ready группы внутри branch по очереди |
+| `benchmark-normalization` | flags | измерить скорость одного точного bucket `branch/role/source_format` и оценить throughput |
 | `split-large-files` | flags | split line-based больших файлов |
 | `normalize-dns` | `[limit]` | legacy branch-level normalization для DNS ready files |
 | `normalize-host` | `[limit]` | legacy branch-level normalization для Host ready files |
@@ -101,6 +104,7 @@ python manage.py stage-two seed-parser-registry
 python manage.py stage-two parser-coverage
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
+python manage.py stage-two benchmark-normalization --branch dns --role TRAIN --format csv --limit 1000 --sample-ratio 0.10 --dry-run
 python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 10
 python manage.py stage-two run-duckdb-checks
 python manage.py stage-two run-leakage-checks
@@ -199,9 +203,11 @@ python manage.py stage-two split-large-files \
 
 ## Важные ограничения CLI
 
+- `python manage.py stage-two` без команды печатает `unknown Stage Two command` и legacy-текст `config.manage_commands`; этот вывод не содержит все новые команды и не должен считаться полным help.
 - `handlers` routes не принимают произвольные flags; `action` должен совпадать с router case.
 - Stage One content analysis падает, если нужный role/format bucket отсутствует в `sort-path-*-file.json`.
 - `catalog-ingest` сканирует `PATH_FOLDER_DATASETS_FILTER`, а не raw `PATH_FOLDER_DATASETS`.
 - `normalize-format` и `normalize-all` обрабатывают только `READY_FOR_PARSING`.
+- `benchmark-normalization` использует те же точные bucket-входы, что и `normalize-format`; actual benchmark принудительно включает resume behavior, если не указан `--dry-run`.
 - `normalize-all` группирует по `role/source_format` и сохраняет порядок ролей из `ACTIVE_DATASET_ROLE_VALUES`: `TRAIN`, `VALIDATION`, `TEST`.
 - `trace-artifact` работает только для уже зарегистрированных `model_ready_artifacts`.

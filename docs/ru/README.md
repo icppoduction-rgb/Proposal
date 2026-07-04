@@ -9,6 +9,15 @@
 - **исследовательские материалы и proposal** - цели, методология, dataset strategy, feature catalogue и планы;
 - **gaps и follow-up** - то, что еще не реализовано или требует уточнения.
 
+## Синхронизация с текущим кодом
+
+Последняя сверка с кодом: 2026-07-04.
+
+- Маршрутизация Stage Two реализована в `scripts/stage_two/cli.py`; этот файл является главным источником истины по поддержанным `stage-two` командам.
+- Fallback-список команд из `config.manage_commands`, который печатается при некоторых ошибках запуска, старше фактического router и не показывает все текущие Stage Two команды, включая `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization` и `split-large-files`.
+- Runtime defaults без resource profile консервативные: `workers=1`, `batch_size=50000`, `max_output_part_rows=50000`. Resource profiles и format policy для `normalize-format` могут изменить итоговые значения перед запуском.
+- Services для feature/model-ready writer/registry уже есть, но полный CLI для end-to-end feature extraction, model-ready build, model training и evaluation пока остается follow-up/proposal work.
+
 ## Быстрый старт
 
 | Если нужно | Читать |
@@ -44,7 +53,7 @@
 - [analysis-dataset/README.md](analysis-dataset/README.md) - итоговый индекс анализа датасетов.
 - [analysis-dataset/dns_datasets.md](analysis-dataset/dns_datasets.md) - DNS `TRAIN` / `VALIDATION` / `TEST`.
 - [analysis-dataset/host_datasets.md](analysis-dataset/host_datasets.md) - Host `TRAIN` / `VALIDATION` / `TEST`.
-- [analysis-dataset/format_status_matrix.md](analysis-dataset/format_status_matrix.md) - readiness matrix по 66 format buckets.
+- [analysis-dataset/format_status_matrix.md](analysis-dataset/format_status_matrix.md) - readiness matrix по 64 format buckets.
 - [analysis-dataset/labels_and_readiness.md](analysis-dataset/labels_and_readiness.md) - labels, readiness statuses и anti-leakage правила.
 
 ### Stage Two / Normalization

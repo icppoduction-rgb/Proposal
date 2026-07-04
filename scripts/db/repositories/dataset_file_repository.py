@@ -162,7 +162,10 @@ class DatasetFileRepository(BaseRepository[DatasetFile]):
             groups = [
                 group
                 for group in groups
-                if not (group["role"] == "VALIDATION" and group["source_format"] == "wls_day")
+                if not (
+                    (group["role"] == "VALIDATION" and group["source_format"] == "wls_day")
+                    or (group["role"] == "TEST" and group["source_format"] in {"netflow_day", "wls_day"})
+                )
             ]
             ready_wls_day_files = self.get_files_ready_for_parsing(
                 branch=branch,

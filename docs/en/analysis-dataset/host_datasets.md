@@ -1,6 +1,6 @@
 # Host datasets
 
-The Host branch contains 58 format buckets and 361640 files. It is the main source for host telemetry, sequence traces, runtime logs, Windows/Sysmon-like events, network flows, and packet captures.
+The Host branch contains 56 format buckets and 361635 files. It is the main source for host telemetry, sequence traces, runtime logs, Windows/Sysmon-like events, network flows, and packet captures.
 
 ## Host TRAIN
 
@@ -50,7 +50,7 @@ Validation packet/flow/trace files without embedded labels must be linked to val
 
 ## Host TEST
 
-Host TEST contains 7 format buckets and 294589 files. This set must not be used for training, but it is important for inference/evaluation.
+Host TEST contains 5 format buckets and 294584 files. This set must not be used for training, but it is important for inference/evaluation.
 
 | Format | Files | Status | Labels | Timestamp | Purpose |
 | --- | ---: | --- | --- | --- | --- |
@@ -58,9 +58,7 @@ Host TEST contains 7 format buckets and 294589 files. This set must not be used 
 | `csv` | 3 | `PARTIALLY_SUPPORTED` | label in separate label CSV | yes | Network/hybrid evaluation; labels join by IP or another confirmed key. |
 | `json` | 7071 | `NEEDS_CUSTOM_PARSER` | none | yes | JSON Lines, Mongo-style `NumberLong(...)`, large reports. |
 | `log` | 4086 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Line-oriented sandbox runtime logs. |
-| `netflow_day` | 2 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Large network flow files. |
 | `txt` | 274419 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Syscall/API sequence traces; very large number of files. |
-| `wls_day` | 3 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Windows/Sysmon-like authentication/process events. |
 
 ## Host feature extraction
 
@@ -77,6 +75,6 @@ Priority features:
 ## Host quality risks
 
 - Mixed schemas inside one extension, especially `json`, `log`, `syslog*`, `txt`, `xml`, `pcap` in TRAIN.
-- Very large sources: TEST `txt`, `bson`, `json`, `log`, `wls_day`, `netflow_day`.
+- Very large sources: TEST `txt`, `bson`, `json`, `log`.
 - Missing embedded labels in most Host telemetry/log/packet/sequence files.
 - Packet formats require binary parsers; BSON and Mongo-style JSON require specialized decoders.

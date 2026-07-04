@@ -24,6 +24,8 @@ manage.py
 
 Unknown modules print `config.manage_commands`.
 
+Code sync note, checked on 2026-07-04: `config.manage_commands` is a fallback printed string and is older than the current Stage Two router. Use `scripts/stage_two/cli.py` and this document as the authoritative command list for Stage Two commands.
+
 ## Stage One Routes
 
 File: `scripts/handlers/router_handler.py`.
@@ -84,6 +86,7 @@ File: `scripts/stage_two/cli.py`.
 | `mark-ready` | flags or fallback | move selected files to `READY_FOR_PARSING` |
 | `normalize-format` | flags or fallback | normalize one `branch/role/source_format` group |
 | `normalize-all` | flags or fallback | normalize all ready groups inside a branch |
+| `benchmark-normalization` | flags | benchmark one exact `branch/role/source_format` group and estimate throughput |
 | `split-large-files` | flags | split large line-based files |
 | `normalize-dns` | `[limit]` | legacy branch-level normalization for DNS ready files |
 | `normalize-host` | `[limit]` | legacy branch-level normalization for Host ready files |
@@ -101,6 +104,7 @@ python manage.py stage-two seed-parser-registry
 python manage.py stage-two parser-coverage
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
+python manage.py stage-two benchmark-normalization --branch dns --role TRAIN --format csv --limit 1000 --sample-ratio 0.10 --dry-run
 python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 10
 python manage.py stage-two run-duckdb-checks
 python manage.py stage-two run-leakage-checks
@@ -122,10 +126,12 @@ python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 
 ## Important CLI Constraints
 
+- `python manage.py stage-two` without a command prints `unknown Stage Two command` plus the legacy `config.manage_commands` text; that printed list omits newer commands and must not be treated as complete.
 - Stage One content analysis requires the corresponding role/format bucket in `sort-path-*-file.json`.
 - `catalog-ingest` reads sorted/filtered files from `PATH_FOLDER_DATASETS_FILTER`.
 - `mark-ready` should be run with `--dry-run` before `--apply`.
 - `normalize-format` is safer than legacy `normalize-dns`/`normalize-host` because it keeps role and format selection explicit.
+- `benchmark-normalization` uses the same exact bucket inputs as `normalize-format`; actual benchmark runs force resume behavior unless `--dry-run` is set.
 - `normalize-all` groups by `role/source_format` and preserves role order from `ACTIVE_DATASET_ROLE_VALUES`: `TRAIN`, `VALIDATION`, `TEST`.
 - `split-large-files` is intended for line-based formats. Do not use it for binary `cap`, `pcap`, `pcapng`, or `bson`.
 - TEST must never be used for training, preprocessing fit, threshold tuning, or feature selection.

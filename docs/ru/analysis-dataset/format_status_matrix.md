@@ -6,7 +6,7 @@
 
 | Статус | Format buckets | Файлов |
 | --- | ---: | ---: |
-| `READY_FOR_FEATURE_EXTRACTION` | 44 | 288871 |
+| `READY_FOR_FEATURE_EXTRACTION` | 42 | 288866 |
 | `NEEDS_CUSTOM_PARSER` | 14 | 72666 |
 | `PARTIALLY_SUPPORTED` | 6 | 138 |
 | `BROKEN_OR_EMPTY` | 2 | 0 |
@@ -93,6 +93,4 @@
 | `csv` | 3 | `PARTIALLY_SUPPORTED` | external label CSV | да | Labels только для evaluation; join по IP/ключу. |
 | `json` | 7071 | `NEEDS_CUSTOM_PARSER` | нет | да | JSON Lines, Mongo-style `NumberLong(...)`, reports. |
 | `log` | 4086 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Sandbox runtime logs. |
-| `netflow_day` | 2 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Большие flow files. |
 | `txt` | 274419 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Очень большие syscall/API traces; нужен streaming. |
-| `wls_day` | 3 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Windows/Sysmon-like events. |

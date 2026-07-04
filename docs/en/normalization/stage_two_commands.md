@@ -10,6 +10,8 @@ python manage.py stage-two <command> [args]
 
 `manage.py` receives `module`, `service`, `action`, and `extra_args`; `scripts/router_script.py` routes `module=stage-two` to `scripts.stage_two.cli.router_stage_two()`. Unknown Stage Two commands return `unknown Stage Two command`.
 
+Code sync note, checked on 2026-07-04: the fallback text printed by `config.manage_commands` is not a complete Stage Two help screen. It omits newer router commands such as `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, and `split-large-files`. Treat `scripts/stage_two/cli.py` as the source of truth for implemented commands.
+
 ## Full Run Order
 
 ```bash
@@ -22,6 +24,9 @@ python manage.py stage-two parser-coverage
 # Operational step: select a bucket and prepare only the required branch/role/format.
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --dry-run
 python manage.py stage-two mark-ready --branch dns --role TRAIN --format csv --apply
+
+# Optional benchmark before a full run.
+python manage.py stage-two benchmark-normalization --branch dns --role TRAIN --format csv --limit 1000 --sample-ratio 0.10 --dry-run
 
 # Main precise production/runbook command.
 python manage.py stage-two normalize-format --branch dns --role TRAIN --format csv --limit 100 --workers 1 --resume
@@ -49,11 +54,12 @@ python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 | 6 | `split-large-files` | Yes | Split large line-based ready files into chunks. |
 | 7 | `normalize-format` | Yes | Normalize one `branch/role/source_format`. |
 | 8 | `normalize-all` | Yes | Normalize all ready buckets inside one `dns` or `host` branch. |
-| 9 | `normalize-dns [limit]` | Yes | Legacy shortcut for DNS files in `READY_FOR_PARSING`. |
-| 10 | `normalize-host [limit]` | Yes | Legacy shortcut for Host files in `READY_FOR_PARSING`. |
-| 11 | `run-duckdb-checks` | Yes | Create DuckDB views and save analytics report. |
-| 12 | `run-leakage-checks` | Yes | Check model-ready/feature contracts for leakage. |
-| 13 | `trace-artifact` | Yes | Reconstruct lineage for a model-ready artifact. |
+| 9 | `benchmark-normalization` | Yes | Benchmark one exact `branch/role/source_format` bucket and estimate throughput. |
+| 10 | `normalize-dns [limit]` | Yes | Legacy shortcut for DNS files in `READY_FOR_PARSING`. |
+| 11 | `normalize-host [limit]` | Yes | Legacy shortcut for Host files in `READY_FOR_PARSING`. |
+| 12 | `run-duckdb-checks` | Yes | Create DuckDB views and save analytics report. |
+| 13 | `run-leakage-checks` | Yes | Check model-ready/feature contracts for leakage. |
+| 14 | `trace-artifact` | Yes | Reconstruct lineage for a model-ready artifact. |
 | - | `readiness_check`, `e2e_dry_run` | Not as `manage.py stage-two` | Run as Python modules. |
 
 ## `bootstrap-storage`

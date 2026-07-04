@@ -9,7 +9,7 @@ This document records which old files were merged into the new thematic structur
 | [README.md](README.md) | Section map, coverage, readiness counts, invariants. |
 | [dns_datasets.md](dns_datasets.md) | All DNS TRAIN/VALIDATION/TEST information. |
 | [host_datasets.md](host_datasets.md) | All Host TRAIN/VALIDATION/TEST information. |
-| [format_status_matrix.md](format_status_matrix.md) | 66 format buckets: files/status/labels/timestamp/action. |
+| [format_status_matrix.md](format_status_matrix.md) | 64 format buckets: files/status/labels/timestamp/action. |
 | [labels_and_readiness.md](labels_and_readiness.md) | Label policy, readiness statuses, LabelResolver guidance. |
 | [parser_feature_recommendations.md](parser_feature_recommendations.md) | Parser priorities, feature groups, quality checks. |
 
@@ -57,7 +57,7 @@ Format list: `cap`, `csv`, `json`, `netflow_day`, `pcap`, `pcapng`, `txt`, `wls_
 
 `host/test/*.md` was merged into `host_datasets.md` and `format_status_matrix.md`.
 
-Format list: `bson`, `csv`, `json`, `log`, `netflow_day`, `txt`, `wls_day`.
+Format list: `bson`, `csv`, `json`, `log`, `txt`.
 
 ## Why the old files are removed
 

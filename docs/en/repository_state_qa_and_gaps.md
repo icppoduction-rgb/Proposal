@@ -16,8 +16,10 @@ The original QA document recorded a repository review across `scripts`, `docs`, 
 | DNS datasets | `CIC-Bell-DNS-2021` (`TRAIN` + `VALIDATION`), `CIC-Bell-DNS-EXF-2021` (`TRAIN`), `Mendeley-DNS-Exfiltration-Dataset` (`TEST`). |
 | Host datasets | `TRAIN`: ADFA IDS, LID-DS 2021, Maintainable Log Dataset; `VALIDATION`: LID-DS 2019, LANL, Windows Event Log / OTRF; `TEST`: Dynamic Malware Analysis, ISOT Cloud IDS, Unified Host-Network / LANL. |
 | Pipeline separation | DNS and Host are processed as separate branches. |
-| Confirmed volumes | DNS sorted/exported files: 35; Host filtered kept paths: 361646 in the old QA; 361675 total files in the current analysis-dataset summary across 66 buckets. |
-| Current docs | Stage One/Stage Two architecture, normalization, parser strategy, labels, leakage, and traceability are documented in `analysis-dataset/`, `normalization/`, and `code-documentation/`. |
+| Confirmed volumes | DNS sorted/exported files: 35; Host filtered kept paths: 361646 in the old QA; 361670 total files in the current analysis-dataset summary across 64 buckets. |
+| Stage Two normalization | Implemented CLI routes cover storage bootstrap, catalog ingestion, parser registry seeding, parser coverage, mark-ready, exact bucket normalization, benchmark runs, large line-based file splitting, DuckDB checks, leakage checks, and traceability. |
+| Feature/model-ready services | Contracts plus writer/registry services exist under `scripts/stage_two/features` and `scripts/stage_two/model_ready`, but full end-to-end orchestration is not exposed through `manage.py`. |
+| Current docs | Stage One/Stage Two architecture, normalization, parser strategy, labels, leakage, performance controls, and traceability are documented in `analysis-dataset/`, `normalization/`, and `code-documentation/`. |
 
 ## Proposal-level, not confirmed implementation
 
@@ -32,6 +34,15 @@ The original QA document recorded a repository review across `scripts`, `docs`, 
 | SHAP | Feature attribution and rank stability. | TreeSHAP/DeepSHAP/KernelSHAP are not selected or implemented. |
 | Evaluation | Stratified k-fold CV, ablation, baseline comparisons. | `k`, statistical tests, seeds, and reports are not fixed. |
 | Runtime environment | Cloud fallback, hardware assumptions. | Hardware and ML library versions are not specified; `requirements.txt` contains only `python-dotenv` and `rich` without pinned versions. |
+
+## Current implementation notes
+
+Checked against code on 2026-07-04:
+
+- Stage Two command routing is in `scripts/stage_two/cli.py`; `config.manage_commands` is an older printed command list and is not complete for current Stage Two commands.
+- `normalize-format` and `benchmark-normalization` apply resource profiles and format-specific runtime policy before execution. `normalize-all` resolves shared runtime options but does not apply per-format policy in the CLI route.
+- The implemented quality gates are parser reports, post-run validation for `normalize-format`, DuckDB checks, leakage checks, and traceability lookup. They are checks around normalized/features/model-ready artifacts, not a complete ML experiment pipeline.
+- The repository still does not confirm RF/XGBoost/CNN/LSTM training, preprocessing fit/transform orchestration, feature extraction CLI, model-ready build CLI, SHAP analysis, or evaluation reports.
 
 ## QA for proposal sections 3.3-3.8
 

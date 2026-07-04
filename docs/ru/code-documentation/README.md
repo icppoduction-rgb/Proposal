@@ -63,6 +63,13 @@ Stage Two создает storage-структуру, регистрирует ra
 
 Фактические компоненты находятся в `scripts/stage_two`, `scripts/db`, `schemas`.
 
+Сверка с текущим кодом от 2026-07-04:
+
+- `router_stage_two()` поддерживает `bootstrap-storage`, `catalog-ingest`, `seed-parser-registry`, `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, `split-large-files`, `normalize-dns`, `normalize-host`, `run-duckdb-checks`, `run-leakage-checks` и `trace-artifact`.
+- `config.manage_commands` является только fallback-списком для вывода в консоль и не полон для новых Stage Two команд.
+- `normalize-format` и `benchmark-normalization` перед запуском применяют resource profiles и format-specific runtime policy; `normalize-all` получает общие runtime options, но не применяет per-format policy на уровне CLI route.
+- В `features/` и `model_ready/` есть contracts и registry/writer services, но полный training/evaluation pipeline через `manage.py` не опубликован.
+
 ## Ключевые инварианты
 
 1. Raw-файлы датасетов не изменяются.

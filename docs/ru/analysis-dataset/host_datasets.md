@@ -1,6 +1,6 @@
 # Host datasets
 
-Host-ветка содержит 58 format buckets и 361640 файлов. Это основной источник host telemetry, sequence traces, runtime logs, Windows/Sysmon-like событий, network flows и packet captures.
+Host-ветка содержит 56 format buckets и 361635 файлов. Это основной источник host telemetry, sequence traces, runtime logs, Windows/Sysmon-like событий, network flows и packet captures.
 
 ## Host TRAIN
 
@@ -50,7 +50,7 @@ Validation packet/flow/traces без встроенных labels нужно св
 
 ## Host TEST
 
-Host TEST содержит 7 format buckets и 294589 файлов. Набор нельзя использовать для обучения, но он важен для inference/evaluation.
+Host TEST содержит 5 format buckets и 294584 файлов. Набор нельзя использовать для обучения, но он важен для inference/evaluation.
 
 | Формат | Файлов | Статус | Labels | Timestamp | Назначение |
 | --- | ---: | --- | --- | --- | --- |
@@ -58,9 +58,7 @@ Host TEST содержит 7 format buckets и 294589 файлов. Набор �
 | `csv` | 3 | `PARTIALLY_SUPPORTED` | label в отдельных label CSV | да | Network/hybrid evaluation; labels join по IP или подтвержденному ключу. |
 | `json` | 7071 | `NEEDS_CUSTOM_PARSER` | нет | да | JSON Lines, Mongo-style `NumberLong(...)`, большие reports. |
 | `log` | 4086 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Line-oriented sandbox runtime logs. |
-| `netflow_day` | 2 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Большие network flow files. |
 | `txt` | 274419 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Syscall/API sequence traces; очень большое число файлов. |
-| `wls_day` | 3 | `READY_FOR_FEATURE_EXTRACTION` | нет | да | Windows/Sysmon-like authentication/process events. |
 
 ## Host feature extraction
 
@@ -77,6 +75,6 @@ Host TEST содержит 7 format buckets и 294589 файлов. Набор �
 ## Host quality risks
 
 - Mixed schemas inside one extension: especially `json`, `log`, `syslog*`, `txt`, `xml`, `pcap` in TRAIN.
-- Очень большие источники: TEST `txt`, `bson`, `json`, `log`, `wls_day`, `netflow_day`.
+- Очень большие источники: TEST `txt`, `bson`, `json`, `log`.
 - Missing embedded labels in most Host telemetry/log/packet/sequence files.
 - Packet formats require binary parsers; BSON and Mongo-style JSON require specialized decoders.

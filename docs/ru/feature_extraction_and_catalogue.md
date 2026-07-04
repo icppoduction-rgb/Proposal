@@ -50,7 +50,7 @@
 | DNS VALIDATION txt | `VALIDATION` | Domain length, label count, TLD/SLD, entropy. | Domain validation | `unknown` не использовать как class без policy. |
 | Host packet captures | `VALIDATION` / `TEST` | Packet/flow counts, protocol distribution, ports, TCP flags, DNS/LDAP/SMB/DCERPC indicators. | Reconnaissance, Lateral Movement, Exfiltration | Labels через scenario/external mapping. |
 | Host TEST bson/json/txt | `TEST` | API/syscall-like frequencies, n-grams, transitions, args, process context, command/path entropy. | Collection, Data Staging | Evaluation only. |
-| Host TEST netflow_day/csv | `TEST` | Flow duration, bytes/packets, ports, protocol, fan-in/fan-out, TCP flags. | Reconnaissance, Lateral Movement, Exfiltration | TEST-only; не обучать. |
+| Host TEST csv | `TEST` | Flow duration, bytes/packets, ports, protocol, fan-in/fan-out, TCP flags. | Reconnaissance, Lateral Movement, Exfiltration | TEST-only; не обучать. |
 
 ## DNS feature catalogue
 

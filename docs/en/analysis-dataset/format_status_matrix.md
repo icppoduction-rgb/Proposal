@@ -6,7 +6,7 @@ This matrix preserves the key facts from the previous 66 per-format reports: spl
 
 | Status | Format buckets | Files |
 | --- | ---: | ---: |
-| `READY_FOR_FEATURE_EXTRACTION` | 44 | 288871 |
+| `READY_FOR_FEATURE_EXTRACTION` | 42 | 288866 |
 | `NEEDS_CUSTOM_PARSER` | 14 | 72666 |
 | `PARTIALLY_SUPPORTED` | 6 | 138 |
 | `BROKEN_OR_EMPTY` | 2 | 0 |
@@ -93,6 +93,4 @@ This matrix preserves the key facts from the previous 66 per-format reports: spl
 | `csv` | 3 | `PARTIALLY_SUPPORTED` | external label CSV | yes | Labels for evaluation only; join by IP/key. |
 | `json` | 7071 | `NEEDS_CUSTOM_PARSER` | none | yes | JSON Lines, Mongo-style `NumberLong(...)`, reports. |
 | `log` | 4086 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Sandbox runtime logs. |
-| `netflow_day` | 2 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Large flow files. |
 | `txt` | 274419 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Very large syscall/API traces; requires streaming. |
-| `wls_day` | 3 | `READY_FOR_FEATURE_EXTRACTION` | none | yes | Windows/Sysmon-like events. |

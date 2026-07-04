@@ -9,6 +9,15 @@ The documentation separates:
 - **research and proposal materials** - objectives, methodology, dataset strategy, feature catalogue, and plans;
 - **gaps and follow-up** - work that is not implemented yet or needs clarification.
 
+## Current Code Sync
+
+Last checked against code on 2026-07-04.
+
+- Stage Two routing is implemented in `scripts/stage_two/cli.py`; this file is the authoritative source for supported `stage-two` commands.
+- The fallback command list printed from `config.manage_commands` is older than the router and does not list every current Stage Two command, including `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, and `split-large-files`.
+- Runtime defaults without a resource profile are conservative: `workers=1`, `batch_size=50000`, and `max_output_part_rows=50000`. Resource profiles and the `normalize-format` format policy can change the resolved values before execution.
+- Feature and model-ready writer/registry services exist, but full end-to-end feature extraction, model-ready build, model training, and evaluation CLIs are still proposal/follow-up work.
+
 ## Quick Start
 
 | Need | Read |
@@ -44,7 +53,7 @@ The documentation separates:
 - [analysis-dataset/README.md](analysis-dataset/README.md) - dataset analysis index.
 - [analysis-dataset/dns_datasets.md](analysis-dataset/dns_datasets.md) - DNS `TRAIN` / `VALIDATION` / `TEST`.
 - [analysis-dataset/host_datasets.md](analysis-dataset/host_datasets.md) - Host `TRAIN` / `VALIDATION` / `TEST`.
-- [analysis-dataset/format_status_matrix.md](analysis-dataset/format_status_matrix.md) - readiness matrix for 66 format buckets.
+- [analysis-dataset/format_status_matrix.md](analysis-dataset/format_status_matrix.md) - readiness matrix for 64 format buckets.
 - [analysis-dataset/labels_and_readiness.md](analysis-dataset/labels_and_readiness.md) - labels, readiness statuses, and anti-leakage rules.
 
 ### Stage Two / Normalization

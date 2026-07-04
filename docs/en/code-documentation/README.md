@@ -63,6 +63,13 @@ Stage Two creates the storage structure, registers raw/sorted files in PostgreSQ
 
 Implemented components live under `scripts/stage_two`, `scripts/db`, and `schemas`.
 
+Current code sync, checked on 2026-07-04:
+
+- `router_stage_two()` supports `bootstrap-storage`, `catalog-ingest`, `seed-parser-registry`, `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, `split-large-files`, `normalize-dns`, `normalize-host`, `run-duckdb-checks`, `run-leakage-checks`, and `trace-artifact`.
+- `config.manage_commands` is only a fallback printed command list and is not complete for newer Stage Two commands.
+- `normalize-format` and `benchmark-normalization` resolve resource profiles and format-specific runtime policy before execution; `normalize-all` resolves shared runtime options but does not apply per-format policy in the CLI route.
+- `features/` and `model_ready/` contain contracts and registry/writer services, but no complete training/evaluation pipeline is exposed through `manage.py`.
+
 ## Core Invariants
 
 1. Raw dataset files are not modified.

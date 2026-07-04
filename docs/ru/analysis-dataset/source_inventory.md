@@ -9,7 +9,7 @@
 | [README.md](README.md) | Общая карта раздела, coverage, readiness counts, инварианты. |
 | [dns_datasets.md](dns_datasets.md) | Все DNS TRAIN/VALIDATION/TEST сведения. |
 | [host_datasets.md](host_datasets.md) | Все Host TRAIN/VALIDATION/TEST сведения. |
-| [format_status_matrix.md](format_status_matrix.md) | 66 format buckets: files/status/labels/timestamp/action. |
+| [format_status_matrix.md](format_status_matrix.md) | 64 format buckets: files/status/labels/timestamp/action. |
 | [labels_and_readiness.md](labels_and_readiness.md) | Label policy, readiness statuses, LabelResolver guidance. |
 | [parser_feature_recommendations.md](parser_feature_recommendations.md) | Parser priorities, feature groups, quality checks. |
 
@@ -57,7 +57,7 @@
 
 `host/test/*.md` был объединен в `host_datasets.md` и `format_status_matrix.md`.
 
-Список форматов: `bson`, `csv`, `json`, `log`, `netflow_day`, `txt`, `wls_day`.
+Список форматов: `bson`, `csv`, `json`, `log`, `txt`.
 
 ## Почему старые файлы удаляются
 
