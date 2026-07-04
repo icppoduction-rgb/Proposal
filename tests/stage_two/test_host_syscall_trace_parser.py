@@ -95,6 +95,62 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertEqual(event["file_path"], r"C:\tmp\a.txt")
         self.assertEqual(event["raw_fields_json"]["arguments"], "GENERIC_READ")
 
+    def test_txt_windows_nt_key_value_trace_line_extracts_method_process_and_time(self) -> None:
+        line = (
+            r"Time=207628,Pid=788,MethodName=ZwAcceptConnectPort,"
+            r"ProcessName=\Device\HarddiskVolume1\WINDOWS\system32\csrss.exe"
+        )
+        path = _write_temp_text(self, line + "\n", file_name="ZwAcceptConnectPort__da9048cd95.txt")
+
+        result = _parser().parse(path, _context(path, role="TEST", source_format="txt"))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "host_syscall")
+        self.assertEqual(event["modality"], "syscall")
+        self.assertEqual(event["timestamp_type"], "event_order")
+        self.assertEqual(event["syscall_name"], "ZwAcceptConnectPort")
+        self.assertEqual(event["process_id"], "788")
+        self.assertEqual(event["process_name"], r"\Device\HarddiskVolume1\WINDOWS\system32\csrss.exe")
+        self.assertEqual(event["metadata_json"]["relative_timestamp"], "207628")
+        self.assertEqual(event["raw_fields_json"]["trace_fields"]["MethodName"], "ZwAcceptConnectPort")
+
+    def test_txt_name_file_emits_sample_metadata_event(self) -> None:
+        content = "C:/Documents/gpupdate.exe,pid=660\n"
+        path = _write_temp_text(self, content, file_name="name.txt")
+
+        result = _parser().parse(path, _context(path, role="TEST", source_format="txt"))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual(result.file_status, "PARSED")
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "host_sample_metadata")
+        self.assertEqual(event["modality"], "host_metadata")
+        self.assertEqual(event["process_id"], "660")
+        self.assertEqual(event["process_name"], "gpupdate.exe")
+        self.assertEqual(event["file_path"], "C:/Documents/gpupdate.exe")
+        self.assertEqual(event["metadata_json"]["helper_type"], "host_sample_name")
+        self.assertEqual(event["metadata_json"]["helper_action"], "metadata_event_emitted")
+
+    def test_txt_hashed_name_file_emits_sample_metadata_event(self) -> None:
+        content = "C:/Documents/VirusShare_0013bad5970be99d0b2c2bfd32675abc.exe,pid=1852\n"
+        path = _write_temp_text(self, content, file_name="name__008a1764ec.txt")
+
+        result = _parser().parse(path, _context(path, role="TEST", source_format="txt"))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "host_sample_metadata")
+        self.assertEqual(event["process_id"], "1852")
+        self.assertEqual(event["process_name"], "VirusShare_0013bad5970be99d0b2c2bfd32675abc.exe")
+        self.assertTrue(any("helper_type=host_sample_name" in warning for warning in result.warnings))
+
     def test_txt_sysdig_trace_line_uses_fast_path(self) -> None:
         line = "811 21:13:19.498051939 3 0 apache2 7149 > wait4 res=0"
         path = _write_temp_text(self, line + "\n", file_name="sysdig.txt")

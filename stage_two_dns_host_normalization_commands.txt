@@ -1,183 +1,20 @@
-Команды Stage Two normalization для оставшихся DNS/HOST форматов
-=================================================================
-
-Обновлено: 2026-06-22
-
-Рабочая директория:
-
-cd C:\Users\Public\PythonProjects\Proposal
-
-Активация окружения:
-
-C:\ProgramData\Anaconda3\condabin\conda.bat activate C:\Users\fmark\.conda\envs\proposal2
 
 
-0. Одноразовая подготовка
--------------------------
+s
+HOST TEST txt
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --dry-run
+python manage.py stage-two mark-ready --branch host --role TEST --format txt --apply
+python manage.py stage-two split-large-files --branch host --role TEST --format txt --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume 
+13
 
-Запустить один раз перед нормализацией, если после изменений кода/схемы это еще не запускалось:
-
-python manage.py stage-two bootstrap-storage
-python -m alembic -c scripts/db/migrations/alembic.ini upgrade head
-python -m alembic -c scripts/db/migrations/alembic.ini current
-python manage.py stage-two seed-parser-registry
-python manage.py stage-two catalog-ingest
-python manage.py stage-two parser-coverage
-
-Необязательная проверка кода перед долгими запусками:
-
-python -m compileall -q manage.py config.py scripts tests
-python -m pytest -q tests\stage_two
-
-
-1. Профили запуска
-------------------
-
-Текущий ноутбук, 16 GB RAM + файл подкачки:
-
---workers 1 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-Использовать, когда:
-- один или два файла очень большие, примерно 8-17 GB;
-- RAM доходит до 90%+;
-- диск занят из-за pagefile/swap Windows.
-
-Текущий ноутбук после разбиения больших line-based файлов:
-
---workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-Использовать только после того, как split-large-files зарегистрировал chunks.
-Следить за Диспетчером задач.
-Если RAM держится ниже 12-14 GB и диск не висит на 100%, можно оставлять этот режим.
-Если RAM или диск забиты, остановить и перезапустить с --workers 1.
-
-Профиль для 64 GB RAM:
-
---workers 2 --batch-size 25000 --max-output-part-rows 50000 --resume
-
-Профиль для 128 GB RAM:
-
---workers 4 --batch-size 50000 --max-output-part-rows 100000 --resume
-
-Для packet capture форматов можно использовать:
-
---packet-mode dns-only
-
-для DNS pcap/cap/pcapng, если не нужны summary по не-DNS пакетам.
-
-
-2. Важное поведение параметров
-------------------------------
-
---limit ограничивает количество файлов, а не количество строк.
-Например, --limit 100 означает до 100 файлов из catalog.
-
---workers параллелит файлы, а не строки внутри одного файла.
-Для одного большого файла workers > 1 почти не поможет, пока файл не разбит на chunks.
-
---batch-size управляет давлением parser-а на память.
-Меньше значение = безопаснее для RAM, но больше накладных расходов.
-Больше значение = иногда быстрее, но требует больше RAM.
-
---max-output-part-rows управляет размером Parquet part.
-Для больших запусков 50000 или 100000 обычно лучше, чем 10000, потому что не создается слишком много мелких Parquet файлов.
-
---resume помогает только если уже есть resumable parser_run и зарегистрированные output parts.
-Если был KeyboardInterrupt до commit parser_run, продолжать может быть нечего.
-
-Не запускай одновременно исходный большой файл и его chunks.
-Команда split-large-files с --register по умолчанию помечает исходный файл как SKIPPED, поэтому normalize-format обрабатывает только chunks.
-
-
-3. Разбиение больших line-based файлов
---------------------------------------
-
-Использовать split для больших line-based форматов:
-
-csv, pcap.csv, txt, json/json-lines, log, auth.log, syslog*, mainlog*, messages*,
-ghc, sc, netflow_day, netflow_ids, wls_day, cpu.log, diskio.log, filesystem.log,
-fsstat.log, load.log, memory.log, network.log, process.log, process.summary.log,
-service.log, socket.summary.log, uptime.log.
-
-Не использовать split для бинарных packet форматов:
-
-cap, pcap, pcapng, bson
-
-DNS TEST csv без header, поэтому использовать --header no.
-
-Проверка без записи:
-
-python manage.py stage-two split-large-files --branch dns --role TEST --format csv --limit 1 --max-part-size-gb 2 --min-size-gb 1 --header no
-
-Записать chunks и зарегистрировать их в catalog:
-
-python manage.py stage-two split-large-files --branch dns --role TEST --format csv --limit 1 --max-part-size-gb 2 --min-size-gb 1 --header no --apply --register
-
-После этого нормализовать chunks параллельно:
-
-python manage.py stage-two normalize-format --branch dns --role TEST --format csv --limit 4 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-Для CSV с header использовать --header yes или --header auto.
-
-
-4. Повторный запуск failed / partial файлов
--------------------------------------------
-
-Если normalize-format вернул PARTIAL_SUCCESS/FAILED и нужно повторить только failed/skipped/partially parsed файлы:
-
-python manage.py stage-two mark-ready --branch <branch> --role <role> --format <format> --retry-failed --dry-run
-python manage.py stage-two mark-ready --branch <branch> --role <role> --format <format> --retry-failed --apply
-python manage.py stage-two normalize-format --branch <branch> --role <role> --format <format> --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-Не сбрасывай PARSED файлы, если не хочешь намеренно обработать успешные данные заново.
-
-
-6. Оставшиеся команды HOST
---------------------------
-
-Оставшийся HOST из твоего списка:
-- TRAIN: csv, ghc, json, log, log-1, netflow_ids, pcap, sc, service.log, xml
-- VALIDATION: cap, csv, json, netflow_day, pcap, pcapng, txt, wls_day
-- TEST: bson, csv, json, log, netflow_day, txt, wls_day
-
-HOST VALIDATION wls_day
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --dry-run
-python manage.py stage-two mark-ready --branch host --role VALIDATION --format wls_day --apply
-python manage.py stage-two split-large-files --branch host --role VALIDATION --format wls_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-python manage.py stage-two normalize-format --branch host --role VALIDATION --format wls_day --limit 20 --workers 8 --batch-size 120000 --max-output-part-rows 120000 --resume 
-4 запуск
-
-HOST TEST bson
-python manage.py stage-two mark-ready --branch host --role TEST --format bson --dry-run
-python manage.py stage-two mark-ready --branch host --role TEST --format bson --apply
-python manage.py stage-two normalize-format --branch host --role TEST --format bson --limit 100 --workers 1 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-HOST TEST json
-python manage.py stage-two mark-ready --branch host --role TEST --format json --dry-run
-python manage.py stage-two mark-ready --branch host --role TEST --format json --apply
-python manage.py stage-two split-large-files --branch host --role TEST --format json --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TEST --format json --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-HOST TEST log
-python manage.py stage-two mark-ready --branch host --role TEST --format log --dry-run
-python manage.py stage-two mark-ready --branch host --role TEST --format log --apply
-python manage.py stage-two split-large-files --branch host --role TEST --format log --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TEST --format log --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
+python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 20000 --workers 6 --batch-size 100000 --max-output-part-rows 200000 --resume
 
 HOST TEST netflow_day
 python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format netflow_day --apply
 python manage.py stage-two split-large-files --branch host --role TEST --format netflow_day --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
 python manage.py stage-two normalize-format --branch host --role TEST --format netflow_day --limit 100 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
-HOST TEST txt
-python manage.py stage-two mark-ready --branch host --role TEST --format txt --dry-run
-python manage.py stage-two mark-ready --branch host --role TEST --format txt --apply
-python manage.py stage-two split-large-files --branch host --role TEST --format txt --limit 100 --max-part-size-gb 2 --min-size-gb 1 --apply --register
-python manage.py stage-two normalize-format --branch host --role TEST --format txt --limit 1000 --workers 2 --batch-size 10000 --max-output-part-rows 50000 --resume
-
 HOST TEST wls_day
 python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --dry-run
 python manage.py stage-two mark-ready --branch host --role TEST --format wls_day --apply
@@ -193,19 +30,4 @@ python manage.py stage-two run-duckdb-checks
 python manage.py stage-two run-leakage-checks
 python -m scripts.stage_two.readiness_check
 
-
-8. Пустые комбинации намеренно не включены
-------------------------------------------
-
-В предыдущем parser_active snapshot у них было parser_active=yes, но files_count=0.
-Не запускать их, пока catalog-ingest/parser-coverage не покажет реальные файлы.
-
-DNS:
-- TRAIN: cap, pcapng
-- VALIDATION: cap, csv, pcap.csv, pcapng
-- TEST: cap, pcap, pcap.csv, pcapng
-
-HOST:
-- TRAIN: cap, netflow_day, pcapng, wls_day
-- VALIDATION: auth.log, cpu.log, diskio.log, filesystem.log, fsstat.log, ghc, info, journal, journal~, json-1, load.log, log, log-1, log-2, log-3, mail-info-1, mail-warn-1, mainlog, mainlog-1, mainlog-2, mainlog-3, memory.log, messages, messages-1, netflow_ids, network.log, process.log, process.summary.log, sc, service.log, socket.summary.log, syslog, syslog-1, syslog-2, syslog-3, syslog-4, syslog.log, uptime.log, xml
-- TEST: auth.log, cpu.log, diskio.log, filesystem.log, fsstat.log, ghc, info, journal, journal~, json-1, load.log, log-1, log-2, log-3, mail-info-1, mail-warn-1, mainlog, mainlog-1, mainlog-2, mainlog-3, memory.log, messages, messages-1, netflow_ids, network.log, process.log, process.summary.log, sc, service.log, socket.summary.log, syslog, syslog-1, syslog-2, syslog-3, syslog-4, syslog.log, uptime.log, xml
+TT2HXFNTAN

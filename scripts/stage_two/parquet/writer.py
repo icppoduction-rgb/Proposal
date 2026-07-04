@@ -325,20 +325,22 @@ def _normalize_parquet_value(column: str, value: Any) -> Any:
         return None
     if column.endswith(JSON_FIELD_SUFFIX):
         return _json_string(value)
+    if isinstance(value, str):
+        return _sanitize_utf8_text(value)
     return value
 
 
 def _json_string(value: Any) -> str:
     """Serialize JSON-like values deterministically before Arrow type inference."""
     if isinstance(value, str):
-        return value
+        return _sanitize_utf8_text(value)
     return json.dumps(_json_safe_value(value), ensure_ascii=False, sort_keys=True)
 
 
 def _json_safe_value(value: Any) -> Any:
     """Convert nested values to JSON-serializable data without dropping raw content."""
     if isinstance(value, dict):
-        return {str(key): _json_safe_value(item) for key, item in value.items()}
+        return {_sanitize_utf8_text(str(key)): _json_safe_value(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe_value(item) for item in value]
     if isinstance(value, datetime):
@@ -347,9 +349,16 @@ def _json_safe_value(value: Any) -> Any:
         return str(value)
     if isinstance(value, bytes):
         return value.hex()
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str):
+        return _sanitize_utf8_text(value)
+    if isinstance(value, (int, float, bool)) or value is None:
         return value
-    return str(value)
+    return _sanitize_utf8_text(str(value))
+
+
+def _sanitize_utf8_text(value: str) -> str:
+    """Replace lone surrogate code points before JSON/Arrow UTF-8 encoding."""
+    return value.encode("utf-8", errors="replace").decode("utf-8")
 
 
 def _is_retryable_replace_error(exc: OSError) -> bool:

@@ -144,6 +144,10 @@ HOST_JSON_SOURCE_TYPES: frozenset[str] = frozenset(
     {"json_lines", "json_array", "json_object", "json_scalar", "log_json_line"}
 )
 TRACE_KEY_VALUE_PATTERN = re.compile(r"(?P<key>[A-Za-z_][\w.\-]*)=(?P<value>\"[^\"]*\"|'[^']*'|\S+)")
+HOST_SAMPLE_NAME_LINE_PATTERN = re.compile(
+    r"^(?P<executable_path>.+?)(?:,\s*pid=(?P<pid>\d+))?\s*$",
+    re.IGNORECASE,
+)
 TRACE_CALL_PATTERN = re.compile(
     r"\b(?P<name>[A-Za-z_][\w.$:@/-]*)\s*\((?P<arguments>.*)\)\s*(?:=\s*(?P<return_value>\S.*))?$"
 )
@@ -845,6 +849,13 @@ class HostSyscallTraceParser(BaseParser):
         """Parse syscall/API trace lines as bounded batches."""
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
+
+        sample_name_result = _parse_host_sample_name_file(self, path, context)
+        if sample_name_result is not None:
+            self.validate_result(sample_name_result)
+            yield sample_name_result
+            return
+
         helper_decision = classify_helper_file(path, source_format=context.source_format)
         if helper_decision.is_helper and not helper_decision.emit_metadata_event:
             reason = helper_decision.reason or "helper file"
@@ -1045,6 +1056,155 @@ def _sysdig_trace_row_to_event(
     )
 
 
+def _parse_host_sample_name_file(
+    parser: BaseParser,
+    path: str | Path,
+    context: ParserContext,
+) -> ParserResult | None:
+    file_path = Path(path)
+    if not _is_host_sample_name_file(file_path, source_format=context.source_format):
+        return None
+
+    reader = UniversalInputReader(file_path)
+    rows_read = 0
+    row: dict[str, Any] | None = None
+    error_samples: list[str] = []
+    with reader.iter_lines(keepends=False, skip_empty=False) as lines:
+        for line_number, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            rows_read += 1
+            row, error = _parse_host_sample_name_line(
+                line,
+                line_number=line_number,
+                source_format=context.source_format,
+            )
+            if error is not None:
+                error_samples.append(error)
+            break
+
+    reader_metadata = reader.metadata_snapshot()
+    warnings = [
+        *reader_metadata.warnings,
+        *(f"reader error: {error}" for error in reader_metadata.errors),
+    ]
+    if row is None:
+        status_override = "EMPTY_FILE" if rows_read == 0 else None
+        status_reason = "host sample name file has no readable metadata" if rows_read == 0 else None
+        return ParserResult(
+            rows_read=rows_read,
+            rows_parsed=0,
+            rows_failed=0 if rows_read == 0 else rows_read,
+            events=[],
+            warnings=warnings,
+            bytes_read=reader_metadata.bytes_read,
+            error_samples=error_samples,
+            status_override=status_override,
+            status_reason=status_reason,
+        )
+
+    event = _host_sample_name_event(parser, row, 0, context)
+    warnings.append(
+        parser_report_warning(
+            status="SUCCESS",
+            reason="host sample name metadata event emitted",
+            helper_type="host_sample_name",
+        )
+    )
+    return ParserResult(
+        rows_read=rows_read,
+        rows_parsed=1,
+        rows_failed=0,
+        events=[event],
+        warnings=warnings,
+        bytes_read=reader_metadata.bytes_read,
+    )
+
+
+def _is_host_sample_name_file(path: Path, *, source_format: str) -> bool:
+    if source_format.strip().lower() != "txt":
+        return False
+    if path.suffix.lower() != ".txt":
+        return False
+    stem = path.stem.lower()
+    return stem == "name" or stem.startswith("name__")
+
+
+def _parse_host_sample_name_line(
+    line: str,
+    *,
+    line_number: int,
+    source_format: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    text = line.strip()
+    match = HOST_SAMPLE_NAME_LINE_PATTERN.match(text)
+    if match is None:
+        return None, f"line {line_number}: invalid host sample name metadata line"
+
+    executable_path = match.group("executable_path").strip()
+    if not executable_path:
+        return None, f"line {line_number}: missing executable path in host sample name metadata"
+
+    return {
+        "_metadata_source_type": "host_sample_name",
+        "source_format": source_format,
+        "line_number": line_number,
+        "_raw_line_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
+        "_raw_line_length": len(text),
+        "_raw_line_preview": _trace_line_preview(text),
+        "file_path": executable_path,
+        "process_id": match.group("pid"),
+        "process_name": _process_name_from_path(executable_path),
+    }, None
+
+
+def _host_sample_name_event(
+    parser: BaseParser,
+    row: dict[str, Any],
+    index: int,
+    context: ParserContext,
+) -> dict[str, Any]:
+    process_name = _string_or_none(row.get("process_name"))
+    executable_path = _string_or_none(row.get("file_path"))
+    entity_id = process_name or executable_path
+    return parser.base_event(
+        context,
+        event_uid=_event_uid(context, index, entity_id or "host_sample_metadata"),
+        timestamp=None,
+        timestamp_source=None,
+        timestamp_type="event_order",
+        event_index=index,
+        entity_type="metadata",
+        entity_id=entity_id,
+        event_type="host_sample_metadata",
+        raw_event_name="host_sample_name",
+        modality="host_metadata",
+        process_id=_string_or_none(row.get("process_id")),
+        process_name=process_name,
+        file_path=executable_path,
+        raw_fields_json=compact_row(row),
+        metadata_json=_host_sample_name_metadata(row),
+        created_at=datetime.now(timezone.utc),
+        **unlabeled().as_event_fields(),
+    )
+
+
+def _host_sample_name_metadata(row: dict[str, Any]) -> dict[str, Any] | None:
+    metadata = {
+        "helper_file": True,
+        "helper_type": "host_sample_name",
+        "helper_action": "metadata_event_emitted",
+        "parser_reason": "name*.txt stores sample executable path and pid metadata",
+        "metadata_source_type": row.get("_metadata_source_type"),
+        "line_number": row.get("line_number"),
+        "source_format": row.get("source_format"),
+        "raw_line_sha256": row.get("_raw_line_sha256"),
+        "raw_line_length": row.get("_raw_line_length"),
+        "raw_line_preview_truncated": _line_preview_truncated(row),
+    }
+    return merge_json_objects(metadata, empty_as_none=True)
+
+
 def _parse_syscall_trace_line(
     line: str,
     *,
@@ -1071,6 +1231,8 @@ def _parse_syscall_trace_line(
             body = relative_match.group("body").strip()
 
     trace_fields = _trace_key_values(body)
+    if relative_timestamp is None:
+        relative_timestamp = _trace_first_field(trace_fields, ("relative_timestamp", "relative.time", "time"))
     syscall_id, explicit_name = _syscall_id_and_name_from_fields(trace_fields)
     call_match = TRACE_CALL_PATTERN.search(body)
     arguments = _trace_first_field(trace_fields, ("arguments", "argument", "args", "arg", "argv"))
@@ -1108,7 +1270,7 @@ def _parse_syscall_trace_line(
         "parent_process_id": _trace_first_field(trace_fields, ("parent_process_id", "ppid", "parent.pid")),
         "process_name": _trace_first_field(
             trace_fields,
-            ("process_name", "process", "proc", "comm", "exe", "executable"),
+            ("process_name", "process.name", "processname", "process", "proc", "comm", "exe", "executable"),
         ),
         "user_name": _trace_first_field(trace_fields, ("user_name", "user", "uid", "euid")),
         "file_path": _trace_first_field(trace_fields, ("file_path", "file", "path", "pathname", "exe", "executable")),
@@ -1227,10 +1389,35 @@ def _iter_numeric_syscall_sequence_rows(
 
 
 def _trace_key_values(text: str) -> dict[str, str]:
+    comma_fields = _comma_separated_trace_key_values(text)
+    if comma_fields:
+        return comma_fields
     return {
         match.group("key"): _strip_trace_quotes(match.group("value"))
         for match in TRACE_KEY_VALUE_PATTERN.finditer(text)
     }
+
+
+def _comma_separated_trace_key_values(text: str) -> dict[str, str]:
+    if "," not in text or "=" not in text:
+        return {}
+    try:
+        parts = next(csv.reader([text]))
+    except csv.Error:
+        return {}
+    fields: dict[str, str] = {}
+    for part in parts:
+        item = part.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            return {}
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            return {}
+        fields[key] = _strip_trace_quotes(value.strip())
+    return fields if len(fields) >= 2 else {}
 
 
 def _syscall_id_and_name_from_fields(fields: dict[str, str]) -> tuple[str | None, str | None]:
@@ -1240,7 +1427,17 @@ def _syscall_id_and_name_from_fields(fields: dict[str, str]) -> tuple[str | None
     )
     explicit_name = _trace_first_field(
         fields,
-        ("syscall_name", "syscall.name", "api", "api_name", "call", "function", "function_name"),
+        (
+            "syscall_name",
+            "syscall.name",
+            "method_name",
+            "methodname",
+            "api",
+            "api_name",
+            "call",
+            "function",
+            "function_name",
+        ),
     )
     syscall_id = None
     if syscall_value not in ("", None):

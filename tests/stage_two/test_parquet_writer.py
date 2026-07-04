@@ -59,6 +59,35 @@ class ParquetArtifactWriterTest(unittest.TestCase):
             " 21:07:56.450015",
         )
 
+    def test_lone_surrogates_are_replaced_before_parquet_write(self) -> None:
+        rows = [
+            _event(
+                "bad-surrogate",
+                raw_fields_json={"message": "bad\ude88value", "nested": ["ok", "\udc7d"]},
+                metadata_json={"details": "meta\udd53value"},
+            )
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            writer = ParquetArtifactWriter(Path(directory))
+            result = writer.write_normalized(
+                rows,
+                branch="host",
+                role="TEST",
+                modality="host",
+                dataset_slug="surrogate-smoke",
+                schema_version="v1",
+                run_id="surrogate",
+            )
+
+            payload = pq.read_table(result.absolute_path).to_pylist()
+
+        self.assertEqual(result.row_count, 1)
+        self.assertEqual(payload[0]["event_uid"], "bad-surrogate")
+        self.assertEqual(json.loads(payload[0]["raw_fields_json"])["message"], "bad?value")
+        self.assertEqual(json.loads(payload[0]["raw_fields_json"])["nested"][1], "?")
+        self.assertEqual(json.loads(payload[0]["metadata_json"])["details"], "meta?value")
+
     def test_hash_output_artifacts_hashes_final_file_when_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             writer = ParquetArtifactWriter(Path(directory), hash_outputs=True)
