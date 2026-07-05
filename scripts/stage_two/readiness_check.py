@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,14 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from config import ALEMBIC_INI_PATH, PATH_DATA_STORAGE, REPORTS_EN_STAGE_TWO, REPORTS_RU_STAGE_TWO
+from config import (
+    ALEMBIC_INI_PATH,
+    PATH_DATA_STORAGE,
+    REPORTS_EN_STAGE_TWO,
+    REPORTS_RU_STAGE_TWO,
+    STAGE_TWO_READINESS_DB_YIELD_PER,
+    STAGE_TWO_READINESS_HASH_CHUNK_BYTES,
+)
 from scripts.db import session_scope
 from scripts.db.models import (
     DataQualityReport,
@@ -29,6 +37,19 @@ from scripts.db.repositories import ParserRepository
 from scripts.stage_two.storage.bootstrap import StorageBootstrapper
 from scripts.stage_two.traceability import TraceabilityError, TraceabilityService
 
+try:
+    from rich.console import Console
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+except ModuleNotFoundError:
+    BarColumn = None  # type: ignore[assignment]
+    Console = None  # type: ignore[assignment]
+    Progress = None  # type: ignore[assignment]
+    SpinnerColumn = None  # type: ignore[assignment]
+    TextColumn = None  # type: ignore[assignment]
+    TimeElapsedColumn = None  # type: ignore[assignment]
+
+ProgressCallback = Callable[[str, dict[str, Any]], None]
+
 
 @dataclass(frozen=True)
 class StageTwoReadinessResult:
@@ -39,27 +60,62 @@ class StageTwoReadinessResult:
     report_paths: dict[str, str]
 
 
-def run_stage_two_readiness_check() -> StageTwoReadinessResult:
+def run_stage_two_readiness_check(
+    progress_callback: ProgressCallback | None = None,
+) -> StageTwoReadinessResult:
     """Run final Stage Two readiness checks and save RU/EN reports."""
     storage_root = _configured_storage_root()
-    checks: dict[str, Any] = {
-        "migrations": _migration_check(),
-        "storage_paths": _storage_path_check(storage_root),
-    }
+    checks: dict[str, Any] = {}
+    _run_named_check(checks, "migrations", _migration_check, progress_callback)
+    _run_named_check(checks, "storage_paths", lambda: _storage_path_check(storage_root), progress_callback)
     with session_scope() as session:
-        checks["catalog_counts"] = _catalog_counts(session)
-        checks["schema_versions"] = _schema_version_check(session)
-        checks["parser_coverage"] = _parser_coverage(session)
-        checks["normalized_artifacts"] = _normalized_artifact_check(session)
-        checks["artifact_registration"] = _artifact_registration_check(session)
-        checks["quality_leakage_reports"] = _quality_leakage_check(session)
-        checks["traceability"] = _traceability_check(session)
-        checks["raw_files"] = _raw_file_hash_check(session)
+        _run_named_check(checks, "catalog_counts", lambda: _catalog_counts(session), progress_callback)
+        _run_named_check(checks, "schema_versions", lambda: _schema_version_check(session), progress_callback)
+        _run_named_check(checks, "parser_coverage", lambda: _parser_coverage(session), progress_callback)
+        _run_named_check(
+            checks,
+            "normalized_artifacts",
+            lambda: _normalized_artifact_check(session),
+            progress_callback,
+        )
+        _run_named_check(
+            checks,
+            "artifact_registration",
+            lambda: _artifact_registration_check(session),
+            progress_callback,
+        )
+        _run_named_check(
+            checks,
+            "quality_leakage_reports",
+            lambda: _quality_leakage_check(session),
+            progress_callback,
+        )
+        _run_named_check(checks, "traceability", lambda: _traceability_check(session), progress_callback)
+        _run_named_check(
+            checks,
+            "raw_files",
+            lambda: _raw_file_hash_check(session, progress_callback=progress_callback),
+            progress_callback,
+        )
 
     status = "SUCCESS" if _all_checks_success(checks) else "FAILED"
     result = StageTwoReadinessResult(status=status, checks=checks, report_paths={})
+    _emit(progress_callback, "report_started", status=status)
     report_paths = _save_reports(storage_root, result)
+    _emit(progress_callback, "report_finished", status=status, report_paths=report_paths)
     return StageTwoReadinessResult(status=status, checks=checks, report_paths=report_paths)
+
+
+def _run_named_check(
+    checks: dict[str, Any],
+    name: str,
+    callback: Callable[[], dict[str, Any]],
+    progress_callback: ProgressCallback | None,
+) -> None:
+    _emit(progress_callback, "check_started", check_name=name)
+    result = callback()
+    checks[name] = result
+    _emit(progress_callback, "check_finished", check_name=name, status=result.get("status"))
 
 
 def _configured_storage_root() -> Path:
@@ -253,24 +309,51 @@ def _traceability_check(session: Session) -> dict[str, Any]:
     }
 
 
-def _raw_file_hash_check(session: Session) -> dict[str, Any]:
-    files = list(session.execute(select(DatasetFile).order_by(DatasetFile.id)).scalars())
+def _raw_file_hash_check(
+    session: Session,
+    *,
+    progress_callback: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    catalog_files = session.execute(select(func.count()).select_from(DatasetFile)).scalar_one()
+    file_rows = session.execute(
+        select(
+            DatasetFile.id,
+            DatasetFile.file_path,
+            DatasetFile.file_hash_sha256,
+        )
+        .order_by(DatasetFile.id)
+        .execution_options(
+            stream_results=True,
+            yield_per=STAGE_TWO_READINESS_DB_YIELD_PER,
+        )
+    )
     missing = []
     mismatched = []
     checked = 0
-    for file in files:
-        path = Path(file.file_path)
+    seen = 0
+    _emit(
+        progress_callback,
+        "raw_hash_started",
+        total=catalog_files,
+        db_yield_per=STAGE_TWO_READINESS_DB_YIELD_PER,
+        hash_chunk_bytes=STAGE_TWO_READINESS_HASH_CHUNK_BYTES,
+    )
+    for file_id, file_path, file_hash_sha256 in file_rows:
+        seen += 1
+        path = Path(file_path)
         if not path.exists():
-            missing.append({"id": file.id, "file_path": file.file_path})
-            continue
-        if file.file_hash_sha256:
+            missing.append({"id": file_id, "file_path": file_path})
+        elif file_hash_sha256:
             checked += 1
-            actual_hash = _sha256(path)
-            if actual_hash != file.file_hash_sha256:
-                mismatched.append({"id": file.id, "file_path": file.file_path})
+            actual_hash = _sha256(path, chunk_size=STAGE_TWO_READINESS_HASH_CHUNK_BYTES)
+            if actual_hash != file_hash_sha256:
+                mismatched.append({"id": file_id, "file_path": file_path})
+        if seen == catalog_files or seen % 100 == 0:
+            _emit(progress_callback, "raw_hash_progress", current=seen, total=catalog_files)
+    _emit(progress_callback, "raw_hash_finished", current=seen, total=catalog_files)
     return {
         "status": "SUCCESS" if not missing and not mismatched else "FAILED",
-        "catalog_files": len(files),
+        "catalog_files": catalog_files,
         "hash_checked": checked,
         "missing_files": missing,
         "hash_mismatches": mismatched,
@@ -312,13 +395,80 @@ def _render_markdown(language: str, payload: dict[str, Any]) -> str:
     )
 
 
-def _sha256(path: Path) -> str:
+def _sha256(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+        for chunk in iter(lambda: file.read(chunk_size), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
+def _emit(progress_callback: ProgressCallback | None, event: str, **payload: Any) -> None:
+    if progress_callback is not None:
+        progress_callback(event, payload)
+
+
+def _readiness_progress_callback(progress: Any) -> ProgressCallback:
+    main_task_id = progress.add_task("readiness: starting", total=11)
+    raw_hash_task_id: int | None = None
+    completed = 0
+
+    def callback(event: str, payload: dict[str, Any]) -> None:
+        nonlocal completed, raw_hash_task_id
+        if event == "check_started":
+            description = f"readiness: {payload.get('check_name') or 'check'}"
+            progress.update(main_task_id, description=description, completed=completed)
+            return
+        if event == "check_finished":
+            completed = min(completed + 1, 11)
+            description = (
+                f"readiness: {payload.get('check_name') or 'check'} "
+                f"{payload.get('status') or ''}"
+            ).strip()
+            progress.update(main_task_id, description=description, completed=completed)
+            return
+        if event == "report_started":
+            progress.update(main_task_id, description="readiness: saving reports", completed=completed)
+            return
+        if event == "report_finished":
+            completed = min(completed + 1, 11)
+            progress.update(main_task_id, description="readiness: reports saved", completed=completed)
+            return
+        if event == "raw_hash_started":
+            total = max(int(payload.get("total") or 1), 1)
+            db_yield_per = int(payload.get("db_yield_per") or 0)
+            chunk_bytes = int(payload.get("hash_chunk_bytes") or 0)
+            description = (
+                f"readiness: hashing raw files "
+                f"(db_batch={db_yield_per}, chunk={chunk_bytes // 1024} KiB)"
+            )
+            raw_hash_task_id = progress.add_task(description, total=total)
+            return
+        if event == "raw_hash_progress" and raw_hash_task_id is not None:
+            total = max(int(payload.get("total") or 1), 1)
+            current = min(int(payload.get("current") or 0), total)
+            progress.update(raw_hash_task_id, completed=current, total=total)
+            return
+        if event == "raw_hash_finished" and raw_hash_task_id is not None:
+            total = max(int(payload.get("total") or 1), 1)
+            progress.update(raw_hash_task_id, completed=total, total=total)
+
+    return callback
+
+
 if __name__ == "__main__":
-    print(json.dumps(asdict(run_stage_two_readiness_check()), indent=2, sort_keys=True))
+    if Progress is None or Console is None:
+        result = run_stage_two_readiness_check()
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=Console(stderr=True),
+        ) as readiness_progress:
+            result = run_stage_two_readiness_check(
+                progress_callback=_readiness_progress_callback(readiness_progress),
+            )
+    print(json.dumps(asdict(result), indent=2, sort_keys=True))

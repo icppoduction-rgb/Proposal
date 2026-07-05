@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -23,14 +24,21 @@ from scripts.stage_two.quality.checks import QualityCheckResult, QualityReportRe
 
 ROLE_VALUES: tuple[str, ...] = ("TRAIN", "VALIDATION", "TEST")
 BRANCH_VALUES: tuple[str, ...] = ("dns", "host", "network", "hybrid")
+ProgressCallback = Callable[[str, dict[str, Any]], None]
 
 
 class DataQualityChecker:
     """Run schema, null, duplicate, and role/branch checks over DuckDB views."""
 
-    def __init__(self, analytics_service: DuckDBAnalyticsService) -> None:
+    def __init__(
+        self,
+        analytics_service: DuckDBAnalyticsService,
+        *,
+        progress_callback: ProgressCallback | None = None,
+    ) -> None:
         """Initialize the checker with a DuckDB analytics service."""
         self.analytics_service = analytics_service
+        self.progress_callback = progress_callback
 
     def run(self, repository: DataQualityRepository | None = None) -> QualityReportResult:
         """Run data quality checks, save reports, and optionally register them."""
@@ -130,26 +138,39 @@ class DataQualityChecker:
 class LeakageChecker:
     """Run leakage checks and block unsafe model-ready artifacts."""
 
-    def __init__(self, analytics_service: DuckDBAnalyticsService, *, session: Session | None = None) -> None:
+    def __init__(
+        self,
+        analytics_service: DuckDBAnalyticsService,
+        *,
+        session: Session | None = None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> None:
         """Initialize the checker with DuckDB analytics and optional catalog session."""
         self.analytics_service = analytics_service
         self.session = session
+        self.progress_callback = progress_callback
 
     def run(self, repository: DataQualityRepository | None = None) -> QualityReportResult:
         """Run leakage checks, save reports, and optionally register them."""
         connection = self.analytics_service.connect()
         try:
-            self.analytics_service.create_views(connection)
+            self._emit("run_started", runtime_settings=self.analytics_service.runtime_settings_payload())
+            self.analytics_service.create_views(connection, view_names=("model_ready_all",))
             checks = [
-                self._x_forbidden_columns_check(connection),
-                self._test_absent_from_train_check(connection),
-                self._preprocessing_fit_role_check(),
+                self._run_check("x_forbidden_columns", lambda: self._x_forbidden_columns_check(connection)),
+                self._run_check("test_absent_from_train", lambda: self._test_absent_from_train_check(connection)),
+                self._run_check("preprocessing_fit_only_train", self._preprocessing_fit_role_check),
             ]
         finally:
             connection.close()
+        self._emit("report_started", check_group="leakage")
         report = build_report("leakage", checks, self.analytics_service.storage_root, failed_severity="CRITICAL")
+        self._emit("report_finished", report_paths=report.report_paths, status=report.status)
         if repository is not None:
+            self._emit("catalog_register_started", check_group="leakage")
             register_quality_report(repository, report)
+            self._emit("catalog_register_finished", check_group="leakage")
+        self._emit("run_finished", status=report.status, check_count=len(report.checks))
         return report
 
     def block_model_ready_if_failed(
@@ -168,13 +189,16 @@ class LeakageChecker:
         if not forbidden:
             return QualityCheckResult("x_forbidden_columns", "SUCCESS", "INFO", 0, 0, {"forbidden_columns": []})
         x_filter = "lower(replace(filename, chr(92), '/')) LIKE '%/tabular/%/x_%'" if "filename" in columns else "TRUE"
-        counts: dict[str, int] = {}
-        for column in forbidden:
-            count = connection.execute(
-                f"SELECT COUNT(*) FROM model_ready_all WHERE {x_filter} AND {quote_identifier(column)} IS NOT NULL"
-            ).fetchone()[0]
-            if count:
-                counts[column] = int(count)
+        expressions = ", ".join(
+            f"SUM(CASE WHEN {quote_identifier(column)} IS NOT NULL THEN 1 ELSE 0 END) AS {quote_identifier(column)}"
+            for column in forbidden
+        )
+        row = connection.execute(f"SELECT {expressions} FROM model_ready_all WHERE {x_filter}").fetchone()
+        counts = {
+            column: int(value or 0)
+            for column, value in zip(forbidden, row, strict=True)
+            if int(value or 0) > 0
+        }
         failed = sum(counts.values())
         return QualityCheckResult(
             check_name="x_forbidden_columns",
@@ -216,6 +240,25 @@ class LeakageChecker:
             rows_failed=failed,
             details={"artifact_ids": [row.id for row in rows]},
         )
+
+    def _run_check(
+        self,
+        check_name: str,
+        callback: Callable[[], QualityCheckResult],
+    ) -> QualityCheckResult:
+        self._emit("check_started", check_name=check_name)
+        result = callback()
+        self._emit(
+            "check_finished",
+            check_name=check_name,
+            status=result.status,
+            rows_failed=result.rows_failed,
+        )
+        return result
+
+    def _emit(self, event: str, **payload: Any) -> None:
+        if self.progress_callback is not None:
+            self.progress_callback(event, payload)
 
 
 def value_domain_checks(

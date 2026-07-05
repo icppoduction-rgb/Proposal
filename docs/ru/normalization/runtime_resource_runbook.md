@@ -13,6 +13,16 @@ python manage.py stage-two run-leakage-checks
 python -m scripts.stage_two.readiness_check
 ```
 
+Если `readiness_check` долго идет или растет RAM на этапе raw hashes, запустите с явными streaming settings:
+
+```powershell
+$env:STAGE_TWO_READINESS_DB_YIELD_PER="1000"
+$env:STAGE_TWO_READINESS_HASH_CHUNK_BYTES="1048576"
+python -m scripts.stage_two.readiness_check
+```
+
+Эти настройки не увеличивают качество проверки, а ограничивают форму чтения: catalog rows идут streaming batches, raw files читаются блоками по 1 MiB.
+
 ## Если storage не готов
 
 Симптомы:
@@ -111,6 +121,22 @@ python manage.py stage-two split-large-files \
 - есть ли required columns;
 - не смешаны ли roles;
 - не записаны ли пустые artifacts вместо ошибок parser.
+
+Если `run-duckdb-checks` забивает RAM или система завершает процессы:
+
+1. Убедиться, что используется обновленная команда с bounded DuckDB settings.
+2. Убедиться, что команда не застряла на `CREATE VIEW normalized_all`: обновленная реализация должна показывать `scanning normalized_all ...`, потому что большие слои проверяются через Parquet metadata, а не через единый DuckDB view.
+3. Начать с консервативного лимита:
+
+```powershell
+$env:STAGE_TWO_DUCKDB_MEMORY_LIMIT="8GB"
+$env:STAGE_TWO_DUCKDB_THREADS="1"
+$env:STAGE_TWO_DUCKDB_MAX_TEMP_DIRECTORY_SIZE="150GB"
+python manage.py stage-two run-duckdb-checks
+```
+
+4. Проверить свободное место в `PATH_DATA_STORAGE/temp_data/duckdb`, потому что при `memory_limit` DuckDB может spill-ить промежуточные данные на диск.
+5. Если run проходит, увеличить `STAGE_TWO_DUCKDB_THREADS` до `2`; не поднимать memory limit выше безопасного headroom для ОС и PostgreSQL.
 
 Запуск:
 

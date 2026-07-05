@@ -233,6 +233,17 @@ python manage.py stage-two run-leakage-checks
 python -m scripts.stage_two.readiness_check
 ```
 
+Для post-run DuckDB checks на машине с 64 GB RAM используйте bounded defaults или задайте их явно:
+
+```powershell
+$env:STAGE_TWO_DUCKDB_MEMORY_LIMIT="32GB"
+$env:STAGE_TWO_DUCKDB_THREADS="2"
+$env:STAGE_TWO_DUCKDB_MAX_TEMP_DIRECTORY_SIZE="100GB"
+python manage.py stage-two run-duckdb-checks
+```
+
+Если DuckDB снова упирается в память, снизьте `STAGE_TWO_DUCKDB_MEMORY_LIMIT` до `8GB` и `STAGE_TWO_DUCKDB_THREADS` до `1`, оставив достаточное место под `PATH_DATA_STORAGE/temp_data/duckdb`.
+
 ### Safety invariants
 
 - Raw files не изменяются.
@@ -251,7 +262,7 @@ python -m scripts.stage_two.readiness_check
 | --- | --- | --- |
 | PostgreSQL timeout | слишком много workers или медленные catalog updates | уменьшить `--workers`, использовать `safe`, проверить DB locks/pool, перезапустить с `--resume` |
 | too many DB connections | workers превышают capacity БД | ограничить workers до `4-8`, не использовать `aggressive`, проверить per-worker sessions |
-| memory pressure | слишком большой batch/output part или binary parser load | уменьшить `--batch-size` и `--max-output-part-rows`; split для line-based files |
+| memory pressure | слишком большой batch/output part, binary parser load или DuckDB scan без spill headroom | уменьшить `--batch-size` и `--max-output-part-rows`; split для line-based files; для DuckDB снизить `STAGE_TWO_DUCKDB_MEMORY_LIMIT`/`STAGE_TWO_DUCKDB_THREADS` и проверить `temp_data/duckdb` |
 | SSD throttling | слишком много concurrent writes или hashing | уменьшить workers, не включать `--hash-output-artifacts` на итерациях, проверить температуру SSD |
 | too many small files | overhead futures/DB/filesystem | использовать bounded executor, запускать точный format bucket, держать `--resume` |
 | parser errors | malformed rows или новая schema variant | читать parser run report и error samples; failed rows не скрывать |

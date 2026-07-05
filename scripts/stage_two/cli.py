@@ -519,11 +519,29 @@ def _normalize_branch(branch: str, args: Sequence[str]) -> None:
 def _run_duckdb_checks() -> None:
     from scripts.stage_two.duckdb import DuckDBAnalyticsService
 
-    analytics = DuckDBAnalyticsService()
-    report = analytics.run_checks()
-    with session_scope() as session:
-        repository = DataQualityRepository(session)
-        registered = analytics.register_report(repository, report)
+    if Progress is None:
+        analytics = DuckDBAnalyticsService()
+        report = analytics.run_checks()
+        with session_scope() as session:
+            repository = DataQualityRepository(session)
+            registered = analytics.register_report(repository, report)
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            callback = _quality_progress_callback(progress, "run-duckdb-checks", total_steps=9)
+            analytics = DuckDBAnalyticsService(progress_callback=callback)
+            report = analytics.run_checks()
+            callback("catalog_register_started", {})
+            with session_scope() as session:
+                repository = DataQualityRepository(session)
+                registered = analytics.register_report(repository, report)
+            callback("catalog_register_finished", {})
     console.print(
         {
             "service": "stage-two run-duckdb-checks",
@@ -539,10 +557,29 @@ def _run_leakage_checks() -> None:
     from scripts.stage_two.duckdb import DuckDBAnalyticsService
     from scripts.stage_two.quality import LeakageChecker
 
-    analytics = DuckDBAnalyticsService()
-    with session_scope() as session:
-        repository = DataQualityRepository(session)
-        report = LeakageChecker(analytics, session=session).run(repository)
+    if Progress is None:
+        analytics = DuckDBAnalyticsService()
+        with session_scope() as session:
+            repository = DataQualityRepository(session)
+            report = LeakageChecker(analytics, session=session).run(repository)
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            callback = _quality_progress_callback(progress, "run-leakage-checks", total_steps=8)
+            analytics = DuckDBAnalyticsService(progress_callback=callback)
+            with session_scope() as session:
+                repository = DataQualityRepository(session)
+                report = LeakageChecker(
+                    analytics,
+                    session=session,
+                    progress_callback=callback,
+                ).run(repository)
     console.print(
         {
             "service": "stage-two run-leakage-checks",
@@ -714,6 +751,81 @@ def _normalize_progress_callback(progress: Any) -> Callable[[str, dict[str, Any]
             completed=int(payload.get("current") or 0),
             total=max(int(payload.get("total") or 1), 1),
         )
+
+    return callback
+
+
+def _quality_progress_callback(
+    progress: Any,
+    service: str,
+    *,
+    total_steps: int,
+) -> Callable[[str, dict[str, Any]], None]:
+    task_id: int | None = None
+    completed = 0
+
+    def ensure_task(description: str) -> int:
+        nonlocal task_id
+        if task_id is None:
+            task_id = progress.add_task(description, total=total_steps)
+        return task_id
+
+    def advance(description: str) -> None:
+        nonlocal completed
+        completed = min(completed + 1, total_steps)
+        progress.update(ensure_task(description), description=description, completed=completed)
+
+    def callback(event: str, payload: dict[str, Any]) -> None:
+        if event == "run_started":
+            settings = payload.get("runtime_settings") or {}
+            memory_limit = settings.get("memory_limit") or "unknown"
+            threads = settings.get("threads") or "unknown"
+            description = f"{service}: DuckDB memory={memory_limit}, threads={threads}"
+            progress.update(ensure_task(description), description=description, completed=completed)
+            return
+        if event == "view_started":
+            view_name = payload.get("view_name") or "view"
+            file_count = int(payload.get("file_count") or 0)
+            description = f"{service}: preparing {view_name} ({file_count} files)"
+            progress.update(ensure_task(description), description=description, completed=completed)
+            return
+        if event == "view_progress":
+            view_name = payload.get("view_name") or "view"
+            current = int(payload.get("current") or 0)
+            total = int(payload.get("total") or 0)
+            rows_seen = int(payload.get("rows_seen") or 0)
+            errors = int(payload.get("metadata_errors") or 0)
+            description = f"{service}: scanning {view_name} {current}/{total}, rows={rows_seen}"
+            if errors:
+                description = f"{description}, metadata_errors={errors}"
+            progress.update(ensure_task(description), description=description, completed=completed)
+            return
+        if event == "view_finished":
+            advance(f"{service}: prepared {payload.get('view_name') or 'view'}")
+            return
+        if event == "chunk_progress":
+            check_name = payload.get("check_name") or "check"
+            current = int(payload.get("current") or 0)
+            total = int(payload.get("total") or 0)
+            description = f"{service}: chunked {check_name} {current}/{total}"
+            progress.update(ensure_task(description), description=description, completed=completed)
+            return
+        if event == "check_started":
+            description = f"{service}: running {payload.get('check_name') or 'check'}"
+            progress.update(ensure_task(description), description=description, completed=completed)
+            return
+        if event == "check_finished":
+            advance(f"{service}: finished {payload.get('check_name') or 'check'}")
+            return
+        if event == "report_finished":
+            advance(f"{service}: saved report")
+            return
+        if event == "catalog_register_started":
+            description = f"{service}: registering report"
+            progress.update(ensure_task(description), description=description, completed=completed)
+            return
+        if event == "catalog_register_finished":
+            advance(f"{service}: registered report")
 
     return callback
 

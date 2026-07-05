@@ -13,6 +13,14 @@ Stage Two использует два уровня проверок:
 python manage.py stage-two run-duckdb-checks
 ```
 
+Runtime-защита:
+
+- команда применяет bounded DuckDB settings: `memory_limit`, `threads`, `temp_directory`, `max_temp_directory_size`;
+- значения по умолчанию: `STAGE_TWO_DUCKDB_MEMORY_LIMIT=32GB`, `STAGE_TWO_DUCKDB_THREADS=2`, `STAGE_TWO_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=100GB`;
+- spill directory по умолчанию: `PATH_DATA_STORAGE/temp_data/duckdb`;
+- для больших Parquet layers команда не создает единый DuckDB view поверх всех файлов; row counts и schema checks считаются потоково по Parquet metadata, а data-level checks выполняются chunked;
+- CLI показывает progress bar по подготовке слоев, проверкам, сохранению report и регистрации в catalog.
+
 Код:
 
 ```text
@@ -73,6 +81,13 @@ Reports пишутся в RU/EN report roots и могут регистриро�
 ```bash
 python -m scripts.stage_two.readiness_check
 ```
+
+Команда выводит progress bar в stderr и JSON result в stdout. Проверка raw file hashes выполняется потоково по колонкам `dataset_files.id/file_path/file_hash_sha256`, без загрузки ORM-объектов всей таблицы в память.
+
+Runtime-настройки для hash scan:
+
+- `STAGE_TWO_READINESS_DB_YIELD_PER` - сколько catalog rows получать за один streaming batch, default `1000`;
+- `STAGE_TWO_READINESS_HASH_CHUNK_BYTES` - размер блока чтения raw file при SHA-256, default `1048576` bytes.
 
 Readiness проверяет, что:
 

@@ -303,19 +303,21 @@ python manage.py stage-two normalize-host 10
 python manage.py stage-two run-duckdb-checks
 ```
 
-**Что делает:** создает DuckDB views `normalized_all`, `features_all`, `model_ready_all` поверх Parquet и выполняет analytics checks: row counts, missing required columns, split contamination, schema mismatch.
+**Что делает:** выполняет analytics checks поверх Parquet: row counts, missing required columns, split contamination, schema mismatch. Для больших слоев не строит единый DuckDB view по glob pattern; row counts/schema читаются потоково из Parquet metadata, а data-level проверки запускаются chunked.
 
 **Когда запускать:** после нормализации и после появления feature/model-ready artifacts.
 
 **Входные данные:** `PATH_DATA_STORAGE`, Parquet layers, DuckDB package.
 
+**Runtime limits:** команда ограничивает DuckDB через `STAGE_TWO_DUCKDB_MEMORY_LIMIT` (default `32GB`), `STAGE_TWO_DUCKDB_THREADS` (default `2`) и `STAGE_TWO_DUCKDB_MAX_TEMP_DIRECTORY_SIZE` (default `100GB`). Временные spill files пишутся в `PATH_DATA_STORAGE/temp_data/duckdb`.
+
 **Артефакты:** JSON report `reports/en/stage-two/quality/duckdb_analytics_report.json`; DuckDB database path из storage config.
 
 **PostgreSQL:** пишет aggregate report в `data_quality_reports` с `check_group=duckdb`, severity `INFO` или `ERROR`.
 
-**Возможные ошибки:** `PATH_DATA_STORAGE` не задан, DuckDB не установлен, Parquet files отсутствуют или имеют несовместимые схемы.
+**Возможные ошибки:** `PATH_DATA_STORAGE` не задан, DuckDB не установлен, Parquet files отсутствуют или имеют несовместимые схемы, spill directory не имеет свободного места.
 
-**Проверка успеха:** CLI выводит `status=SUCCESS`, `check_count`, `catalog_report_id`; report не содержит failed checks.
+**Проверка успеха:** CLI показывает progress bar и выводит `status=SUCCESS`, `check_count`, `catalog_report_id`; report не содержит failed checks.
 
 ## `run-leakage-checks`
 
@@ -327,7 +329,7 @@ python manage.py stage-two run-leakage-checks
 
 **Когда запускать:** после сборки feature/model-ready artifacts и перед использованием данных для обучения.
 
-**Входные данные:** Parquet `features`/`model_ready`, DuckDB views, catalog metadata.
+**Входные данные:** Parquet `features`/`model_ready`, DuckDB views, catalog metadata. Используются те же DuckDB runtime limits, что и для `run-duckdb-checks`.
 
 **Артефакты:** leakage reports в `reports/{ru,en}/stage-two/leakage/`.
 
@@ -335,7 +337,7 @@ python manage.py stage-two run-leakage-checks
 
 **Возможные ошибки:** пустые model-ready views, forbidden X columns, `TEST` contamination, несогласованные роли в artifact paths/columns.
 
-**Проверка успеха:** CLI выводит `status=SUCCESS`, severity не `CRITICAL`, `check_count`; report не содержит failed leakage checks.
+**Проверка успеха:** CLI показывает progress bar и выводит `status=SUCCESS`, severity не `CRITICAL`, `check_count`; report не содержит failed leakage checks.
 
 ## `trace-artifact`
 

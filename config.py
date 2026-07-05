@@ -37,6 +37,14 @@ def _storage_path(*parts: str) -> str:
     return str(Path(PATH_DATA_STORAGE).expanduser().joinpath(*parts))
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    """Read a positive integer environment variable with a clear config error."""
+    raw_value = os.getenv(name, str(default)).strip()
+    if raw_value.isdecimal() and int(raw_value) > 0:
+        return int(raw_value)
+    raise ValueError(f"{name} must be a positive integer")
+
+
 PATH_DATA_STORAGE: str = os.getenv("PATH_DATA_STORAGE", "")
 
 PATH_FOLDER_DATASETS: str = os.getenv("PATH_FOLDER_DATASETS", "")
@@ -79,6 +87,16 @@ STAGE_TWO_DEFAULT_WORKERS: int = 1
 STAGE_TWO_HASH_OUTPUT_ARTIFACTS: bool = False
 STAGE_TWO_PARQUET_COMPRESSION: str = os.getenv("STAGE_TWO_PARQUET_COMPRESSION", "zstd").strip() or "zstd"
 STAGE_TWO_PACKET_PARSE_MODE: str = "packet-summary"
+STAGE_TWO_DUCKDB_MEMORY_LIMIT: str = os.getenv("STAGE_TWO_DUCKDB_MEMORY_LIMIT", "20GB").strip() or "20GB"
+STAGE_TWO_DUCKDB_THREADS: int = _positive_int_env("STAGE_TWO_DUCKDB_THREADS", 3)
+STAGE_TWO_DUCKDB_MAX_TEMP_DIRECTORY_SIZE: str = (
+    os.getenv("STAGE_TWO_DUCKDB_MAX_TEMP_DIRECTORY_SIZE", "100GB").strip() or "100GB"
+)
+STAGE_TWO_READINESS_DB_YIELD_PER: int = _positive_int_env("STAGE_TWO_READINESS_DB_YIELD_PER", 1000)
+STAGE_TWO_READINESS_HASH_CHUNK_BYTES: int = _positive_int_env(
+    "STAGE_TWO_READINESS_HASH_CHUNK_BYTES",
+    1024 * 1024,
+)
 STAGE_TWO_TEXT_ENCODINGS: tuple[str, ...] = (
     "utf-8-sig",
     "utf-8",

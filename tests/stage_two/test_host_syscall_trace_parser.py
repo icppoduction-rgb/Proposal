@@ -117,6 +117,38 @@ class HostSyscallTraceParserTest(unittest.TestCase):
         self.assertEqual(event["metadata_json"]["relative_timestamp"], "207628")
         self.assertEqual(event["raw_fields_json"]["trace_fields"]["MethodName"], "ZwAcceptConnectPort")
 
+    def test_txt_trace_line_uses_syscall_name_from_host_filename_when_method_is_missing(self) -> None:
+        line = "Time=203783,Pid=Time=203883,Pid=Time=203983,Pid="
+        path = _write_temp_text(self, line + "\n", file_name="ZwSetEvent__ce4e9a948c.txt")
+
+        result = _parser().parse(path, _context(path, role="TEST", source_format="txt"))
+
+        self.assertEqual(result.rows_read, 1)
+        self.assertEqual(result.rows_parsed, 1)
+        self.assertEqual(result.rows_failed, 0)
+        event = result.events[0]
+        self.assertEqual(event["event_type"], "host_syscall")
+        self.assertEqual(event["syscall_name"], "ZwSetEvent")
+        self.assertEqual(event["raw_event_name"], "ZwSetEvent")
+        self.assertEqual(event["metadata_json"]["relative_timestamp"], "203783")
+
+    def test_txt_trace_reader_replaces_late_invalid_utf8_bytes(self) -> None:
+        content = (
+            b"Time=203923,Pid=1392,MethodName=ZwQuerySystemTime,"
+            b"ProcessName=\\\\Device\\\\HarddiskVolume1\\\\WINDOWS\\\\system32\\\\svchost.exe\r\n"
+            b"Time=203924,Pid=856,MethodName=ZwQuerySystemTime,"
+            b"ProcessName=\\\\Device\\\\HarddiskVolume1\\\\WINDOWS\\\\system32\\\\services.exe"
+            b"\xa1\r\n"
+        )
+        path = _write_temp_bytes(self, content, file_name="ZwQuerySystemTime__67d112705f.txt")
+
+        result = _parser().parse(path, _context(path, role="TEST", source_format="txt"))
+
+        self.assertEqual(result.rows_read, 2)
+        self.assertEqual(result.rows_parsed, 2)
+        self.assertEqual(result.rows_failed, 0)
+        self.assertEqual([event["syscall_name"] for event in result.events], ["ZwQuerySystemTime", "ZwQuerySystemTime"])
+
     def test_txt_name_file_emits_sample_metadata_event(self) -> None:
         content = "C:/Documents/gpupdate.exe,pid=660\n"
         path = _write_temp_text(self, content, file_name="name.txt")
@@ -287,6 +319,19 @@ def _write_temp_text(
     test_case.addCleanup(lambda: shutil.rmtree(directory, ignore_errors=True))
     path = directory / file_name
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _write_temp_bytes(
+    test_case: unittest.TestCase,
+    content: bytes,
+    *,
+    file_name: str,
+) -> Path:
+    directory = Path(tempfile.mkdtemp(prefix="host-syscall-trace-parser-"))
+    test_case.addCleanup(lambda: shutil.rmtree(directory, ignore_errors=True))
+    path = directory / file_name
+    path.write_bytes(content)
     return path
 
 

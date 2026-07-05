@@ -886,8 +886,10 @@ class HostSyscallTraceParser(BaseParser):
         rows_failed = 0
         event_index = 0
         error_samples: list[str] = []
-        reader = UniversalInputReader(path)
-        with reader.iter_lines(keepends=False, skip_empty=False) as lines:
+        file_path = Path(path)
+        fallback_syscall_name = _syscall_name_from_trace_file_name(file_path)
+        reader = UniversalInputReader(file_path)
+        with reader.iter_lines(errors="replace", keepends=False, skip_empty=False) as lines:
             for line_index, line in enumerate(lines):
                 if not line.strip():
                     continue
@@ -917,6 +919,7 @@ class HostSyscallTraceParser(BaseParser):
                         line,
                         line_number=line_index + 1,
                         source_format=context.source_format,
+                        fallback_syscall_name=fallback_syscall_name,
                     )
                     sysdig_fast_path = False
                     if error is not None:
@@ -1210,6 +1213,7 @@ def _parse_syscall_trace_line(
     *,
     line_number: int,
     source_format: str,
+    fallback_syscall_name: str | None = None,
 ) -> tuple[dict[str, Any], str | None]:
     text = line.strip()
     if _is_control_heavy_trace_line(text):
@@ -1237,7 +1241,7 @@ def _parse_syscall_trace_line(
     call_match = TRACE_CALL_PATTERN.search(body)
     arguments = _trace_first_field(trace_fields, ("arguments", "argument", "args", "arg", "argv"))
     return_value = _trace_first_field(trace_fields, ("return_value", "retval", "ret", "return", "result"))
-    syscall_name = explicit_name
+    syscall_name = explicit_name or fallback_syscall_name
     if call_match:
         syscall_name = call_match.group("name")
         arguments = call_match.group("arguments") or arguments
@@ -1284,6 +1288,20 @@ def _parse_syscall_trace_line(
     if timestamp not in ("", None):
         row["timestamp"] = timestamp
     return row, None
+
+
+def _syscall_name_from_trace_file_name(path: Path) -> str | None:
+    """Extract syscall/API name from Host TEST trace filenames like ZwOpen__hash.txt."""
+    if path.suffix.lower() != ".txt":
+        return None
+    candidate = path.stem.split("__", 1)[0].strip()
+    if not candidate:
+        return None
+    if not TRACE_NAME_PATTERN.match(candidate):
+        return None
+    if not (candidate.startswith("Zw") or candidate.startswith("Nt")):
+        return None
+    return candidate
 
 
 def _iter_ghc_trace_sequence_rows(
