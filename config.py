@@ -422,6 +422,7 @@ manage_commands: str = (
     "python manage.py stage-three --help\n"
     "python manage.py stage-three validate-inputs --branch dns --role TRAIN\n"
     "python manage.py stage-three build-feature-catalog\n"
+    "python manage.py stage-three probe-runtime-backend --backend auto\n"
     "python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --resume\n"
     "python manage.py stage-three align-labels --branch dns --role TRAIN --resume\n"
     "python manage.py stage-three build-sequences --branch dns --role TRAIN --feature-group dns_lexical --resume\n"

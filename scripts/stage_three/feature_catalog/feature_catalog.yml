@@ -1,0 +1,456 @@
+version: "1.0"
+project: "Proposal"
+stage: "stage-three"
+owner: "stage-three"
+source_document: "planning/stage-three/STAGE THREE(Feature Extraction, Preprocessing and Model-Ready Dataset Preparation).txt"
+forbidden_X_columns:
+  - "dataset_id"
+  - "dataset_name"
+  - "dataset_role"
+  - "event_uid"
+  - "file_id"
+  - "label_*"
+  - "label_binary"
+  - "label_confidence"
+  - "label_family"
+  - "label_mapping_rule_id"
+  - "label_source"
+  - "label_status"
+  - "label_subtype"
+  - "metadata_json"
+  - "normalized_artifact_id"
+  - "parser_name"
+  - "parser_run_id"
+  - "parser_version"
+  - "raw_fields_json"
+  - "scenario_name"
+  - "source_file"
+  - "source_file_id"
+  - "source_file_path"
+  - "source_path"
+feature_groups:
+  dns_lexical:
+    branch: "dns"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["domain", "features_json"]
+        output_features: ["dns_query_length"]
+    features:
+      - name: "dns_query_length"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+  dns_entropy:
+    branch: "dns"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["domain", "features_json"]
+        output_features: ["dns_query_entropy"]
+    features:
+      - name: "dns_query_entropy"
+        dtype: "numeric"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "median"
+          scaling: "standard"
+          encoding: "none"
+  dns_temporal:
+    branch: "dns"
+    level: "window"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_timestamp", "event_order", "domain"]
+        output_features: ["dns_queries_per_window"]
+    features:
+      - name: "dns_queries_per_window"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "robust"
+          encoding: "none"
+  dns_protocol:
+    branch: "dns"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["features_json", "raw_fields_json"]
+        output_features: ["dns_response_code"]
+    features:
+      - name: "dns_response_code"
+        dtype: "categorical"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "one_hot"
+  dns_window:
+    branch: "dns"
+    level: "window"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_timestamp", "domain", "src_ip"]
+        output_features: ["dns_unique_domains_per_window"]
+    features:
+      - name: "dns_unique_domains_per_window"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+  dns_exfil_indicators:
+    branch: "dns"
+    level: "window"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["domain", "features_json"]
+        output_features: ["dns_suspicious_tunnel_score"]
+    features:
+      - name: "dns_suspicious_tunnel_score"
+        dtype: "numeric"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "minmax"
+          encoding: "none"
+  host_syscall:
+    branch: "host"
+    level: "sequence"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_order", "features_json"]
+        output_features: ["host_syscall_frequency_vector"]
+    features:
+      - name: "host_syscall_frequency_vector"
+        dtype: "numeric_vector"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "none"
+          encoding: "none"
+  host_process:
+    branch: "host"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["process", "features_json"]
+        output_features: ["host_process_name_hash"]
+    features:
+      - name: "host_process_name_hash"
+        dtype: "categorical"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "hashing"
+  host_auth:
+    branch: "host"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["user", "features_json"]
+        output_features: ["host_auth_failure_flag"]
+    features:
+      - name: "host_auth_failure_flag"
+        dtype: "boolean"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "false"
+          scaling: "none"
+          encoding: "boolean"
+  host_file_access:
+    branch: "host"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["features_json", "raw_fields_json"]
+        output_features: ["host_file_access_count"]
+    features:
+      - name: "host_file_access_count"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+  host_metrics:
+    branch: "host"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["features_json"]
+        output_features: ["host_cpu_load_pct"]
+    features:
+      - name: "host_cpu_load_pct"
+        dtype: "numeric"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "median"
+          scaling: "standard"
+          encoding: "none"
+  host_logs:
+    branch: "host"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["features_json", "raw_fields_json"]
+        output_features: ["host_log_severity"]
+    features:
+      - name: "host_log_severity"
+        dtype: "categorical"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "ordinal"
+  host_windows_sysmon:
+    branch: "host"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["features_json", "process"]
+        output_features: ["host_sysmon_event_id"]
+    features:
+      - name: "host_sysmon_event_id"
+        dtype: "categorical"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "one_hot"
+  network_flow:
+    branch: "network"
+    level: "flow"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["flow_id", "features_json"]
+        output_features: ["network_flow_bytes"]
+    features:
+      - name: "network_flow_bytes"
+        dtype: "numeric"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "robust"
+          encoding: "none"
+  network_ports:
+    branch: "network"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["features_json", "dst_ip"]
+        output_features: ["network_dst_port"]
+    features:
+      - name: "network_dst_port"
+        dtype: "integer"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "none"
+          encoding: "none"
+  network_protocol:
+    branch: "network"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["features_json"]
+        output_features: ["network_transport_protocol"]
+    features:
+      - name: "network_transport_protocol"
+        dtype: "categorical"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "one_hot"
+  network_direction:
+    branch: "network"
+    level: "event"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["src_ip", "dst_ip", "features_json"]
+        output_features: ["network_direction_code"]
+    features:
+      - name: "network_direction_code"
+        dtype: "categorical"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "one_hot"
+  network_timing:
+    branch: "network"
+    level: "flow"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_timestamp", "flow_id"]
+        output_features: ["network_flow_duration_ms"]
+    features:
+      - name: "network_flow_duration_ms"
+        dtype: "duration"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "median"
+          scaling: "robust"
+          encoding: "none"
+  host_network_correlation:
+    branch: "hybrid"
+    level: "hybrid"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["host", "process", "src_ip", "dst_ip", "event_timestamp"]
+        output_features: ["hybrid_host_network_time_delta_ms"]
+    features:
+      - name: "hybrid_host_network_time_delta_ms"
+        dtype: "duration"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "median"
+          scaling: "robust"
+          encoding: "none"
+  auth_network_correlation:
+    branch: "hybrid"
+    level: "hybrid"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["user", "src_ip", "event_timestamp"]
+        output_features: ["hybrid_auth_network_join_count"]
+    features:
+      - name: "hybrid_auth_network_join_count"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+  staging_exfil_sequence:
+    branch: "hybrid"
+    level: "sequence"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_order", "host", "flow_id", "domain"]
+        output_features: ["hybrid_staging_exfil_pattern_score"]
+    features:
+      - name: "hybrid_staging_exfil_pattern_score"
+        dtype: "numeric"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "minmax"
+          encoding: "none"
+  stage_transition:
+    branch: "hybrid"
+    level: "sequence"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_order", "features_json"]
+        output_features: ["hybrid_stage_transition_token"]
+    features:
+      - name: "hybrid_stage_transition_token"
+        dtype: "categorical"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "ordinal"
+  sequence_basic:
+    branch: "sequence"
+    level: "sequence"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_order", "session_id"]
+        output_features: ["sequence_length"]
+    features:
+      - name: "sequence_length"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+  sequence_temporal:
+    branch: "sequence"
+    level: "sequence"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["event_timestamp", "event_order"]
+        output_features: ["sequence_inter_event_gap_ms"]
+    features:
+      - name: "sequence_inter_event_gap_ms"
+        dtype: "duration"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "median"
+          scaling: "robust"
+          encoding: "none"
+  sequence_token:
+    branch: "sequence"
+    level: "sequence"
+    enabled: true
+    planned: true
+    extractor_mappings:
+      - source_fields: ["process", "domain", "features_json"]
+        output_features: ["sequence_event_token"]
+    features:
+      - name: "sequence_event_token"
+        dtype: "text_token"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "unknown"
+          scaling: "none"
+          encoding: "token_id"

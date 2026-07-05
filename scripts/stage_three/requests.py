@@ -30,6 +30,15 @@ class BuildFeatureCatalogRequest(StageThreeBaseRequest):
 
 
 @dataclass(frozen=True)
+class ProbeRuntimeBackendRequest(StageThreeBaseRequest):
+    """Request for probing Stage Three feature extraction runtime backend."""
+
+    backend: str = "auto"
+    profile: str | None = None
+    skip_probe: bool = False
+
+
+@dataclass(frozen=True)
 class ExtractFeaturesRequest(StageThreeBaseRequest):
     """Request for extracting feature artifacts from normalized Parquet data."""
 

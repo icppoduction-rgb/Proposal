@@ -1,0 +1,793 @@
+{
+  "feature_groups": {
+    "auth_network_correlation": {
+      "branch": "hybrid",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "hybrid_auth_network_join_count"
+          ],
+          "source_fields": [
+            "user",
+            "src_ip",
+            "event_timestamp"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "hybrid_auth_network_join_count",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        }
+      ],
+      "level": "hybrid",
+      "planned": true
+    },
+    "dns_entropy": {
+      "branch": "dns",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "dns_query_entropy"
+          ],
+          "source_fields": [
+            "domain",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "dns_query_entropy",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "median",
+            "scaling": "standard"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "dns_exfil_indicators": {
+      "branch": "dns",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "dns_suspicious_tunnel_score"
+          ],
+          "source_fields": [
+            "domain",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "dns_suspicious_tunnel_score",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "minmax"
+          }
+        }
+      ],
+      "level": "window",
+      "planned": true
+    },
+    "dns_lexical": {
+      "branch": "dns",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "dns_query_length"
+          ],
+          "source_fields": [
+            "domain",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "dns_query_length",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "dns_protocol": {
+      "branch": "dns",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "dns_response_code"
+          ],
+          "source_fields": [
+            "features_json",
+            "raw_fields_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "categorical",
+          "name": "dns_response_code",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "one_hot",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "dns_temporal": {
+      "branch": "dns",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "dns_queries_per_window"
+          ],
+          "source_fields": [
+            "event_timestamp",
+            "event_order",
+            "domain"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "dns_queries_per_window",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "robust"
+          }
+        }
+      ],
+      "level": "window",
+      "planned": true
+    },
+    "dns_window": {
+      "branch": "dns",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "dns_unique_domains_per_window"
+          ],
+          "source_fields": [
+            "event_timestamp",
+            "domain",
+            "src_ip"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "dns_unique_domains_per_window",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        }
+      ],
+      "level": "window",
+      "planned": true
+    },
+    "host_auth": {
+      "branch": "host",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "host_auth_failure_flag"
+          ],
+          "source_fields": [
+            "user",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "boolean",
+          "name": "host_auth_failure_flag",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "boolean",
+            "missing": "false",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "host_file_access": {
+      "branch": "host",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "host_file_access_count"
+          ],
+          "source_fields": [
+            "features_json",
+            "raw_fields_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "host_file_access_count",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "host_logs": {
+      "branch": "host",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "host_log_severity"
+          ],
+          "source_fields": [
+            "features_json",
+            "raw_fields_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "categorical",
+          "name": "host_log_severity",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "ordinal",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "host_metrics": {
+      "branch": "host",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "host_cpu_load_pct"
+          ],
+          "source_fields": [
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "host_cpu_load_pct",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "median",
+            "scaling": "standard"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "host_network_correlation": {
+      "branch": "hybrid",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "hybrid_host_network_time_delta_ms"
+          ],
+          "source_fields": [
+            "host",
+            "process",
+            "src_ip",
+            "dst_ip",
+            "event_timestamp"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "duration",
+          "name": "hybrid_host_network_time_delta_ms",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "median",
+            "scaling": "robust"
+          }
+        }
+      ],
+      "level": "hybrid",
+      "planned": true
+    },
+    "host_process": {
+      "branch": "host",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "host_process_name_hash"
+          ],
+          "source_fields": [
+            "process",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "categorical",
+          "name": "host_process_name_hash",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "hashing",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "host_syscall": {
+      "branch": "host",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "host_syscall_frequency_vector"
+          ],
+          "source_fields": [
+            "event_order",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "numeric_vector",
+          "name": "host_syscall_frequency_vector",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "sequence",
+      "planned": true
+    },
+    "host_windows_sysmon": {
+      "branch": "host",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "host_sysmon_event_id"
+          ],
+          "source_fields": [
+            "features_json",
+            "process"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "categorical",
+          "name": "host_sysmon_event_id",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "one_hot",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "network_direction": {
+      "branch": "network",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "network_direction_code"
+          ],
+          "source_fields": [
+            "src_ip",
+            "dst_ip",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "categorical",
+          "name": "network_direction_code",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "one_hot",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "network_flow": {
+      "branch": "network",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "network_flow_bytes"
+          ],
+          "source_fields": [
+            "flow_id",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "network_flow_bytes",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "robust"
+          }
+        }
+      ],
+      "level": "flow",
+      "planned": true
+    },
+    "network_ports": {
+      "branch": "network",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "network_dst_port"
+          ],
+          "source_fields": [
+            "features_json",
+            "dst_ip"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "network_dst_port",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "network_protocol": {
+      "branch": "network",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "network_transport_protocol"
+          ],
+          "source_fields": [
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "categorical",
+          "name": "network_transport_protocol",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "one_hot",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "event",
+      "planned": true
+    },
+    "network_timing": {
+      "branch": "network",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "network_flow_duration_ms"
+          ],
+          "source_fields": [
+            "event_timestamp",
+            "flow_id"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "duration",
+          "name": "network_flow_duration_ms",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "median",
+            "scaling": "robust"
+          }
+        }
+      ],
+      "level": "flow",
+      "planned": true
+    },
+    "sequence_basic": {
+      "branch": "sequence",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "sequence_length"
+          ],
+          "source_fields": [
+            "event_order",
+            "session_id"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "sequence_length",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        }
+      ],
+      "level": "sequence",
+      "planned": true
+    },
+    "sequence_temporal": {
+      "branch": "sequence",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "sequence_inter_event_gap_ms"
+          ],
+          "source_fields": [
+            "event_timestamp",
+            "event_order"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "duration",
+          "name": "sequence_inter_event_gap_ms",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "median",
+            "scaling": "robust"
+          }
+        }
+      ],
+      "level": "sequence",
+      "planned": true
+    },
+    "sequence_token": {
+      "branch": "sequence",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "sequence_event_token"
+          ],
+          "source_fields": [
+            "process",
+            "domain",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "text_token",
+          "name": "sequence_event_token",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "token_id",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "sequence",
+      "planned": true
+    },
+    "stage_transition": {
+      "branch": "hybrid",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "hybrid_stage_transition_token"
+          ],
+          "source_fields": [
+            "event_order",
+            "features_json"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "categorical",
+          "name": "hybrid_stage_transition_token",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "ordinal",
+            "missing": "unknown",
+            "scaling": "none"
+          }
+        }
+      ],
+      "level": "sequence",
+      "planned": true
+    },
+    "staging_exfil_sequence": {
+      "branch": "hybrid",
+      "enabled": true,
+      "extractor_mappings": [
+        {
+          "output_features": [
+            "hybrid_staging_exfil_pattern_score"
+          ],
+          "source_fields": [
+            "event_order",
+            "host",
+            "flow_id",
+            "domain"
+          ]
+        }
+      ],
+      "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "hybrid_staging_exfil_pattern_score",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "minmax"
+          }
+        }
+      ],
+      "level": "sequence",
+      "planned": true
+    }
+  },
+  "forbidden_X_columns": [
+    "dataset_id",
+    "dataset_name",
+    "dataset_role",
+    "event_uid",
+    "file_id",
+    "label_*",
+    "label_binary",
+    "label_confidence",
+    "label_family",
+    "label_mapping_rule_id",
+    "label_source",
+    "label_status",
+    "label_subtype",
+    "metadata_json",
+    "normalized_artifact_id",
+    "parser_name",
+    "parser_run_id",
+    "parser_version",
+    "raw_fields_json",
+    "scenario_name",
+    "source_file",
+    "source_file_id",
+    "source_file_path",
+    "source_path"
+  ],
+  "owner": "stage-three",
+  "project": "Proposal",
+  "source_document": "planning/stage-three/STAGE THREE(Feature Extraction, Preprocessing and Model-Ready Dataset Preparation).txt",
+  "stage": "stage-three",
+  "version": "1.0"
+}
