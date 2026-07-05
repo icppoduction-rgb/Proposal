@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import sys
 
 parser = argparse.ArgumentParser()
 
@@ -17,6 +18,12 @@ def manage() -> None:
     """
 
     from scripts.router_script import router_commands
+
+    raw_args = sys.argv[1:]
+    if raw_args and raw_args[0] == "stage-three":
+        service = raw_args[1] if len(raw_args) > 1 else None
+        router_commands("stage-three", service, None, raw_args[2:])
+        return
 
     args, unknown = parser.parse_known_args()
 

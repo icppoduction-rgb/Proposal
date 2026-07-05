@@ -30,5 +30,10 @@ def router_commands(
 
         router_stage_two(service, action, extra_args=extra_args)
 
+    elif module == "stage-three":
+        from scripts.stage_three.cli import router_stage_three
+
+        router_stage_three(service, action, extra_args=extra_args)
+
     else:
         console.print(manage_commands)
