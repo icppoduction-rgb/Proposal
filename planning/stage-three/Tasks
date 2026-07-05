@@ -1,0 +1,1185 @@
+================================================================================
+2. ЗАДАЧИ ДЛЯ CODEX
+================================================================================
+
+--------------------------------------------------------------------------------
+Задача 01 — stage-three-config-resource-profile
+--------------------------------------------------------------------------------
+
+Цель:
+  Добавить конфигурацию Stage Three, resource profiles и runtime safety limits.
+
+Ссылка на предыдущий report:
+  Сослаться на финальный/readiness report Stage Two, если он существует.
+  Если он недоступен, явно написать:
+  "No previous Stage Three task report; this is the first Stage Three task."
+
+Scope:
+  - Обновить config.py путями Stage Three и resource defaults.
+  - Добавить Stage Three entries в .env.example.
+  - Добавить модель resource profile для safe/balanced/fast/aggressive.
+  - Добавить runtime memory guard settings для сохранения минимум 8 GB свободной RAM.
+  - Добавить GPU backend selection settings: auto/cpu/gpu.
+  - Добавить stage_three report path helper, который строит RU/EN пути из config.py.
+
+Требования к реализации:
+  - Не hardcode-ить C:\Users\Public\PythonProjects\storage внутри кода.
+  - Resolve reports через PATH_DATA_STORAGE.
+  - Добавить небольшой utility module:
+      scripts/stage_three/runtime/resources.py
+  - Добавить dataclasses:
+      StageThreeResourceProfile
+      StageThreeRuntimeSettings
+      StageThreeAccelerationSettings
+  - Валидировать:
+      reserved_ram_gb >= 8
+      hard_ram_limit_gb <= total_ram_gb - reserved_ram_gb
+      default_workers <= max_workers
+      db_workers <= default_workers
+  - Добавить psutil-based memory check, если psutil установлен.
+    Если psutil отсутствует — fallback на conservative static limits и warning.
+
+Рекомендуемые файлы:
+  - config.py
+  - .env.example
+  - scripts/stage_three/__init__.py
+  - scripts/stage_three/runtime/__init__.py
+  - scripts/stage_three/runtime/resources.py
+  - scripts/stage_three/reports/path_utils.py
+  - tests/stage_three/test_runtime_config.py
+
+Критерии готовности:
+  - Stage Three report directories создаются через config.py.
+  - Runtime settings загружаются без DB connection.
+  - Некорректные memory settings завершаются понятной ошибкой.
+  - Tests pass.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task01-stage-three-config-resource-profile.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task01-stage-three-config-resource-profile.md
+
+Report должен включать:
+  - Новые constants в config.py.
+  - Новые .env keys.
+  - Resolved report paths.
+  - Selected default profile.
+  - CPU/GPU/memory policy.
+  - Previous report reference.
+
+--------------------------------------------------------------------------------
+Задача 02 — stage-three-storage-bootstrap
+--------------------------------------------------------------------------------
+
+Цель:
+  Расширить storage bootstrap для директорий Stage Three без изменения Stage Two outputs.
+
+Ссылка на предыдущий report:
+  Task01-stage-three-config-resource-profile.md
+
+Scope:
+  - Создать Stage Three storage directories под PATH_DATA_STORAGE.
+  - Сохранить существующий Stage Two bootstrap idempotent.
+  - Добавить stage-three report/log/temp directories.
+  - Добавить role-aware feature/model-ready directories, если их нет.
+
+Обязательные директории:
+  PATH_DATA_STORAGE\reports\ru\stage-three\
+  PATH_DATA_STORAGE\reports\en\stage-three\
+  PATH_DATA_STORAGE\logs\stage-three\
+  PATH_DATA_STORAGE\temp_data\stage_three\
+  PATH_DATA_STORAGE\parquet\features\
+  PATH_DATA_STORAGE\parquet\model_ready\
+
+Требования к реализации:
+  - Переиспользовать существующие storage bootstrap conventions.
+  - Не удалять, не перемещать и не перезаписывать существующие files.
+  - Возвращать counters: created/existing/skipped.
+  - Command support добавить позже через CLI skeleton; сейчас предоставить service method для tests.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/storage/bootstrap.py
+  - tests/stage_three/test_storage_bootstrap.py
+
+Критерии готовности:
+  - Bootstrap idempotent.
+  - Существующие Stage Two tests still pass.
+  - Required Stage Three directories существуют после запуска service.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task02-stage-three-storage-bootstrap.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task02-stage-three-storage-bootstrap.md
+
+Report должен включать:
+  - Previous report path.
+  - Created/existing directories.
+  - Подтверждение, что Stage Two directories не были destructive changed.
+
+--------------------------------------------------------------------------------
+Задача 03 — stage-three-cli-skeleton
+--------------------------------------------------------------------------------
+
+Цель:
+  Добавить Stage Three CLI routing через manage.py без поломки Stage Two.
+
+Ссылка на предыдущий report:
+  Task02-stage-three-storage-bootstrap.md
+
+Scope:
+  - Добавить module route: python manage.py stage-three <command> [options]
+  - Добавить CLI command skeletons:
+      validate-inputs
+      build-feature-catalog
+      extract-features
+      align-labels
+      build-sequences
+      build-model-ready
+      run-quality-checks
+      run-leakage-checks
+      trace-artifact
+      final-report
+  - Добавить typed request dataclasses для commands.
+  - Добавить --dry-run, --resume, --branch, --role, --feature-group, --experiment-id where relevant.
+
+Требования к реализации:
+  - Использовать argparse или существующий project CLI pattern consistently.
+  - DB sessions открывать только внутри commands, которым нужна DB.
+  - Не разделять SQLAlchemy sessions между workers.
+  - CLI должен печатать structured JSON-like output, совместимый со стилем Stage Two.
+  - Добавить понятные errors для missing PATH_DATA_STORAGE или DATABASE_URL.
+
+Рекомендуемые файлы:
+  - scripts/router_script.py
+  - scripts/stage_three/cli.py
+  - scripts/stage_three/requests.py
+  - tests/stage_three/test_cli_routing.py
+
+Критерии готовности:
+  - python manage.py stage-three --help работает.
+  - Unknown Stage Three command безопасно завершается ошибкой.
+  - Stage Two commands still work.
+  - Routing tests pass.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task03-stage-three-cli-skeleton.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task03-stage-three-cli-skeleton.md
+
+Report должен включать:
+  - Previous report path.
+  - Добавленные commands.
+  - CLI examples.
+  - Tests executed.
+
+--------------------------------------------------------------------------------
+Задача 04 — stage-three-validate-inputs-readiness-gate
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать Stage Three readiness gate поверх Stage Two normalized outputs.
+
+Ссылка на предыдущий report:
+  Task03-stage-three-cli-skeleton.md
+
+Scope:
+  - Реализовать python manage.py stage-three validate-inputs.
+  - Проверить, что Stage Two завершил обязательные gates перед стартом Stage Three.
+  - Валидировать normalized_artifacts, parser_runs, dataset_files, datasets и schemas.
+  - Проверить, что normalized Parquet files существуют и читаются.
+
+Проверки:
+  - normalized_artifacts существуют для requested branch/role.
+  - parser_runs имеют SUCCESS или разрешенный PARTIAL_SUCCESS.
+  - dataset_files statuses совместимы с downstream feature extraction.
+  - normalized Parquet schema содержит traceability fields.
+  - labels присутствуют или явно отмечены как unlabeled.
+  - TEST artifacts не помечены для TRAIN preprocessing fit.
+  - Required schema files существуют:
+      schemas/features/feature_artifact_v1.json
+      schemas/model_ready/model_ready_v1.json
+
+Требования по оптимизации:
+  - Использовать DuckDB или PyArrow metadata reads для schema/count checks.
+  - Не сканировать полный Parquet content без необходимости.
+  - Использовать column projection для sample checks.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/readiness/validator.py
+  - scripts/stage_three/readiness/report.py
+  - tests/stage_three/test_validate_inputs.py
+
+Критерии готовности:
+  - validate-inputs формирует summary PASS/WARN/FAIL.
+  - Blocking failures останавливают downstream commands.
+  - Report генерируется в RU/EN.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task04-stage-three-validate-inputs-readiness-gate.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task04-stage-three-validate-inputs-readiness-gate.md
+
+Report должен включать:
+  - Previous report path.
+  - Checked branches/roles.
+  - Normalized artifact counts.
+  - PASS/WARN/FAIL checks.
+  - Blocking issues and next actions.
+
+--------------------------------------------------------------------------------
+Задача 05 — feature-catalog-contract-validator
+--------------------------------------------------------------------------------
+
+Цель:
+  Создать и валидировать machine-readable feature_catalog.yml/json.
+
+Ссылка на предыдущий report:
+  Task04-stage-three-validate-inputs-readiness-gate.md
+
+Scope:
+  - Создать scripts/stage_three/feature_catalog/feature_catalog.yml.
+  - Добавить loader и validator.
+  - Покрыть DNS, Host, Network, Hybrid и Sequence feature groups.
+  - Добавить forbidden_X_columns в catalog.
+  - Добавить preprocessing strategy для каждого feature.
+
+Минимальные feature groups:
+  DNS:
+    dns_lexical
+    dns_entropy
+    dns_temporal
+    dns_protocol
+    dns_window
+    dns_exfil_indicators
+  Host:
+    host_syscall
+    host_process
+    host_auth
+    host_file_access
+    host_metrics
+    host_logs
+    host_windows_sysmon
+  Network:
+    network_flow
+    network_ports
+    network_protocol
+    network_direction
+    network_timing
+  Hybrid:
+    host_network_correlation
+    auth_network_correlation
+    staging_exfil_sequence
+    stage_transition
+  Sequence:
+    sequence_basic
+    sequence_temporal
+    sequence_token
+
+Validator должен проверять:
+  - Unique feature names.
+  - dtype exists.
+  - preprocessing strategy exists.
+  - branch and level exist.
+  - allow_in_X is explicit.
+  - forbidden columns are not allow_in_X=true.
+  - dtype compatible with missing/scaling/encoding strategy.
+  - feature group has at least one extractor mapping or explicitly planned=false.
+
+Требования к реализации:
+  - Хранить catalog versioned.
+  - Не использовать dataset_name, dataset_role, source_file, source_path,
+    scenario_name, parser_name, parser_version, label_* как X features.
+  - Поддержать output как YAML и normalized JSON для deterministic tests.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/feature_catalog/loader.py
+  - scripts/stage_three/feature_catalog/validator.py
+  - scripts/stage_three/feature_catalog/feature_catalog.yml
+  - tests/stage_three/test_feature_catalog_validator.py
+
+Критерии готовности:
+  - build-feature-catalog валидирует catalog и пишет normalized catalog snapshot.
+  - Invalid forbidden feature fails tests.
+  - Report включает enabled/planned feature groups.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task05-feature-catalog-contract-validator.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task05-feature-catalog-contract-validator.md
+
+Report должен включать:
+  - Previous report path.
+  - Catalog version.
+  - Feature groups.
+  - Forbidden X columns.
+  - Validation result.
+
+--------------------------------------------------------------------------------
+Задача 06 — feature-extraction-runtime-backend
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать общий feature extraction runtime с CPU/GPU backend selection и memory guard.
+
+Ссылка на предыдущий report:
+  Task05-feature-catalog-contract-validator.md
+
+Scope:
+  - Добавить backend abstraction для feature extraction.
+  - Реализовать CPU backend как обязательный.
+  - Реализовать GPU backend как optional capability wrapper.
+  - Добавить benchmark/correctness probe для auto mode.
+
+Требования к CPU backend:
+  - Предпочитать PyArrow Dataset, DuckDB и Polars LazyFrame.
+  - Читать только required columns.
+  - Обрабатывать данные bounded batches.
+  - Писать intermediate output в Parquet parts; не держать все rows в памяти.
+
+Требования к GPU backend:
+  - Detect RAPIDS/cuDF availability at runtime.
+  - Использовать GPU только для supported operations.
+  - Fall back to CPU, если GPU library отсутствует или unsupported.
+  - Соблюдать GPU memory limits.
+  - Проверять output equality/tolerance против CPU на small sample перед production use.
+
+Memory guard:
+  - Проверять free RAM перед каждым batch.
+  - Если free RAM < 8 GB — уменьшать batch size или pause/fail safely.
+  - Логировать peak RSS, batch rows, elapsed seconds и backend used.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/runtime/backend.py
+  - scripts/stage_three/runtime/memory_guard.py
+  - scripts/stage_three/runtime/benchmark_probe.py
+  - tests/stage_three/test_runtime_backend.py
+
+Критерии готовности:
+  - CPU backend always works.
+  - GPU backend optional и никогда не требуется для tests.
+  - Auto mode safely falls back.
+  - Memory guard testable.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task06-feature-extraction-runtime-backend.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task06-feature-extraction-runtime-backend.md
+
+Report должен включать:
+  - Previous report path.
+  - Backend selected.
+  - GPU availability result.
+  - CPU/GPU probe result, если запускался.
+  - RAM limits and peak memory.
+
+--------------------------------------------------------------------------------
+Задача 07 — dns-feature-extractors-mvp
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать MVP DNS feature extractors из normalized Parquet artifacts.
+
+Ссылка на предыдущий report:
+  Task06-feature-extraction-runtime-backend.md
+
+Scope:
+  - Реализовать extract-features для DNS MVP groups:
+      dns_lexical
+      dns_entropy
+      dns_temporal
+  - Использовать только normalized artifacts как input.
+  - Генерировать feature rows и feature artifacts.
+
+Примеры features:
+  dns_query_length
+  dns_subdomain_length
+  dns_label_count
+  dns_label_avg_len
+  dns_label_max_len
+  dns_digit_count
+  dns_special_char_count
+  dns_entropy
+  dns_queries_per_window
+  dns_inter_query_interval_mean
+  dns_inter_query_interval_std
+  dns_burst_score
+
+Требования к реализации:
+  - Поддержать --branch dns --role TRAIN|VALIDATION|TEST.
+  - Поддержать --feature-group.
+  - Сохранять sample_uid, normalized_artifact_id и traceability fields.
+  - Держать label fields отдельно от X processing.
+  - Не выводить benign из missing labels.
+  - Использовать vectorized Polars/PyArrow operations where possible.
+  - Избегать full pandas loads.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/extraction/base.py
+  - scripts/stage_three/extraction/dns_extractors.py
+  - scripts/stage_three/extraction/runner.py
+  - tests/stage_three/test_dns_feature_extractors.py
+
+Критерии готовности:
+  - DNS MVP features extracted for a sample normalized artifact.
+  - Feature schema matches feature catalog.
+  - Forbidden columns are not emitted as X features.
+  - Report includes row counts and missing ratios.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task07-dns-feature-extractors-mvp.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task07-dns-feature-extractors-mvp.md
+
+Report должен включать:
+  - Previous report path.
+  - Input normalized artifacts.
+  - Output feature artifacts.
+  - Rows read/written.
+  - Columns created.
+  - Runtime and memory metrics.
+
+--------------------------------------------------------------------------------
+Задача 08 — host-network-feature-extractors-core
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать core Host и Network feature extractors.
+
+Ссылка на предыдущий report:
+  Task07-dns-feature-extractors-mvp.md
+
+Scope:
+  - Реализовать feature groups:
+      host_syscall
+      host_process
+      host_auth
+      host_file_access
+      host_metrics
+      host_logs
+      network_flow
+      network_ports
+      network_protocol
+      network_direction
+      network_timing
+  - Использовать только normalized artifacts.
+
+Требования к реализации:
+  - Поддержать line/log/syscall/metric/network normalized events.
+  - Использовать branch/role/format filters.
+  - Использовать chunked processing для high-volume Host TEST txt/log/json artifacts.
+  - Сделать feature extraction deterministic.
+  - Сохранять unsupported source fields как warnings, не как X columns.
+  - Не использовать raw paths или source names как features.
+
+Требования по оптимизации:
+  - Использовать DuckDB group-by over Parquet для крупных window/flow aggregations, где это проще и быстрее.
+  - Использовать Polars lazy scan для columnar transforms и token counts.
+  - Использовать batch size из config.py.
+  - Throttle workers based on memory guard.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/extraction/host_extractors.py
+  - scripts/stage_three/extraction/network_extractors.py
+  - tests/stage_three/test_host_feature_extractors.py
+  - tests/stage_three/test_network_feature_extractors.py
+
+Критерии готовности:
+  - Core Host/Network features work on sample normalized data.
+  - Missing timestamp handled by event_order where valid.
+  - No raw/source/leakage fields included in X.
+  - Runtime report includes batch/worker statistics.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task08-host-network-feature-extractors-core.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task08-host-network-feature-extractors-core.md
+
+Report должен включать:
+  - Previous report path.
+  - Supported feature groups.
+  - Unsupported/partial fields.
+  - Runtime and memory metrics.
+  - Quality warnings.
+
+--------------------------------------------------------------------------------
+Задача 09 — feature-artifact-writer-and-catalog-registration
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать запись feature artifacts и регистрацию в PostgreSQL Catalog.
+
+Ссылка на предыдущий report:
+  Task08-host-network-feature-extractors-core.md
+
+Scope:
+  - Переиспользовать или расширить существующие Stage Two FeatureArtifact writer/registry services.
+  - Писать feature rows в Parquet.
+  - Регистрировать feature_artifacts в PostgreSQL.
+  - Сохранять traceability к normalized_artifacts.
+
+Требования к реализации:
+  - Писать atomic Parquet outputs: temp file -> validate -> rename/register.
+  - Использовать zstd compression, если config не переопределяет.
+  - Хранить feature schema version.
+  - Хранить feature group, branch, role, row count, column count, source artifact IDs.
+  - Поддержать --resume с пропуском уже успешных matching artifacts.
+  - Добавить checksum/hash, если это поддерживается conventions проекта.
+
+Рекомендуемый output pattern:
+  PATH_DATA_STORAGE\parquet\features\<feature_group>\<branch>\<role>\schema=<version>\part-<run_id>.parquet
+
+Рекомендуемые файлы:
+  - scripts/stage_three/extraction/artifact_writer.py
+  - scripts/stage_three/extraction/registry.py
+  - tests/stage_three/test_feature_artifact_registration.py
+
+Критерии готовности:
+  - Feature artifact физически записан.
+  - Catalog row зарегистрирован.
+  - Traceability к normalized artifact recoverable.
+  - Resume не дублирует successful artifacts.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task09-feature-artifact-writer-and-catalog-registration.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task09-feature-artifact-writer-and-catalog-registration.md
+
+Report должен включать:
+  - Previous report path.
+  - Written artifact paths.
+  - Catalog IDs.
+  - Row/column counts.
+  - Resume behavior.
+
+--------------------------------------------------------------------------------
+Задача 10 — label-alignment-policies
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать label alignment для event/window/sequence feature samples.
+
+Ссылка на предыдущий report:
+  Task09-feature-artifact-writer-and-catalog-registration.md
+
+Scope:
+  - Реализовать labels для event-level, window-level, flow-level и sequence-level samples.
+  - Добавить label policy module.
+  - Выводить y-ready labels отдельно от X.
+
+Обязательные label policies:
+  explicit_only
+  any_attack_in_window
+  majority_label
+  last_event_label
+  weak_allowed_with_confidence
+
+Правила:
+  - Labels никогда не являются input features.
+  - Missing label остается unlabeled.
+  - Не преобразовывать unlabeled в benign.
+  - Не использовать TEST filename hints для training logic.
+  - Сохранять label_source, label_status, label_confidence и label_mapping_rule_id в y/metadata, не в X.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/labels/label_policy.py
+  - scripts/stage_three/labels/window_labeler.py
+  - scripts/stage_three/labels/sequence_labeler.py
+  - tests/stage_three/test_label_alignment.py
+
+Критерии готовности:
+  - Policies produce deterministic labels.
+  - Conflicting labels marked, not silently overwritten.
+  - y and metadata outputs separated from X.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task10-label-alignment-policies.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task10-label-alignment-policies.md
+
+Report должен включать:
+  - Previous report path.
+  - Policy used.
+  - Label coverage.
+  - Unlabeled/conflicting counts.
+  - Label source/status distribution.
+
+--------------------------------------------------------------------------------
+Задача 11 — xy-metadata-traceability-separation
+--------------------------------------------------------------------------------
+
+Цель:
+  Физически разделить X, y, metadata и traceability до preprocessing.
+
+Ссылка на предыдущий report:
+  Task10-label-alignment-policies.md
+
+Scope:
+  - Реализовать separator, который читает feature artifacts и создает четыре logical tables:
+      X
+      y
+      metadata
+      traceability
+  - Enforce removal forbidden columns from X.
+  - Хранить audit fields только в metadata/traceability.
+
+X может содержать:
+  - numeric behavioural features
+  - binary indicators
+  - encoded categorical feature outputs
+  - timestamp-derived numeric features
+
+X не должен содержать:
+  - label_*
+  - dataset_name
+  - dataset_role
+  - source_file
+  - source_path
+  - scenario_name
+  - parser_name
+  - parser_version
+  - raw_fields_json
+  - metadata_json
+  - absolute local paths
+  - traceability IDs as model features
+
+Требования к реализации:
+  - Использовать feature_catalog allow_in_X и forbidden_X_columns.
+  - Формировать explicit dropped_columns list.
+  - Fail, если forbidden column non-null in X after separation.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/model_ready/separator.py
+  - tests/stage_three/test_xy_separation.py
+
+Критерии готовности:
+  - X/y/metadata/traceability separated on sample data.
+  - Forbidden X columns check fails correctly.
+  - Dropped columns documented.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task11-xy-metadata-traceability-separation.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task11-xy-metadata-traceability-separation.md
+
+Report должен включать:
+  - Previous report path.
+  - X columns kept.
+  - y columns.
+  - metadata columns.
+  - traceability columns.
+  - dropped/forbidden columns.
+
+--------------------------------------------------------------------------------
+Задача 12 — type-casting-and-schema-normalization
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать feature type casting и stable schema normalization.
+
+Ссылка на предыдущий report:
+  Task11-xy-metadata-traceability-separation.md
+
+Scope:
+  - Преобразовать feature values к ML/DL-compatible types.
+  - Сохранить memory efficiency.
+  - Записать schema metadata для downstream preprocessing.
+
+Правила типов:
+  - Counters: int32 или int64 в зависимости от max value.
+  - Ratios/entropy/durations: float32 by default.
+  - Boolean flags: int8 или bool, затем 0/1 for model-ready.
+  - One-hot columns: int8 или sparse matrix-compatible representation.
+  - Timestamp: никогда raw timestamp в X; использовать hour, day_of_week, time_delta, duration, inter-arrival.
+  - json/list/dict: раскрыть в numeric features или исключить из X.
+  - raw payload/body/path/source/scenario: исключить из X.
+
+Требования по оптимизации:
+  - Downcast numeric dtypes where safe.
+  - Избегать object dtype в model-ready X.
+  - Сохранять high-cardinality sparse outputs sparse where possible.
+  - Использовать batch processing.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/preprocessing/type_casting.py
+  - tests/stage_three/test_type_casting.py
+
+Критерии готовности:
+  - No object/string raw feature remains in X after type casting unless explicitly scheduled for encoding.
+  - Dtypes match feature catalog.
+  - Report shows before/after memory footprint.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task12-type-casting-and-schema-normalization.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task12-type-casting-and-schema-normalization.md
+
+Report должен включать:
+  - Previous report path.
+  - dtype conversions.
+  - rejected columns.
+  - memory before/after.
+  - schema warnings.
+
+--------------------------------------------------------------------------------
+Задача 13 — missing-values-and-categorical-encoding
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать TRAIN-fitted missing value handling и categorical encoding.
+
+Ссылка на предыдущий report:
+  Task12-type-casting-and-schema-normalization.md
+
+Scope:
+  - Реализовать imputer fit/transform split.
+  - Реализовать categorical encoding fit/transform split.
+  - Fit только на TRAIN.
+  - Transform TRAIN/VALIDATION/TEST с использованием TRAIN-fitted artifacts.
+
+Missing value strategies:
+  - Numeric counters: 0 только если absence semantically means zero, иначе median.
+  - Numeric continuous: median.
+  - Ratios: median или 0 + missing indicator.
+  - Boolean: false + missing indicator.
+  - Categorical: UNKNOWN.
+  - Timestamp-derived: -1/UNKNOWN_TIME + timestamp_missing flag.
+  - Sequence: padding + mask.
+
+Encoding strategies:
+  - One-hot для small-cardinality categories.
+  - Frequency encoding для high-cardinality process/event/domain classes.
+  - Hashing trick для safe high-cardinality tokens после leakage cleaning.
+  - Embedding index для sequence tokens.
+
+Forbidden categories for encoding:
+  dataset_name, dataset_role, source_file, source_path, scenario_name,
+  label_source, label_status, parser_name, parser_version.
+
+Требования к реализации:
+  - Регистрировать preprocessing metadata.
+  - Хранить fitted categories/statistics.
+  - Unknown categories in VALIDATION/TEST не должны fail by default; map to UNKNOWN/other.
+  - Добавить tests, доказывающие, что fit на VALIDATION/TEST blocked.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/preprocessing/missing_values.py
+  - scripts/stage_three/preprocessing/categorical_encoding.py
+  - scripts/stage_three/preprocessing/fit_transform.py
+  - tests/stage_three/test_missing_values.py
+  - tests/stage_three/test_categorical_encoding.py
+
+Критерии готовности:
+  - TRAIN fit artifacts created.
+  - VALIDATION/TEST transform uses TRAIN artifacts only.
+  - Missing indicators added where configured.
+  - Encoding does not include forbidden source/leakage fields.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task13-missing-values-and-categorical-encoding.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task13-missing-values-and-categorical-encoding.md
+
+Report должен включать:
+  - Previous report path.
+  - Fit role.
+  - Imputer strategies.
+  - Encoder strategies.
+  - Unknown category handling.
+  - Missing ratios before/after.
+
+--------------------------------------------------------------------------------
+Задача 14 — scaling-profiles-and-preprocessing-artifacts
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать scaling profiles и зарегистрировать preprocessing artifacts.
+
+Ссылка на предыдущий report:
+  Task13-missing-values-and-categorical-encoding.md
+
+Scope:
+  - Реализовать scaling profiles:
+      tree_unscaled
+      standard_scaled
+      robust_scaled
+      minmax_scaled
+      dl_scaled
+  - Fit scaler только на TRAIN.
+  - Transform TRAIN/VALIDATION/TEST.
+  - Зарегистрировать PreprocessingArtifact с fitted_on_role=TRAIN.
+
+Правила:
+  - RF/XGBoost profile может использовать tree_unscaled.
+  - CNN/LSTM profile должен использовать standard_scaled или minmax_scaled по feature policy.
+  - Scaler не должен fit на VALIDATION или TEST.
+  - Scaling выполняется после missing handling и categorical encoding.
+
+Требования по оптимизации:
+  - Использовать float32 для scaled arrays, если точность не требует float64.
+  - Process in chunks for large Parquet artifacts.
+  - Использовать sparse-safe scaling for sparse encodings.
+  - Избегать materializing all splits in memory.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/preprocessing/scaling.py
+  - scripts/stage_three/preprocessing/profiles.py
+  - tests/stage_three/test_scaling_profiles.py
+  - tests/stage_three/test_preprocessing_artifact_registration.py
+
+Критерии готовности:
+  - tree_unscaled и dl_scaled profiles доступны.
+  - PreprocessingArtifact registered.
+  - fitted_on_role=TRAIN enforced.
+  - Reports show scaler statistics location.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task14-scaling-profiles-and-preprocessing-artifacts.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task14-scaling-profiles-and-preprocessing-artifacts.md
+
+Report должен включать:
+  - Previous report path.
+  - Scaling profiles created.
+  - Fit role.
+  - Preprocessing artifact IDs.
+  - Feature count per profile.
+
+--------------------------------------------------------------------------------
+Задача 15 — class-balance-report-and-train-only-balancing
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать class balance reporting и optional TRAIN-only balancing.
+
+Ссылка на предыдущий report:
+  Task14-scaling-profiles-and-preprocessing-artifacts.md
+
+Scope:
+  - Создать class balance report для TRAIN/VALIDATION/TEST.
+  - Реализовать class_weight metadata for Stage Four.
+  - Реализовать optional random undersampling/oversampling только для TRAIN.
+  - Держать SMOTE optional и disabled by default.
+
+Правила:
+  - No balancing on VALIDATION.
+  - No balancing on TEST.
+  - No threshold tuning on TEST.
+  - Missing labels are not benign.
+  - SMOTE должен требовать explicit flag и отдельный warning в report.
+
+Рекомендуемое MVP-поведение:
+  - Не делать physical resampling на первом запуске.
+  - Записать class_weight / scale_pos_weight metadata for Stage Four.
+  - Создать distribution report.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/preprocessing/class_balance.py
+  - scripts/stage_three/quality/class_balance_report.py
+  - tests/stage_three/test_class_balance.py
+
+Критерии готовности:
+  - Class distribution reported.
+  - TRAIN-only balancing guard tested.
+  - VALIDATION/TEST row counts unchanged.
+  - SMOTE disabled by default.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task15-class-balance-report-and-train-only-balancing.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task15-class-balance-report-and-train-only-balancing.md
+
+Report должен включать:
+  - Previous report path.
+  - Before/after class distribution.
+  - Balancing method.
+  - Confirmation that VALIDATION/TEST were not modified.
+  - Recommended class_weight/scale_pos_weight.
+
+--------------------------------------------------------------------------------
+Задача 16 — sequence-window-builder
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать sequence window builder для будущего LSTM/CNN-LSTM training.
+
+Ссылка на предыдущий report:
+  Task15-class-balance-report-and-train-only-balancing.md
+
+Scope:
+  - Строить ordered sequence windows из normalized/feature events.
+  - Создавать sequence artifacts, не выполнять model training.
+  - Поддержать event ordering by timestamp or event_order.
+
+Минимальная sequence policy:
+  sequence_length: 50 or 100
+  step: 25
+  padding: post-padding
+  masking: required
+  label_policy: any_attack_in_window for MVP
+  group_by: host / source_ip / user / process / flow_id
+
+Требования к реализации:
+  - Никогда не использовать current runtime time для missing timestamps.
+  - Если timestamp missing, использовать event_order только если он reliable.
+  - Хранить mask and padding_count.
+  - Хранить traceability_event_uids outside model X.
+  - Не выполнять mechanical merge incompatible host/network raw datasets.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/extraction/sequence_extractors.py
+  - scripts/stage_three/model_ready/sequence_builder.py
+  - tests/stage_three/test_sequence_window_builder.py
+
+Критерии готовности:
+  - Sequence windows built for sample data.
+  - Padding/mask correct.
+  - Sequence labels follow selected policy.
+  - Traceability preserved.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task16-sequence-window-builder.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task16-sequence-window-builder.md
+
+Report должен включать:
+  - Previous report path.
+  - Sequence policy.
+  - Number of sequences.
+  - Padding statistics.
+  - Label distribution.
+  - Ordering policy and timestamp coverage.
+
+--------------------------------------------------------------------------------
+Задача 17 — model-ready-builder
+--------------------------------------------------------------------------------
+
+Цель:
+  Собрать финальные model-ready artifacts: X, y, metadata, traceability, sequence и split_index.
+
+Ссылка на предыдущий report:
+  Task16-sequence-window-builder.md
+
+Scope:
+  - Реализовать python manage.py stage-three build-model-ready.
+  - Собирать artifacts для branch/experiment/profile/role.
+  - Регистрировать ModelReadyArtifact records в PostgreSQL.
+
+Artifacts to create:
+  X_train, y_train, metadata_train, traceability_train
+  X_validation, y_validation, metadata_validation, traceability_validation
+  X_test, y_test, metadata_test, traceability_test
+  sequence_train, sequence_validation, sequence_test if sequence profile is enabled
+  split_index
+  preprocessing_metadata
+
+Рекомендуемый path pattern:
+  PATH_DATA_STORAGE\parquet\model_ready\<experiment_id>\<branch>\<preprocessing_profile>\<role>\X.parquet
+  PATH_DATA_STORAGE\parquet\model_ready\<experiment_id>\<branch>\<preprocessing_profile>\<role>\y.parquet
+  PATH_DATA_STORAGE\parquet\model_ready\<experiment_id>\<branch>\<preprocessing_profile>\<role>\metadata.parquet
+  PATH_DATA_STORAGE\parquet\model_ready\<experiment_id>\<branch>\<preprocessing_profile>\<role>\traceability.parquet
+
+Требования к реализации:
+  - X contains only model features.
+  - y contains target labels.
+  - metadata and traceability are separate.
+  - X schema must match between TRAIN/VALIDATION/TEST for the same profile.
+  - All artifacts registered through repository/service layer.
+  - Support resume and atomic writes.
+  - Support dry-run.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/model_ready/builder.py
+  - scripts/stage_three/model_ready/registry.py
+  - scripts/stage_three/model_ready/split_index.py
+  - tests/stage_three/test_model_ready_builder.py
+
+Критерии готовности:
+  - Model-ready artifacts created for at least DNS MVP sample.
+  - X/y/metadata/traceability physically separate.
+  - Catalog rows registered.
+  - Schema consistency checks pass.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task17-model-ready-builder.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task17-model-ready-builder.md
+
+Report должен включать:
+  - Previous report path.
+  - Experiment ID.
+  - Branch/profile/roles.
+  - Artifact paths and catalog IDs.
+  - X/y row counts.
+  - Feature count.
+  - Target distribution.
+
+--------------------------------------------------------------------------------
+Задача 18 — stage-three-quality-checks
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать Stage Three quality checks для feature и model-ready artifacts.
+
+Ссылка на предыдущий report:
+  Task17-model-ready-builder.md
+
+Scope:
+  - Реализовать python manage.py stage-three run-quality-checks.
+  - Валидировать feature artifacts, preprocessing outputs и model-ready artifacts.
+  - Сохранять DataQualityReport records в PostgreSQL.
+
+Feature quality checks:
+  - Feature artifact not empty.
+  - Required columns present.
+  - sample_uid unique.
+  - dtypes match feature catalog.
+  - missing ratio below threshold or documented.
+  - label coverage calculated.
+  - timestamp coverage calculated.
+  - schema drift detected/documented.
+  - class distribution calculated.
+  - feature columns do not contain forbidden fields.
+
+Model-ready quality checks:
+  - X exists and is not empty.
+  - y exists for supervised pipeline.
+  - X/y row counts match.
+  - X schemas match between TRAIN/VALIDATION/TEST.
+  - preprocessing artifact exists.
+  - fitted_on_role=TRAIN.
+  - class balance report exists.
+  - metadata/traceability artifacts exist.
+
+Требования по оптимизации:
+  - Prefer DuckDB SQL over full DataFrame loads.
+  - Use Parquet metadata where possible.
+  - Use column projection for checks.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/quality/feature_quality.py
+  - scripts/stage_three/quality/preprocessing_quality.py
+  - scripts/stage_three/quality/model_ready_quality.py
+  - tests/stage_three/test_quality_checks.py
+
+Критерии готовности:
+  - Quality checks produce PASS/WARN/FAIL.
+  - Critical failures block downstream Stage Four readiness.
+  - Reports and DB quality records created.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task18-stage-three-quality-checks.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task18-stage-three-quality-checks.md
+
+Report должен включать:
+  - Previous report path.
+  - Checks executed.
+  - PASS/WARN/FAIL table.
+  - Quality report catalog IDs.
+  - Blocking issues.
+
+--------------------------------------------------------------------------------
+Задача 19 — stage-three-leakage-and-traceability-checks
+--------------------------------------------------------------------------------
+
+Цель:
+  Реализовать Stage Three leakage и traceability checks.
+
+Ссылка на предыдущий report:
+  Task18-stage-three-quality-checks.md
+
+Scope:
+  - Реализовать python manage.py stage-three run-leakage-checks.
+  - Реализовать python manage.py stage-three trace-artifact <model_ready_artifact_id>.
+  - Расширить существующую Stage Two leakage logic на Stage Three artifacts, где возможно.
+
+Critical leakage checks:
+  - label_* columns in X.
+  - source_file/source_path/scenario_name in X.
+  - dataset_name/dataset_role in X.
+  - parser_name/parser_version in X.
+  - raw_fields_json/metadata_json in X.
+  - local absolute paths in X.
+  - TEST rows inside TRAIN artifact.
+  - preprocessing fitted on VALIDATION/TEST.
+  - balancing applied to VALIDATION/TEST.
+  - feature selection or threshold tuning using TEST metadata.
+
+Traceability chain:
+  model_ready_artifact
+    -> feature_artifact
+    -> normalized_artifact
+    -> parser_run
+    -> dataset_file
+    -> dataset
+    -> raw source
+
+Blocking policy:
+  - CRITICAL leakage means artifact status BLOCKED_BY_LEAKAGE.
+  - Broken traceability means artifact status BLOCKED_BY_QUALITY or FAILED,
+    depending on existing project conventions.
+
+Рекомендуемые файлы:
+  - scripts/stage_three/quality/leakage.py
+  - scripts/stage_three/quality/traceability.py
+  - tests/stage_three/test_stage_three_leakage.py
+  - tests/stage_three/test_stage_three_traceability.py
+
+Критерии готовности:
+  - Leakage checks catch known bad X columns.
+  - TEST contamination detected.
+  - Traceability command reconstructs chain or reports missing link.
+  - Blocking statuses applied.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+
+Report должен включать:
+  - Previous report path.
+  - Leakage checks and severity.
+  - Blocked artifacts.
+  - Traceability chain examples.
+  - Missing links, if any.
+
+--------------------------------------------------------------------------------
+Задача 20 — stage-three-final-report-and-documentation
+--------------------------------------------------------------------------------
+
+Цель:
+  Сгенерировать final Stage Three report и обновить документацию проекта.
+
+Ссылка на предыдущий report:
+  Task19-stage-three-leakage-and-traceability-checks.md
+
+Scope:
+  - Реализовать python manage.py stage-three final-report --experiment-id <id>.
+  - Сгенерировать RU/EN final report.
+  - Обновить docs/ru и docs/en с Stage Three usage guide и command reference.
+  - Добавить краткий runbook для MVP DNS path и production path.
+
+Структура final report:
+  1. Executive summary.
+  2. Inputs from Stage Two.
+  3. Feature catalogue version.
+  4. Feature extraction summary.
+  5. Label alignment summary.
+  6. X/y/metadata/traceability separation summary.
+  7. Preprocessing summary.
+  8. Class balance summary.
+  9. Sequence artifact summary.
+  10. Model-ready artifacts.
+  11. Quality checks.
+  12. Leakage checks.
+  13. Traceability checks.
+  14. Runtime and hardware utilization summary.
+  15. Known limitations.
+  16. Readiness for Stage Four.
+
+Документацию добавить/обновить:
+  docs/ru/stage-three/README.md
+  docs/ru/stage-three/usage_guide.md
+  docs/ru/stage-three/stage_three_commands.md
+  docs/ru/stage-three/performance_tuning.md
+  docs/en/stage-three/README.md
+  docs/en/stage-three/usage_guide.md
+  docs/en/stage-three/stage_three_commands.md
+  docs/en/stage-three/performance_tuning.md
+
+Критерии готовности:
+  - Final Stage Three report exists in RU/EN.
+  - Documentation explains how to run validate-inputs -> feature catalog -> extraction -> preprocessing -> model-ready -> checks.
+  - Report states whether artifacts are ready for Stage Four.
+  - Known gaps explicit.
+
+Reports для генерации:
+  RU: C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task20-stage-three-final-report-and-documentation.md
+  EN: C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task20-stage-three-final-report-and-documentation.md
+
+Report должен включать:
+  - Previous report path.
+  - Final report path.
+  - Documentation files created/updated.
+  - Stage Four readiness status.

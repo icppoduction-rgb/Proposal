@@ -1,0 +1,253 @@
+================================================================================
+0. КОНТЕКСТ И ПОЛИТИКА РЕАЛИЗАЦИИ С УЧЕТОМ ЖЕЛЕЗА
+================================================================================
+
+Название Stage Three:
+  Feature Extraction, Preprocessing and Model-Ready Dataset Preparation
+  Извлечение признаков, предобработка и подготовка model-ready датасетов.
+
+Главная цель Stage Three:
+  Преобразовать normalized Parquet artifacts, созданные Stage Two, в split-safe,
+  leakage-safe и traceable model-ready datasets для следующего этапа:
+  обучения и оценки RF, XGBoost, CNN и LSTM.
+
+Stage Three не должен выполнять:
+  - обучение моделей;
+  - подбор гиперпараметров;
+  - SHAP/XAI;
+  - late fusion;
+  - финальную экспериментальную оценку.
+
+Эти работы относятся к Stage Four.
+
+Целевое железо:
+  ОС: Windows 11 Pro 64-bit, build 26200
+  CPU: Intel Core i7-14700KF, 20 ядер, 28 потоков
+  RAM: 64 GB DDR5, фактическая скорость 5600 MT/s
+  GPU: NVIDIA GeForce RTX 5060 Ti, 16 GB VRAM, driver 610.62
+  Накопители: Lexar NM610 PRO 1 TB + Samsung 980 PRO 2 TB NVMe SSD
+
+Требование по безопасности памяти:
+  - Общая RAM: 64 GB
+  - Минимально свободная RAM во время обработки: 8 GB
+  - Жесткий лимит рабочей памяти процесса/системы: 56 GB
+  - Рекомендуемый мягкий лимит рабочей памяти: 48 GB
+  - Pipeline обязан остановиться, уменьшить batch size или безопасно завершиться ошибкой до нарушения резерва 8 GB свободной RAM.
+
+Политика исполнения по умолчанию:
+  - CPU-first и streaming-first.
+  - GPU является optional и должен использоваться только после runtime capability checks.
+  - Если GPU backend недоступен, CPU path должен оставаться полностью рабочим и оптимизированным.
+  - Нельзя по умолчанию загружать большой датасет целиком в pandas/DataFrame memory.
+  - Все крупные чтения должны использовать Parquet column projection, predicate pushdown, chunking, batches, lazy execution или DuckDB SQL.
+  - PostgreSQL остается metadata/catalog-only слоем. Большие таблицы должны храниться в Parquet.
+
+Рекомендуемые Python-библиотеки:
+
+  CPU / основной путь:
+    - pyarrow.dataset для Parquet scanning с column projection и batches.
+    - duckdb для SQL-проверок и out-of-core аналитических запросов по Parquet.
+    - polars lazy scan для эффективных feature transforms и aggregations.
+    - numpy для dense numeric arrays.
+    - scipy.sparse для sparse one-hot / high-cardinality matrices при необходимости.
+    - scikit-learn для preprocessing contracts, scalers, encoders и class weights.
+    - joblib или concurrent.futures для bounded parallel work.
+    - psutil для мониторинга RAM и adaptive throttling.
+    - orjson/ujson optional для ускоренного JSON metadata parsing, если совместимо со стилем проекта.
+
+  GPU / optional путь:
+    - RAPIDS cuDF / cudf.pandas для GPU DataFrame acceleration, если доступно.
+    - CuPy для GPU numeric arrays, если conversion overhead оправдан.
+    - cuML только для preprocessing components, которые явно проверены против CPU output.
+    - PyTorch только для сборки/валидации sequence tensors на Stage Three.
+      Обучение CNN/LSTM относится к Stage Four.
+    - XGBoost GPU относится к Stage Four, но Stage Three может писать metadata,
+      совместимую с будущим GPU XGBoost.
+
+Правило использования GPU:
+  - Не делать RAPIDS/cuDF обязательным на native Windows.
+  - Добавить backend selection: auto/cpu/gpu.
+  - В auto mode запускать небольшой correctness + performance probe.
+    Использовать GPU только если output идентичен в пределах tolerance и память остается в лимитах.
+  - Если RAPIDS/cuDF недоступен, записать warning и использовать CPU backend.
+
+Рекомендуемый Stage Three resource profile для этого ПК:
+  stage_three_profile = "balanced"
+  default_workers = 8
+  max_workers = 12
+  db_workers = 2-4
+  batch_rows = 100_000 to 250_000
+  parquet_row_group_size = 100_000 to 250_000
+  ram_soft_limit_gb = 48
+  ram_hard_limit_gb = 56
+  reserved_ram_gb = 8
+  gpu_memory_soft_limit_gb = 12
+  gpu_memory_hard_limit_gb = 14
+
+Не запускать сразу все 28 CPU threads. Увеличивать workers только после benchmark reports
+с чистой памятью, стабильным поведением БД и стабильной записью на SSD.
+
+================================================================================
+1. ГЛОБАЛЬНЫЕ ТРЕБОВАНИЯ ДЛЯ КАЖДОЙ ЗАДАЧИ
+================================================================================
+
+Каждая задача должна:
+  1. Быть достаточно небольшой для независимой реализации и review.
+  2. Завершаться логически полным результатом.
+  3. Не ломать поведение Stage One и Stage Two.
+  4. Использовать config.py и .env для всех путей и runtime settings.
+  5. Генерировать RU и EN reports после выполнения.
+  6. Ссылаться на report предыдущей задачи внутри текущего report.
+  7. Быть idempotent и resume-friendly там, где задача пишет artifacts.
+  8. Добавлять или обновлять tests для измененного поведения.
+  9. Сохранять raw files неизменными.
+  10. Сохранять split isolation: TRAIN, VALIDATION и TEST не смешивать.
+  11. Не допускать labels, metadata и traceability в model-ready X.
+  12. Обеспечивать TRAIN-only fit для imputer, encoder, scaler и balancing.
+  13. Регистрировать artifacts через repository/service layer, не через ad-hoc SQL.
+  14. Использовать bounded memory и безопасно падать при memory pressure.
+
+Формат пути к report:
+  C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task<number>-<description_task>.md
+  C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task<number>-<description_task>.md
+
+Важно:
+  Эти пути нельзя hardcode-ить в business logic. Их нужно вычислять через config.py от PATH_DATA_STORAGE.
+
+Обязательные добавления в config.py:
+  REPORTS_RU_STAGE_THREE = _storage_path("reports", "ru", "stage-three")
+  REPORTS_EN_STAGE_THREE = _storage_path("reports", "en", "stage-three")
+  LOGS_STAGE_THREE = _storage_path("logs", "stage-three")
+  TEMP_DATA_STAGE_THREE = _storage_path("temp_data", "stage_three")
+  STAGE_THREE_FEATURE_CATALOG_PATH = _project_path("scripts", "stage_three", "feature_catalog", "feature_catalog.yml")
+  STAGE_THREE_DEFAULT_PROFILE = os.getenv("STAGE_THREE_DEFAULT_PROFILE", "balanced")
+  STAGE_THREE_ACCELERATION_BACKEND = os.getenv("STAGE_THREE_ACCELERATION_BACKEND", "auto")
+  STAGE_THREE_RESERVED_RAM_GB = int(os.getenv("STAGE_THREE_RESERVED_RAM_GB", "8"))
+  STAGE_THREE_SOFT_RAM_LIMIT_GB = int(os.getenv("STAGE_THREE_SOFT_RAM_LIMIT_GB", "48"))
+  STAGE_THREE_HARD_RAM_LIMIT_GB = int(os.getenv("STAGE_THREE_HARD_RAM_LIMIT_GB", "56"))
+  STAGE_THREE_DEFAULT_WORKERS = int(os.getenv("STAGE_THREE_DEFAULT_WORKERS", "8"))
+  STAGE_THREE_MAX_WORKERS = int(os.getenv("STAGE_THREE_MAX_WORKERS", "12"))
+  STAGE_THREE_DB_WORKERS = int(os.getenv("STAGE_THREE_DB_WORKERS", "4"))
+  STAGE_THREE_BATCH_ROWS = int(os.getenv("STAGE_THREE_BATCH_ROWS", "250000"))
+  STAGE_THREE_PARQUET_ROW_GROUP_SIZE = int(os.getenv("STAGE_THREE_PARQUET_ROW_GROUP_SIZE", "250000"))
+  STAGE_THREE_GPU_MEMORY_SOFT_LIMIT_GB = int(os.getenv("STAGE_THREE_GPU_MEMORY_SOFT_LIMIT_GB", "12"))
+  STAGE_THREE_GPU_MEMORY_HARD_LIMIT_GB = int(os.getenv("STAGE_THREE_GPU_MEMORY_HARD_LIMIT_GB", "14"))
+
+Рекомендуемые добавления в .env:
+  STAGE_THREE_DEFAULT_PROFILE=balanced
+  STAGE_THREE_ACCELERATION_BACKEND=auto
+  STAGE_THREE_RESERVED_RAM_GB=8
+  STAGE_THREE_SOFT_RAM_LIMIT_GB=48
+  STAGE_THREE_HARD_RAM_LIMIT_GB=56
+  STAGE_THREE_DEFAULT_WORKERS=8
+  STAGE_THREE_MAX_WORKERS=12
+  STAGE_THREE_DB_WORKERS=4
+  STAGE_THREE_BATCH_ROWS=250000
+  STAGE_THREE_PARQUET_ROW_GROUP_SIZE=250000
+  STAGE_THREE_GPU_MEMORY_SOFT_LIMIT_GB=12
+  STAGE_THREE_GPU_MEMORY_HARD_LIMIT_GB=14
+
+
+
+  ================================================================================
+3. РЕКОМЕНДУЕМЫЙ ПОРЯДОК ВЫПОЛНЕНИЯ
+================================================================================
+
+Выполнять задачи строго в этом порядке:
+
+  Task 01 -> Task 02 -> Task 03 -> Task 04 -> Task 05 -> Task 06 -> Task 07 ->
+  Task 08 -> Task 09 -> Task 10 -> Task 11 -> Task 12 -> Task 13 -> Task 14 ->
+  Task 15 -> Task 16 -> Task 17 -> Task 18 -> Task 19 -> Task 20
+
+MVP route для самого быстрого первого результата:
+  Task 01-06
+  Task 07 DNS MVP extraction
+  Task 09 artifact registration
+  Task 10 label alignment
+  Task 11 X/y separation
+  Task 12-14 preprocessing
+  Task 15 class balance report without resampling
+  Task 17 model-ready builder for DNS tree_unscaled
+  Task 18-20 checks and final report
+
+Production expansion:
+  Добавить Task 08 Host/Network extractors и Task 16 sequence builder перед full Stage Four.
+
+================================================================================
+4. РЕКОМЕНДУЕМЫЙ CLI FLOW ПОСЛЕ РЕАЛИЗАЦИИ
+================================================================================
+
+Validate Stage Three inputs:
+  python manage.py stage-three validate-inputs --branch dns --role TRAIN
+  python manage.py stage-three validate-inputs --branch dns --role VALIDATION
+  python manage.py stage-three validate-inputs --branch dns --role TEST
+
+Build and validate feature catalog:
+  python manage.py stage-three build-feature-catalog
+
+Extract DNS MVP features:
+  python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --resume
+  python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_entropy --resume
+  python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_temporal --resume
+
+Repeat extraction for VALIDATION and TEST:
+  python manage.py stage-three extract-features --branch dns --role VALIDATION --feature-group dns_lexical --resume
+  python manage.py stage-three extract-features --branch dns --role TEST --feature-group dns_lexical --resume
+
+Align labels:
+  python manage.py stage-three align-labels --branch dns --role TRAIN --label-policy explicit_only --resume
+  python manage.py stage-three align-labels --branch dns --role VALIDATION --label-policy explicit_only --resume
+  python manage.py stage-three align-labels --branch dns --role TEST --label-policy explicit_only --resume
+
+Build model-ready DNS MVP:
+  python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+
+Run checks:
+  python manage.py stage-three run-quality-checks --experiment-id exp001
+  python manage.py stage-three run-leakage-checks --experiment-id exp001
+  python manage.py stage-three final-report --experiment-id exp001
+
+================================================================================
+5. DEFINITION OF DONE ДЛЯ STAGE THREE
+================================================================================
+
+Stage Three завершен, когда:
+  1. Stage Two readiness gate passes.
+  2. feature_catalog.yml/json exists and validates.
+  3. Feature artifacts created for required branches/roles.
+  4. Labels aligned at event/window/sequence level where applicable.
+  5. X, y, metadata and traceability physically separated.
+  6. Type casting complete and X has ML-compatible dtypes.
+  7. Missing values handled with TRAIN-fitted imputer.
+  8. Categorical encoding uses TRAIN-fitted encoder.
+  9. Scaling uses TRAIN-fitted scaler when profile requires scaling.
+  10. Class balancing/reporting affects TRAIN only.
+  11. Model-ready artifacts registered in PostgreSQL Catalog.
+  12. Quality checks pass.
+  13. Leakage checks pass.
+  14. Traceability chain recoverable.
+  15. Final Stage Three report exists in RU and EN.
+  16. Artifacts ready for Stage Four training/evaluation.
+
+================================================================================
+6. ВАЖНЫЕ НЕОБСУЖДАЕМЫЕ ПРАВИЛА
+================================================================================
+
+Нельзя:
+  - Читать raw files как основной Stage Three input.
+  - Помещать label/source/path/scenario/traceability fields в model-ready X.
+  - Считать missing labels как benign.
+  - Fit imputer/scaler/encoder on VALIDATION or TEST.
+  - Balance VALIDATION or TEST.
+  - Tune thresholds on TEST.
+  - Загружать full large datasets into memory.
+  - Делать GPU mandatory.
+  - Ломать существующие Stage Two CLI и tests.
+
+Нужно:
+  - Использовать normalized Parquet artifacts as input.
+  - Использовать config.py и .env for paths/resources.
+  - Держать 8 GB RAM free.
+  - Предпочитать streaming, lazy execution, predicate pushdown and column projection.
+  - Использовать GPU only after runtime validation and correctness checks.
+  - Держать все tasks report-driven and chained by previous report reference.

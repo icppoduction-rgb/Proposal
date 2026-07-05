@@ -1,0 +1,2162 @@
+Stage Three: Feature Extraction, Preprocessing and Model-Ready Dataset Preparation
+Документация следующего этапа после Stage Two
+Проект: Proposal — Behaviour-driven hybrid learning for data exfiltration detection
+Дата подготовки: 2026-07-04
+
+================================================================================
+1. НАЗНАЧЕНИЕ ДОКУМЕНТА
+================================================================================
+
+Этот документ описывает следующий этап после Stage Two normalization.
+Этап рекомендуется называть:
+
+    Stage Three — Feature Extraction, Preprocessing and Model-Ready Dataset Preparation
+
+Главная цель Stage Three:
+
+    преобразовать normalized Parquet artifacts, созданные Stage Two, в корректные,
+    воспроизводимые, leakage-safe и split-safe model-ready datasets для последующего
+    обучения и оценки моделей RF, XGBoost, CNN и LSTM.
+
+Stage Three не должен заменять Stage Two. Он начинается только после того, как Stage Two
+успешно выполнил:
+
+- catalog ingestion;
+- parser registry / parser coverage;
+- mark-ready workflow;
+- normalization в Parquet;
+- DuckDB quality checks;
+- leakage checks;
+- traceability checks;
+- регистрацию normalized artifacts в PostgreSQL Catalog.
+
+Общая линия данных проекта:
+
+    raw -> normalized -> features -> model-ready -> training/evaluation
+
+Stage Two закрывает участок:
+
+    raw -> normalized
+
+Stage Three закрывает участок:
+
+    normalized -> features -> model-ready
+
+Следующий этап после Stage Three должен закрывать:
+
+    model-ready -> model training -> evaluation -> SHAP/explainability
+
+================================================================================
+2. ГРАНИЦЫ STAGE THREE
+================================================================================
+
+2.1. Что входит в Stage Three
+-----------------------------
+
+Stage Three включает следующие работы:
+
+1. Проверка готовности Stage Two outputs.
+2. Формализация machine-readable feature catalogue.
+3. Feature extraction из normalized Parquet artifacts.
+4. Построение признаков на уровнях:
+   - event-level;
+   - window-level;
+   - flow-level;
+   - trace-level;
+   - sequence-level;
+   - hybrid-level.
+5. Label alignment для event/window/sequence samples.
+6. Отделение X, y, metadata и traceability.
+7. Приведение признаков к типам, совместимым с ML/DL.
+8. Обработка пропусков.
+9. Кодирование категориальных признаков.
+10. Масштабирование признаков.
+11. Балансировка классов только на TRAIN.
+12. Сборка model-ready artifacts.
+13. Регистрация feature/model-ready/preprocessing artifacts в PostgreSQL Catalog.
+14. Data quality checks.
+15. Leakage checks.
+16. Traceability checks.
+17. Генерация итоговых отчетов Stage Three.
+
+2.2. Что не входит в Stage Three
+--------------------------------
+
+Stage Three не должен включать:
+
+- обучение Random Forest;
+- обучение XGBoost;
+- обучение CNN;
+- обучение LSTM;
+- подбор гиперпараметров моделей;
+- late fusion между branches/models;
+- SHAP / XAI explanations;
+- финальную experimental evaluation;
+- comparison с baselines;
+- оформление research results.
+
+Эти задачи должны быть вынесены в следующий этап:
+
+    Stage Four — Model Training, Evaluation and Explainability
+
+================================================================================
+3. КЛЮЧЕВЫЕ ИНВАРИАНТЫ
+================================================================================
+
+Stage Three должен строго соблюдать проектные инварианты.
+
+3.1. Split isolation
+--------------------
+
+TRAIN, VALIDATION и TEST нельзя смешивать.
+
+Разрешено:
+
+- TRAIN использовать для обучения и fit preprocessing;
+- VALIDATION использовать для настройки и проверки устойчивости;
+- TEST использовать только для финальной оценки/inference.
+
+Запрещено:
+
+- использовать TEST для training;
+- использовать TEST для fit imputer/scaler/encoder;
+- использовать TEST для feature selection;
+- использовать TEST для threshold tuning;
+- использовать TEST для балансировки классов;
+- смешивать rows из разных roles в одном X artifact без явного split_index.
+
+3.2. Raw immutability
+---------------------
+
+Raw-файлы не изменяются.
+
+Stage Three не должен напрямую работать с raw dataset files как с основным источником.
+Основной вход Stage Three:
+
+    PATH_DATA_STORAGE/parquet/normalized/
+
+Допускается обращаться к raw-файлам только для отладки traceability/parser issues,
+но не для production feature extraction.
+
+3.3. Label safety
+-----------------
+
+Labels не являются input features.
+
+Поля label_* должны храниться отдельно от X:
+
+- label_binary;
+- label_family;
+- label_subtype;
+- label_source;
+- label_status;
+- label_confidence;
+- label_mapping_rule_id.
+
+Отсутствующий label не означает benign.
+
+Если label отсутствует, нужно сохранять:
+
+    label_binary = null
+    label_source = none
+    label_status = unlabeled
+
+3.4. Leakage prevention
+-----------------------
+
+В model-ready X запрещено включать:
+
+- label_binary;
+- label_family;
+- label_subtype;
+- label_source;
+- label_status;
+- label_confidence;
+- label_mapping_rule_id;
+- dataset_name;
+- dataset_role;
+- source_file;
+- source_path;
+- file basename;
+- scenario_name;
+- parser_name;
+- parser_version;
+- raw_fields_json;
+- metadata_json;
+- absolute local paths;
+- traceability identifiers как признаки модели.
+
+Эти поля допустимы только в metadata/traceability artifacts.
+
+3.5. Timestamp safety
+---------------------
+
+Если timestamp отсутствует, запрещено подставлять текущее время.
+
+Корректные варианты:
+
+- timestamp = null;
+- timestamp_type = missing;
+- использовать event_order, если порядок событий надежно известен;
+- для sequence modelling использовать ordering policy, а не synthetic current time.
+
+3.6. Traceability
+-----------------
+
+Каждый feature artifact и model-ready artifact должен иметь восстановимую цепочку:
+
+    model_ready_artifact
+    -> feature_artifact
+    -> normalized_artifact
+    -> parser_run
+    -> dataset_file
+    -> dataset
+    -> raw source
+
+================================================================================
+4. ПРАВИЛЬНАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ ДЕЙСТВИЙ
+================================================================================
+
+Исходный список пользователя:
+
+- feature extraction;
+- обработка пропусков;
+- масштабирование признаков;
+- балансировка классов;
+- разметка данных;
+- приведение данных в типы числовой, бинарный, bool для обучения модели.
+
+Правильная последовательность должна быть такой:
+
+0. Stage Two readiness gate.
+1. Feature catalogue contract.
+2. Feature extraction.
+3. Feature artifact registration.
+4. Label alignment для event/window/sequence.
+5. X/y/metadata/traceability separation.
+6. Приведение типов признаков.
+7. Обработка пропусков.
+8. Categorical encoding.
+9. Масштабирование признаков.
+10. Балансировка классов только на TRAIN.
+11. Sequence window build.
+12. Model-ready artifact build.
+13. Quality checks.
+14. Leakage checks.
+15. Traceability checks.
+16. Stage Three final report.
+
+Почему именно так:
+
+- feature extraction должен идти первым, потому что без признаков нечего
+  типизировать, масштабировать и балансировать;
+- label alignment должен идти до сборки y, но labels не должны попадать в X;
+- X/y/metadata/traceability нужно разделить до preprocessing, чтобы случайно
+  не обработать label/source поля как признаки;
+- приведение типов должно идти до imputation/scaling/encoding;
+- missing value handling должен выполняться до scaling;
+- categorical encoding должен выполняться до передачи данных в большинство ML models;
+- scaling выполняется после imputation и encoding;
+- class balancing выполняется последним среди preprocessing operations и только на TRAIN.
+
+================================================================================
+5. ВХОДНЫЕ ДАННЫЕ STAGE THREE
+================================================================================
+
+5.1. Основные входы
+-------------------
+
+Stage Three должен использовать:
+
+- PATH_DATA_STORAGE/parquet/normalized/;
+- PostgreSQL Catalog table: normalized_artifacts;
+- PostgreSQL Catalog table: parser_runs;
+- PostgreSQL Catalog table: dataset_files;
+- PostgreSQL Catalog table: datasets;
+- PostgreSQL Catalog table: label_mapping_rules;
+- schemas/features/feature_artifact_v1.json;
+- schemas/model_ready/model_ready_v1.json.
+
+5.2. Минимальные поля normalized event
+--------------------------------------
+
+Каждая normalized event запись должна содержать или позволять восстановить:
+
+Traceability:
+
+- event_uid;
+- source_file_id;
+- parser_run_id;
+- normalized_artifact_id;
+- dataset_name;
+- dataset_role;
+- branch;
+- source_format.
+
+Time:
+
+- event_timestamp;
+- timestamp_type;
+- event_order.
+
+Entities:
+
+- src_ip;
+- dst_ip;
+- host;
+- user;
+- process;
+- domain;
+- flow_id;
+- session_id.
+
+Labels:
+
+- label_binary;
+- label_family;
+- label_subtype;
+- label_source;
+- label_status;
+- label_confidence;
+- label_mapping_rule_id.
+
+Payload / normalized data:
+
+- features_json;
+- raw_fields_json;
+- metadata_json.
+
+================================================================================
+6. ВЫХОДНЫЕ ДАННЫЕ STAGE THREE
+================================================================================
+
+6.1. Основные директории
+------------------------
+
+Рекомендуемая структура output:
+
+    PATH_DATA_STORAGE/parquet/features/
+    PATH_DATA_STORAGE/parquet/model_ready/
+    PATH_DATA_STORAGE/reports/ru/stage-three/
+    PATH_DATA_STORAGE/reports/en/stage-three/
+
+6.2. Типы artifacts
+-------------------
+
+Stage Three должен создавать следующие artifacts:
+
+1. feature_artifact
+
+   Назначение:
+   - хранит извлеченные признаки;
+   - сохраняет metadata;
+   - сохраняет traceability;
+   - еще может содержать label fields, но они должны быть отделены от X при
+     model-ready build.
+
+2. model_ready_X
+
+   Назначение:
+   - содержит только признаки модели;
+   - не содержит labels;
+   - не содержит source/path/scenario/leakage fields;
+   - не содержит traceability identifiers как признаки.
+
+3. model_ready_y
+
+   Назначение:
+   - содержит target values;
+   - может быть binary, multiclass или sequence-level target.
+
+4. model_ready_metadata
+
+   Назначение:
+   - содержит audit/evaluation metadata;
+   - не используется как X.
+
+5. model_ready_traceability
+
+   Назначение:
+   - позволяет восстановить lineage до raw source.
+
+6. model_ready_sequence
+
+   Назначение:
+   - хранит sequence tensors/windows для LSTM/CNN-LSTM.
+
+7. split_index
+
+   Назначение:
+   - фиксирует rows/sample_uid по TRAIN/VALIDATION/TEST;
+   - дополнительно может хранить fold assignment для cross-validation.
+
+8. preprocessing_metadata
+
+   Назначение:
+   - хранит imputer/scaler/encoder settings;
+   - фиксирует fitted_on_role = TRAIN;
+   - хранит версии preprocessing pipeline.
+
+================================================================================
+7. РЕКОМЕНДУЕМАЯ АРХИТЕКТУРА КОДА
+================================================================================
+
+Рекомендуемая структура:
+
+    scripts/
+      stage_three/
+        __init__.py
+        cli.py
+
+        feature_catalog/
+          __init__.py
+          loader.py
+          validator.py
+          feature_catalog.yml
+
+        extraction/
+          __init__.py
+          base.py
+          dns_extractors.py
+          host_extractors.py
+          network_extractors.py
+          hybrid_extractors.py
+          sequence_extractors.py
+          runner.py
+
+        labels/
+          __init__.py
+          window_labeler.py
+          sequence_labeler.py
+          label_policy.py
+
+        preprocessing/
+          __init__.py
+          type_casting.py
+          missing_values.py
+          categorical_encoding.py
+          scaling.py
+          class_balance.py
+          fit_transform.py
+
+        model_ready/
+          __init__.py
+          builder.py
+          registry.py
+          split_index.py
+
+        quality/
+          __init__.py
+          feature_quality.py
+          preprocessing_quality.py
+          class_balance_report.py
+          model_ready_quality.py
+          leakage.py
+          traceability.py
+
+        reports/
+          __init__.py
+          stage_three_report.py
+
+Принцип интеграции:
+
+- не ломать Stage Two;
+- не дублировать существующие contracts;
+- переиспользовать существующие FeatureArtifact / ModelReadyArtifact /
+  PreprocessingArtifact / DataQualityReport catalog entities;
+- все операции регистрации artifacts выполнять через repository/service layer;
+- все batch операции делать идемпотентными и resume-friendly.
+
+================================================================================
+8. CLI-КОМАНДЫ STAGE THREE
+================================================================================
+
+8.1. Базовые команды
+--------------------
+
+Рекомендуемые команды:
+
+    python manage.py stage-three validate-inputs
+    python manage.py stage-three build-feature-catalog
+    python manage.py stage-three extract-features --branch dns --role TRAIN
+    python manage.py stage-three extract-features --branch host --role TRAIN
+    python manage.py stage-three align-labels --branch dns --role TRAIN
+    python manage.py stage-three align-labels --branch host --role TRAIN
+    python manage.py stage-three build-sequences --branch host --role TRAIN
+    python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns
+    python manage.py stage-three build-model-ready --experiment-id exp001 --branch host
+    python manage.py stage-three run-quality-checks --experiment-id exp001
+    python manage.py stage-three run-leakage-checks --experiment-id exp001
+    python manage.py stage-three trace-artifact <model_ready_artifact_id>
+    python manage.py stage-three final-report --experiment-id exp001
+
+8.2. Feature extraction по конкретной группе
+--------------------------------------------
+
+DNS example:
+
+    python manage.py stage-three extract-features \
+      --branch dns \
+      --role TRAIN \
+      --feature-group dns_lexical \
+      --resume
+
+Host example:
+
+    python manage.py stage-three extract-features \
+      --branch host \
+      --role TRAIN \
+      --feature-group host_syscall \
+      --resume
+
+8.3. Model-ready build
+----------------------
+
+    python manage.py stage-three build-model-ready \
+      --experiment-id exp001 \
+      --branch dns \
+      --target label_binary \
+      --preprocessing-profile tree_unscaled \
+      --resume
+
+8.4. Sequence build
+-------------------
+
+    python manage.py stage-three build-sequences \
+      --experiment-id exp001 \
+      --branch host \
+      --role TRAIN \
+      --sequence-length 100 \
+      --step 25 \
+      --label-policy any_attack_in_window
+
+================================================================================
+9. FEATURE CATALOGUE
+================================================================================
+
+9.1. Назначение
+---------------
+
+feature_catalog.yml/json — machine-readable контракт признаков.
+
+Он должен фиксировать:
+
+- feature group;
+- branch;
+- level;
+- source normalized fields;
+- output feature name;
+- dtype;
+- nullable;
+- preprocessing strategy;
+- allow_in_X;
+- forbidden_X_columns;
+- version;
+- owner/source document.
+
+9.2. Пример структуры feature_catalog.yml
+-----------------------------------------
+
+    version: "1.0"
+    project: "Proposal"
+    stage: "stage-three"
+
+    feature_groups:
+      dns_lexical:
+        branch: "dns"
+        level: "event"
+        enabled: true
+        features:
+          - name: dns_query_length
+            dtype: numeric
+            nullable: false
+            preprocessing:
+              missing: median
+              scaling: standard
+            allow_in_X: true
+
+          - name: dns_entropy
+            dtype: numeric
+            nullable: false
+            preprocessing:
+              missing: median
+              scaling: standard
+            allow_in_X: true
+
+      host_syscall:
+        branch: "host"
+        level: "sequence"
+        enabled: true
+        features:
+          - name: syscall_frequency
+            dtype: numeric_vector
+            nullable: false
+            preprocessing:
+              missing: zero
+              scaling: none
+            allow_in_X: true
+
+    forbidden_X_columns:
+      - label_binary
+      - label_family
+      - label_source
+      - label_status
+      - label_confidence
+      - dataset_name
+      - dataset_role
+      - source_file
+      - source_path
+      - parser_name
+      - parser_version
+      - scenario_name
+      - raw_fields_json
+      - metadata_json
+
+9.3. Feature catalogue validation
+---------------------------------
+
+Validator должен проверять:
+
+- уникальность feature names;
+- наличие dtype;
+- наличие preprocessing strategy;
+- отсутствие forbidden columns в allow_in_X=true;
+- совместимость dtype и preprocessing strategy;
+- наличие branch/level;
+- поддержку feature group в extraction runner;
+- version compatibility.
+
+================================================================================
+10. FEATURE EXTRACTION
+================================================================================
+
+10.1. Общий принцип
+-------------------
+
+Feature extraction выполняется только из normalized artifacts.
+
+Pipeline:
+
+    normalized_events -> feature rows -> feature_artifacts
+
+Каждая feature row должна содержать:
+
+- sample_uid;
+- feature_artifact_id;
+- normalized_artifact_id;
+- branch;
+- dataset_role;
+- feature_group;
+- window_id или sequence_id;
+- event_count;
+- label fields;
+- traceability metadata;
+- feature columns.
+
+10.2. Уровни feature extraction
+-------------------------------
+
+1. Event-level
+
+   Один DNS query, syscall, process event, auth event, packet или log event.
+
+   Подходит для:
+   - RF;
+   - XGBoost;
+   - CNN на табличных признаках.
+
+2. Window-level
+
+   Aggregates по времени, host, source_ip, user, process, domain.
+
+   Подходит для:
+   - RF;
+   - XGBoost;
+   - CNN;
+   - hybrid features.
+
+3. Flow-level
+
+   Network flow / 5-tuple.
+
+   Подходит для:
+   - RF;
+   - XGBoost;
+   - network branch.
+
+4. Trace-level
+
+   Syscall/API trace.
+
+   Подходит для:
+   - CNN;
+   - LSTM;
+   - sequence branch.
+
+5. Sequence-level
+
+   Ordered event windows.
+
+   Подходит для:
+   - LSTM;
+   - CNN-LSTM;
+   - temporal attack pattern modelling.
+
+6. Hybrid-level
+
+   Host + DNS/network correlation.
+
+   Подходит для:
+   - late fusion;
+   - hybrid behavioural analysis;
+   - exfiltration sequence detection.
+
+10.3. DNS feature groups
+------------------------
+
+1. dns_lexical
+
+   Примеры:
+   - dns_query_length;
+   - dns_subdomain_length;
+   - dns_label_count;
+   - dns_label_avg_len;
+   - dns_label_max_len;
+   - dns_digit_count;
+   - dns_special_char_count.
+
+2. dns_entropy
+
+   Примеры:
+   - dns_entropy;
+   - dns_rr_name_entropy;
+   - url_token_entropy;
+   - character_distribution_score.
+
+3. dns_temporal
+
+   Примеры:
+   - dns_query_rate;
+   - dns_queries_per_window;
+   - dns_inter_query_interval_mean;
+   - dns_inter_query_interval_std;
+   - dns_burst_score.
+
+4. dns_protocol
+
+   Примеры:
+   - qtype_frequency;
+   - rcode_distribution;
+   - ttl_mean;
+   - ttl_variance;
+   - unique_ttl_count;
+   - response_size_stats.
+
+5. dns_window
+
+   Примеры:
+   - unique_domain_count;
+   - unique_subdomain_ratio;
+   - nxdomain_rate;
+   - source_ip_query_count;
+   - repeated_domain_ratio.
+
+6. dns_exfil_indicators
+
+   Примеры:
+   - long_subdomain_ratio;
+   - high_entropy_domain_ratio;
+   - unusual_qtype_ratio;
+   - abnormal_query_rate_score.
+
+10.4. Host feature groups
+-------------------------
+
+1. host_syscall
+
+   Примеры:
+   - syscall_frequency;
+   - syscall_ngram_2_frequency;
+   - syscall_ngram_3_frequency;
+   - syscall_transition_probability;
+   - unique_syscall_count;
+   - syscall_trace_length.
+
+2. host_process
+
+   Примеры:
+   - process_count;
+   - parent_child_process_count;
+   - rare_process_execution_score;
+   - command_line_length;
+   - command_line_entropy;
+   - encoded_powershell_indicator.
+
+3. host_auth
+
+   Примеры:
+   - login_success_count;
+   - login_failure_count;
+   - failed_login_ratio;
+   - failed_then_success_login_indicator;
+   - sudo_activity_count;
+   - sshd_activity_count.
+
+4. host_file_access
+
+   Примеры:
+   - file_access_count;
+   - file_access_rate;
+   - file_access_entropy;
+   - unique_file_count;
+   - sensitive_file_extension_count;
+   - archive_creation_count.
+
+5. host_metrics
+
+   Примеры:
+   - cpu_total_pct_mean;
+   - memory_usage_mean;
+   - disk_read_bytes_rate;
+   - disk_write_bytes_rate;
+   - network_interface_bytes_rate;
+   - filesystem_used_pct.
+
+6. host_logs
+
+   Примеры:
+   - log_event_count;
+   - log_volume_rate;
+   - log_level_frequency;
+   - warning_error_count;
+   - component_frequency;
+   - message_template_frequency.
+
+7. host_windows_sysmon
+
+   Примеры:
+   - event_id_frequency;
+   - logon_type_distribution;
+   - process_name_frequency;
+   - parent_child_process_count;
+   - source_dest_address_port_count.
+
+10.5. Network feature groups
+----------------------------
+
+1. network_flow
+
+   Примеры:
+   - flow_duration;
+   - packet_count;
+   - byte_count;
+   - packet_size_mean;
+   - packet_size_std.
+
+2. network_ports
+
+   Примеры:
+   - src_port_frequency;
+   - dst_port_frequency;
+   - rare_port_indicator.
+
+3. network_protocol
+
+   Примеры:
+   - protocol_distribution;
+   - tcp_flag_counts;
+   - udp_ratio;
+   - icmp_ratio.
+
+4. network_direction
+
+   Примеры:
+   - outbound_byte_ratio;
+   - external_destination_count;
+   - fan_in_count;
+   - fan_out_count.
+
+5. network_timing
+
+   Примеры:
+   - inter_arrival_time_mean;
+   - inter_arrival_time_std;
+   - burst_interval_score.
+
+10.6. Hybrid feature groups
+---------------------------
+
+1. host_network_correlation
+
+   Примеры:
+   - process_to_network_burst_score;
+   - file_to_network_correlation;
+   - cpu_io_network_correlation.
+
+2. auth_network_correlation
+
+   Примеры:
+   - network_activity_after_login_count;
+   - auth_to_network_time_delta;
+   - failed_login_to_outbound_flow_score.
+
+3. staging_exfil_sequence
+
+   Примеры:
+   - file_access_to_archive_to_network_pattern;
+   - sensitive_file_access_before_outbound_burst;
+   - compression_process_before_external_connection.
+
+4. stage_transition
+
+   Примеры:
+   - reconnaissance_to_collection_transition;
+   - collection_to_staging_transition;
+   - staging_to_exfiltration_transition.
+
+================================================================================
+11. LABEL ALIGNMENT
+================================================================================
+
+11.1. Назначение
+----------------
+
+Label alignment связывает labels с feature rows, windows и sequences.
+Это не означает, что labels становятся input features.
+
+Pipeline:
+
+    event labels -> window labels -> sequence labels -> y artifact
+
+11.2. Canonical label fields
+----------------------------
+
+Обязательные label fields:
+
+- label_binary;
+- label_family;
+- label_subtype;
+- label_source;
+- label_status;
+- label_confidence;
+- label_mapping_rule_id.
+
+11.3. Label alignment по уровням
+--------------------------------
+
+Event-level:
+
+    label берется из конкретного normalized event.
+
+Window-level:
+
+    label назначается по событиям внутри окна.
+
+Sequence-level:
+
+    label назначается по событиям внутри sequence window.
+
+Flow-level:
+
+    label назначается по flow/event mapping.
+
+Hybrid-level:
+
+    label назначается по самому сильному подтвержденному signal внутри окна.
+
+11.4. Рекомендуемые label policies
+----------------------------------
+
+1. explicit_only
+
+   Использовать только explicit labels.
+   Рекомендуется для строгой supervised evaluation.
+
+2. any_attack_in_window
+
+   Если в окне есть хотя бы одно attack событие, окно получает attack label.
+   Рекомендуется для detection-oriented MVP с высоким recall.
+
+3. majority_label
+
+   Label окна определяется большинством событий.
+   Рекомендуется для устойчивости к единичным noisy labels.
+
+4. last_event_label
+
+   Label окна определяется последним событием.
+   Подходит для sequence forecasting.
+
+5. weak_allowed_with_confidence
+
+   Weak labels разрешаются, но обязательно сохраняется confidence.
+   Подходит, если explicit labels мало.
+
+11.5. Запреты label alignment
+-----------------------------
+
+Запрещено:
+
+- считать unlabeled как benign;
+- использовать filename hint для TEST training logic;
+- смешивать labels из VALIDATION/TEST в TRAIN;
+- включать label_* поля в X;
+- использовать scenario/source/path как признаки модели.
+
+================================================================================
+12. X / y / METADATA / TRACEABILITY SEPARATION
+================================================================================
+
+12.1. Назначение
+----------------
+
+После feature extraction каждая строка должна быть разделена на четыре части:
+
+    X            -> input features for model
+    y            -> target labels
+    metadata     -> audit/evaluation metadata
+    traceability -> lineage fields
+
+12.2. X
+-------
+
+X содержит только поведенческие признаки:
+
+- dns_query_length;
+- dns_entropy;
+- query_rate;
+- packet_count;
+- byte_count;
+- syscall_frequency_*;
+- auth_failure_ratio;
+- file_access_count;
+- process_count;
+- outbound_byte_ratio;
+- event_type_entropy.
+
+12.3. y
+-------
+
+y содержит target:
+
+- label_binary;
+- label_family;
+- label_subtype.
+
+Для MVP рекомендуется начинать с binary target:
+
+    label_binary: 0 = benign, 1 = attack/malicious/exfiltration
+
+12.4. metadata
+--------------
+
+Metadata используется для анализа, но не для обучения:
+
+- dataset_name;
+- dataset_role;
+- branch;
+- source_format;
+- feature_group;
+- label_source;
+- label_status;
+- label_confidence;
+- window_start;
+- window_end;
+- preprocessing_profile.
+
+12.5. traceability
+------------------
+
+Traceability используется для восстановления lineage:
+
+- sample_uid;
+- window_id;
+- sequence_id;
+- event_uid;
+- normalized_artifact_id;
+- parser_run_id;
+- source_file_id;
+- dataset_id.
+
+================================================================================
+13. ПРИВЕДЕНИЕ ТИПОВ
+================================================================================
+
+13.1. Цель
+----------
+
+ML/DL модели требуют стабильных типов данных.
+
+Stage Three должен привести признаки к следующим типам:
+
+- numeric;
+- binary;
+- bool;
+- encoded categorical;
+- numeric vector;
+- sequence tensor;
+- timestamp-derived numeric features.
+
+13.2. Правила типизации
+-----------------------
+
+Исходный тип: int / float
+Действие: привести к float32 или float64.
+
+Исходный тип: bool
+Действие: привести к 0/1.
+
+Исходный тип: string category
+Действие: кодировать через encoder.
+
+Исходный тип: timestamp
+Действие: не использовать напрямую; извлечь derived features:
+
+- hour;
+- day_of_week;
+- time_delta;
+- duration;
+- inter-arrival interval.
+
+Исходный тип: json/list/dict
+Действие: раскрыть в числовые признаки или исключить из X.
+
+Исходный тип: raw payload/body
+Действие: исключить из X.
+
+Исходный тип: path/source/scenario
+Действие: исключить из X.
+
+13.3. Рекомендуемые dtypes
+--------------------------
+
+Counters:
+
+    int32 или int64
+
+Ratios:
+
+    float32
+
+Entropy values:
+
+    float32
+
+Durations:
+
+    float32
+
+Binary flags:
+
+    int8
+
+One-hot encoded columns:
+
+    int8 или sparse matrix
+
+Sequence tensors:
+
+    float32 / int32 + mask
+
+================================================================================
+14. ОБРАБОТКА ПРОПУСКОВ
+================================================================================
+
+14.1. Главный принцип
+---------------------
+
+Imputer fit выполняется только на TRAIN.
+
+    TRAIN:      fit imputer + transform
+    VALIDATION: transform only
+    TEST:       transform only
+
+Запрещено fit imputer на VALIDATION или TEST.
+
+14.2. Типы пропусков
+--------------------
+
+1. Реально отсутствующее значение
+
+   Поле отсутствует в источнике.
+   Нужно заполнить согласно policy и добавить missing indicator.
+
+2. Not applicable
+
+   Например, DNS field для host event.
+   Нужно заполнить 0 или отдельным not_applicable indicator.
+
+3. Parser extraction failure
+
+   Parser не смог извлечь значение.
+   Нужно сохранить parser warning и не скрывать проблему.
+
+4. Unknown label
+
+   Label отсутствует.
+   Нельзя превращать в benign.
+
+14.3. Missing strategies
+------------------------
+
+Numeric counters:
+
+    0, если отсутствие действительно означает ноль;
+    иначе median.
+
+Numeric continuous:
+
+    median.
+
+Ratios:
+
+    median или 0 + missing indicator.
+
+Boolean:
+
+    false + missing indicator.
+
+Categorical:
+
+    UNKNOWN category.
+
+Timestamp-derived:
+
+    -1 / UNKNOWN_TIME + timestamp_missing flag.
+
+Sequence:
+
+    padding + mask.
+
+14.4. Preprocessing metadata для imputer
+---------------------------------------
+
+Пример:
+
+    {
+      "imputer_version": "1.0",
+      "fitted_on_role": "TRAIN",
+      "numeric_strategy": "median",
+      "categorical_strategy": "constant_UNKNOWN",
+      "missing_indicators": true,
+      "fit_artifact_id": "...",
+      "created_at": "..."
+    }
+
+================================================================================
+15. CATEGORICAL ENCODING
+================================================================================
+
+15.1. Назначение
+----------------
+
+Категориальные признаки должны быть преобразованы в числовой формат.
+
+15.2. Методы encoding
+---------------------
+
+One-hot encoding:
+
+- protocol;
+- qtype;
+- rcode;
+- log_level;
+- small-cardinality categories.
+
+Ordinal encoding:
+
+- только если у категории есть реальный порядок.
+
+Frequency encoding:
+
+- process_name;
+- event_template;
+- domain token class;
+- command category.
+
+Hashing trick:
+
+- high-cardinality process names;
+- command tokens;
+- file path tokens, если они очищены от leakage.
+
+Embedding index:
+
+- sequence models;
+- syscall tokens;
+- API calls;
+- event type tokens.
+
+15.3. Запрещенные категории для encoding
+----------------------------------------
+
+Нельзя кодировать как признаки:
+
+- dataset_name;
+- dataset_role;
+- source_file;
+- source_path;
+- scenario_name;
+- label_source;
+- label_status;
+- parser_name;
+- parser_version.
+
+Причина:
+
+    модель будет учить источник/сценарий/разметку, а не поведение атаки.
+
+================================================================================
+16. МАСШТАБИРОВАНИЕ ПРИЗНАКОВ
+================================================================================
+
+16.1. Главный принцип
+---------------------
+
+Scaler fit выполняется только на TRAIN.
+
+    TRAIN:      fit scaler + transform
+    VALIDATION: transform only
+    TEST:       transform only
+
+16.2. Когда scaling нужен
+-------------------------
+
+Random Forest:
+
+    scaling обычно не обязателен.
+
+XGBoost:
+
+    scaling обычно не обязателен.
+
+CNN:
+
+    scaling желателен.
+
+LSTM:
+
+    scaling желателен или обязателен, особенно для continuous features.
+
+Logistic Regression / SVM:
+
+    scaling обязателен.
+
+SMOTE:
+
+    scaling желателен до применения, так как SMOTE distance-based.
+
+16.3. Scaling profiles
+----------------------
+
+1. tree_unscaled
+
+   Для RF/XGBoost.
+   Содержит imputed + encoded features без scaling.
+
+2. standard_scaled
+
+   StandardScaler для DL/linear models.
+
+3. robust_scaled
+
+   RobustScaler для признаков с выбросами.
+
+4. minmax_scaled
+
+   MinMaxScaler для neural networks, если нужен диапазон [0, 1].
+
+16.4. Рекомендация для проекта
+------------------------------
+
+Создавать минимум два model-ready варианта:
+
+    model_ready/tree_unscaled/
+      X_train.parquet
+      X_validation.parquet
+      X_test.parquet
+
+    model_ready/dl_scaled/
+      X_train.parquet
+      X_validation.parquet
+      X_test.parquet
+
+================================================================================
+17. БАЛАНСИРОВКА КЛАССОВ
+================================================================================
+
+17.1. Главный принцип
+---------------------
+
+Балансировка выполняется только на TRAIN.
+
+Запрещено:
+
+- SMOTE на VALIDATION;
+- SMOTE на TEST;
+- undersampling VALIDATION;
+- undersampling TEST;
+- oversampling VALIDATION;
+- oversampling TEST;
+- threshold tuning на TEST.
+
+17.2. Методы балансировки
+-------------------------
+
+1. class_weight
+
+   Первый безопасный baseline.
+   Рекомендуется для MVP.
+
+2. scale_pos_weight
+
+   Для XGBoost при дисбалансе классов.
+
+3. Random undersampling
+
+   Можно использовать, если benign rows слишком много и обучение слишком медленное.
+
+4. Random oversampling
+
+   Можно использовать, если attack minority слишком мал.
+
+5. SMOTE
+
+   Только после numeric preprocessing.
+   Должен быть disabled by default.
+   Требует отдельной ablation-проверки.
+
+6. Focal loss
+
+   Для DL-моделей на следующем этапе.
+
+17.3. Рекомендация для MVP
+--------------------------
+
+Для первого стабильного pipeline:
+
+1. Не применять SMOTE сразу.
+2. Использовать class_weight / scale_pos_weight.
+3. Сформировать class balance report.
+4. Позже отдельно сравнить undersampling/oversampling/SMOTE как ablation.
+
+Причина:
+
+    SMOTE может создавать искусственные attack samples, которые плохо отражают
+    реальные cybersecurity events.
+
+17.4. Class balance report
+--------------------------
+
+Отчет должен содержать:
+
+- rows_total;
+- rows_train;
+- rows_validation;
+- rows_test;
+- class_0_count;
+- class_1_count;
+- class_ratio;
+- label_status_distribution;
+- label_source_distribution;
+- balancing_method;
+- before_balance_distribution;
+- after_balance_distribution.
+
+================================================================================
+18. SEQUENCE WINDOW BUILDER
+================================================================================
+
+18.1. Назначение
+----------------
+
+Sequence builder нужен для LSTM/CNN-LSTM ветки.
+
+Он строит ordered windows:
+
+    normalized events -> ordered event tokens/features -> sequence tensor
+
+18.2. Минимальная политика sequence windows
+-------------------------------------------
+
+Рекомендуемые параметры:
+
+- sequence_length: 50 или 100 событий;
+- step: 25 для overlap;
+- padding: post-padding;
+- masking: обязательно;
+- ordering: timestamp, если есть; иначе event_order;
+- label_policy: any_attack_in_window для MVP;
+- group_by: host / source_ip / user / process / flow_id.
+
+18.3. Sequence output fields
+----------------------------
+
+Sequence artifact должен содержать:
+
+- sequence_id;
+- branch;
+- dataset_role;
+- group_key;
+- sequence_start;
+- sequence_end;
+- sequence_length;
+- padding_count;
+- mask;
+- X_sequence;
+- y_sequence;
+- label_policy;
+- traceability_event_uids.
+
+18.4. Важное ограничение
+------------------------
+
+Sequence builder не должен механически объединять несовместимые host/network raw datasets.
+Корреляция допускается только на уровне normalized events, windows, features и traceability.
+
+================================================================================
+19. MODEL-READY BUILD
+================================================================================
+
+19.1. Назначение
+----------------
+
+Model-ready build собирает финальные artifacts для ML/DL:
+
+    feature_artifacts -> preprocessing -> model_ready artifacts
+
+19.2. Artifact groups
+---------------------
+
+Должны создаваться:
+
+- X_train;
+- y_train;
+- X_validation;
+- y_validation;
+- X_test;
+- y_test;
+- metadata_train;
+- metadata_validation;
+- metadata_test;
+- traceability_train;
+- traceability_validation;
+- traceability_test;
+- sequence_train;
+- sequence_validation;
+- sequence_test;
+- split_index;
+- preprocessing_metadata.
+
+19.3. Рекомендуемая структура директорий
+----------------------------------------
+
+    PATH_DATA_STORAGE/
+      parquet/
+        model_ready/
+          exp001/
+            dns/
+              tree_unscaled/
+                TRAIN/
+                  X.parquet
+                  y.parquet
+                  metadata.parquet
+                  traceability.parquet
+                VALIDATION/
+                  X.parquet
+                  y.parquet
+                  metadata.parquet
+                  traceability.parquet
+                TEST/
+                  X.parquet
+                  y.parquet
+                  metadata.parquet
+                  traceability.parquet
+              dl_scaled/
+                TRAIN/
+                VALIDATION/
+                TEST/
+            host/
+              tree_unscaled/
+              dl_scaled/
+            hybrid/
+              late_fusion/
+
+19.4. Metadata для model-ready artifact
+---------------------------------------
+
+Пример:
+
+    {
+      "experiment_id": "exp001",
+      "branch": "dns",
+      "role": "TRAIN",
+      "data_type": "X",
+      "feature_catalog_version": "1.0",
+      "preprocessing_profile": "tree_unscaled",
+      "source_feature_artifacts": ["..."],
+      "rows": 1000000,
+      "columns": 128,
+      "forbidden_columns_check": "PASSED",
+      "fitted_on_role": "TRAIN",
+      "created_at": "..."
+    }
+
+================================================================================
+20. QUALITY CHECKS
+================================================================================
+
+20.1. Feature quality checks
+----------------------------
+
+Обязательные проверки:
+
+- feature artifact не пустой;
+- required columns присутствуют;
+- sample_uid уникален;
+- dtypes соответствуют feature_catalog;
+- missing ratio не превышает threshold;
+- label coverage рассчитан;
+- timestamp coverage рассчитан;
+- schema drift отсутствует или задокументирован;
+- class distribution рассчитан;
+- feature columns не содержат forbidden fields.
+
+20.2. Model-ready quality checks
+--------------------------------
+
+Блокирующие проверки:
+
+- X не содержит label_*;
+- X не содержит source_file/path/scenario;
+- X не содержит dataset_role/dataset_name;
+- TRAIN не содержит TEST rows;
+- preprocessing fitted_on_role = TRAIN;
+- y существует для supervised pipeline;
+- feature columns одинаковы между TRAIN/VALIDATION/TEST;
+- preprocessing artifact зарегистрирован;
+- traceability chain восстановима.
+
+20.3. Reports
+--------------
+
+Рекомендуемые отчеты:
+
+    PATH_DATA_STORAGE/reports/ru/stage-three/feature_extraction_report.md
+    PATH_DATA_STORAGE/reports/ru/stage-three/preprocessing_report.md
+    PATH_DATA_STORAGE/reports/ru/stage-three/class_balance_report.md
+    PATH_DATA_STORAGE/reports/ru/stage-three/model_ready_report.md
+    PATH_DATA_STORAGE/reports/ru/stage-three/leakage_report.md
+    PATH_DATA_STORAGE/reports/ru/stage-three/stage_three_final_report.md
+
+Аналогично для английской версии:
+
+    PATH_DATA_STORAGE/reports/en/stage-three/
+
+================================================================================
+21. LEAKAGE PREVENTION
+================================================================================
+
+21.1. Critical leakage fields
+-----------------------------
+
+Запрещены в X:
+
+- label_binary;
+- label_family;
+- label_subtype;
+- label_source;
+- label_status;
+- label_confidence;
+- label_mapping_rule_id;
+- dataset_name;
+- dataset_role;
+- source_file;
+- source_path;
+- scenario_name;
+- parser_name;
+- parser_version;
+- raw_fields_json;
+- metadata_json;
+- local absolute paths;
+- raw payload/body;
+- traceability IDs как model features.
+
+21.2. Critical leakage scenarios
+--------------------------------
+
+CRITICAL:
+
+- TEST rows внутри TRAIN artifact;
+- labels внутри X;
+- source/path/scenario fields внутри X;
+- preprocessing fit на VALIDATION/TEST;
+- feature selection с использованием TEST;
+- threshold tuning с использованием TEST;
+- filename label hints в TEST training logic.
+
+ERROR или CRITICAL по контексту:
+
+- weak labels используются как ground truth без label_status/confidence;
+- missing labels превращаются в benign;
+- scenario metadata используется как input feature.
+
+21.3. Blocking policy
+---------------------
+
+Если leakage check возвращает CRITICAL, artifact нельзя использовать downstream.
+
+Artifact должен получить статус:
+
+    BLOCKED_BY_LEAKAGE
+
+================================================================================
+22. POSTGRESQL CATALOG INTEGRATION
+================================================================================
+
+22.1. Используемые catalog entities
+-----------------------------------
+
+Stage Three должен использовать следующие сущности:
+
+- normalized_artifacts;
+- feature_artifacts;
+- model_ready_artifacts;
+- preprocessing_artifacts;
+- data_quality_reports;
+- label_mapping_rules;
+- parser_runs;
+- dataset_files;
+- datasets.
+
+22.2. Artifact lifecycle statuses
+---------------------------------
+
+Рекомендуемые статусы:
+
+- PLANNED;
+- RUNNING;
+- SUCCESS;
+- PARTIAL_SUCCESS;
+- FAILED;
+- SKIPPED;
+- BLOCKED_BY_LEAKAGE;
+- BLOCKED_BY_QUALITY.
+
+22.3. PreprocessingArtifact constraint
+--------------------------------------
+
+Preprocessing artifacts должны иметь:
+
+    fitted_on_role = TRAIN
+
+Любая попытка fit preprocessing на VALIDATION или TEST должна завершаться ошибкой.
+
+================================================================================
+23. ОТЧЕТЫ STAGE THREE
+================================================================================
+
+23.1. Feature extraction report
+-------------------------------
+
+Содержит:
+
+- experiment_id;
+- branch;
+- role;
+- feature_group;
+- input_normalized_artifacts;
+- output_feature_artifacts;
+- rows_read;
+- rows_written;
+- columns_created;
+- missing_values_summary;
+- label_coverage;
+- timestamp_coverage;
+- schema_warnings;
+- runtime_seconds;
+- status.
+
+23.2. Preprocessing report
+--------------------------
+
+Содержит:
+
+- preprocessing_profile;
+- fit_role;
+- numeric_columns;
+- categorical_columns;
+- boolean_columns;
+- dropped_columns;
+- imputer_strategy;
+- encoder_strategy;
+- scaler_strategy;
+- train_rows;
+- validation_rows;
+- test_rows;
+- forbidden_columns_removed.
+
+23.3. Class balance report
+--------------------------
+
+Содержит:
+
+- class distribution before balancing;
+- class distribution after balancing;
+- balancing method;
+- affected role;
+- confirmation that VALIDATION/TEST were not modified;
+- label_status distribution;
+- label_source distribution.
+
+23.4. Model-ready report
+------------------------
+
+Содержит:
+
+- experiment_id;
+- model_ready_artifacts;
+- X/y row counts;
+- feature count;
+- target distribution;
+- split distribution;
+- class balance;
+- leakage status;
+- traceability status;
+- readiness status.
+
+23.5. Final Stage Three report
+------------------------------
+
+Структура:
+
+1. Executive summary.
+2. Inputs from Stage Two.
+3. Feature catalogue version.
+4. Feature extraction summary.
+5. Label alignment summary.
+6. Preprocessing summary.
+7. Class balance summary.
+8. Model-ready artifacts.
+9. Quality checks.
+10. Leakage checks.
+11. Traceability checks.
+12. Known limitations.
+13. Readiness for Stage Four.
+
+================================================================================
+24. DEFINITION OF DONE
+================================================================================
+
+Stage Three считается завершенным, если выполнены условия:
+
+1. Stage Two readiness report passed.
+2. feature_catalog.yml/json создан и валидирован.
+3. Feature artifacts созданы для нужных branch/role.
+4. Labels aligned на event/window/sequence уровне.
+5. X/y/metadata/traceability физически разделены.
+6. Missing values обработаны через TRAIN-fitted imputer.
+7. Категории закодированы через TRAIN-fitted encoder.
+8. Scaling выполнен через TRAIN-fitted scaler.
+9. Class balancing применен только к TRAIN.
+10. Model-ready artifacts зарегистрированы в PostgreSQL Catalog.
+11. Quality checks passed.
+12. Leakage checks passed.
+13. Traceability chain восстановима.
+14. Final Stage Three report создан.
+15. Artifacts готовы для Stage Four training/evaluation.
+
+================================================================================
+25. MVP-ПУТЬ
+================================================================================
+
+Для быстрого перехода к первому обучению рекомендуется минимальный scope:
+
+1. Использовать только готовые normalized artifacts.
+2. Начать с DNS branch.
+3. Реализовать feature groups:
+   - dns_lexical;
+   - dns_entropy;
+   - dns_temporal.
+4. Использовать label_binary как target.
+5. Сформировать tree_unscaled model-ready dataset.
+6. Не применять SMOTE на первом запуске.
+7. Использовать class_weight / scale_pos_weight уже на Stage Four.
+8. Проверить leakage.
+9. Обучить RF/XGBoost baseline на следующем этапе.
+10. Затем расширять Host и sequence branch.
+
+Минимальный первый результат Stage Three:
+
+    model_ready/tree_unscaled/dns/TRAIN/X.parquet
+    model_ready/tree_unscaled/dns/TRAIN/y.parquet
+    model_ready/tree_unscaled/dns/VALIDATION/X.parquet
+    model_ready/tree_unscaled/dns/VALIDATION/y.parquet
+    model_ready/tree_unscaled/dns/TEST/X.parquet
+    model_ready/tree_unscaled/dns/TEST/y.parquet
+    reports/ru/stage-three/stage_three_final_report.md
+
+================================================================================
+26. РАСШИРЕННЫЙ PRODUCTION-ПУТЬ
+================================================================================
+
+После MVP нужно расширить Stage Three:
+
+1. Добавить Host feature groups.
+2. Добавить Network feature groups.
+3. Добавить Hybrid correlation features.
+4. Добавить sequence window builder.
+5. Добавить dl_scaled preprocessing profile.
+6. Добавить sequence artifacts для LSTM.
+7. Добавить split_index/fold_index для controlled experiments.
+8. Добавить preprocessing profiles для tree/dl/linear models.
+9. Добавить feature stability reports.
+10. Добавить full readiness report для Stage Four.
+
+================================================================================
+27. НЕСООТВЕТСТВИЯ И GAPS, КОТОРЫЕ НУЖНО ЗАКРЫТЬ
+================================================================================
+
+1. Feature extraction CLI
+
+   Текущее состояние:
+   - contracts и writer services есть;
+   - полноценный end-to-end CLI не подтвержден.
+
+   Нужно:
+   - добавить `python manage.py stage-three extract-features`.
+
+2. Model-ready build CLI
+
+   Текущее состояние:
+   - model-ready contracts/registry есть;
+   - полного CLI build step нет.
+
+   Нужно:
+   - добавить `python manage.py stage-three build-model-ready`.
+
+3. Preprocessing orchestration
+
+   Текущее состояние:
+   - missing value handling, scaling, encoding как pipeline не подтверждены.
+
+   Нужно:
+   - реализовать fit/transform separation;
+   - fit только на TRAIN.
+
+4. Class imbalance
+
+   Текущее состояние:
+   - SMOTE/undersampling/class weights не подтверждены как реализация.
+
+   Нужно:
+   - начать с class balance report;
+   - class_weight/scale_pos_weight использовать как первый безопасный baseline;
+   - SMOTE оставить optional и disabled by default.
+
+5. Sequence policy
+
+   Текущее состояние:
+   - LSTM sequence length 50-100 упоминается как proposal-level;
+   - step/overlap/label policy/time alignment не реализованы полностью.
+
+   Нужно:
+   - зафиксировать sequence_length;
+   - step;
+   - group_by;
+   - padding/mask;
+   - label_policy.
+
+6. Leakage checks
+
+   Текущее состояние:
+   - Stage Two leakage checks есть;
+   - Stage Three должен расширить их на feature/model-ready artifacts.
+
+   Нужно:
+   - проверять forbidden columns в X;
+   - проверять fit role preprocessing;
+   - проверять split contamination.
+
+7. Reports
+
+   Текущее состояние:
+   - Stage Three reports не описаны как готовая реализация.
+
+   Нужно:
+   - добавить feature_extraction_report;
+   - preprocessing_report;
+   - class_balance_report;
+   - model_ready_report;
+   - leakage_report;
+   - stage_three_final_report.
+
+================================================================================
+28. РЕКОМЕНДУЕМЫЕ TASKS ДЛЯ CODEX
+================================================================================
+
+Task 1 — Stage Three CLI skeleton
+---------------------------------
+
+Реализуй Stage Three CLI skeleton.
+
+Требования:
+
+- добавить routing для `python manage.py stage-three ...`;
+- не ломать существующий Stage Two;
+- использовать typed request dataclasses;
+- DB операции выполнять через session_scope;
+- добавить команды:
+  - validate-inputs;
+  - build-feature-catalog;
+  - extract-features;
+  - align-labels;
+  - build-sequences;
+  - build-model-ready;
+  - run-quality-checks;
+  - run-leakage-checks;
+  - final-report;
+- добавить unit tests для routing;
+- обновить документацию.
+
+Task 2 — Feature catalog contract
+---------------------------------
+
+Реализуй machine-readable feature_catalog.yml/json.
+
+Требования:
+
+- включить DNS, Host, Network, Hybrid, Sequence feature groups;
+- указать dtype, nullable, preprocessing strategy, allow_in_X;
+- добавить forbidden_X_columns;
+- добавить validator;
+- добавить tests;
+- сгенерировать отчет в reports/ru/stage-three/feature_catalog_report.md.
+
+Task 3 — Feature extraction runner
+----------------------------------
+
+Реализуй feature extraction runner из normalized Parquet artifacts.
+
+Требования:
+
+- читать только normalized artifacts;
+- не читать raw files;
+- поддержать branch/role/feature_group;
+- сохранять feature artifacts в Parquet;
+- регистрировать feature_artifacts в PostgreSQL;
+- сохранять traceability fields;
+- исключать forbidden X columns;
+- поддержать resume;
+- добавить quality report.
+
+Task 4 — Label alignment
+------------------------
+
+Реализуй label alignment для feature rows, windows и sequences.
+
+Требования:
+
+- labels не добавлять в X;
+- поддержать policies:
+  - explicit_only;
+  - any_attack_in_window;
+  - majority_label;
+  - last_event_label;
+  - weak_allowed_with_confidence;
+- missing labels оставлять unlabeled;
+- TEST filename hints не использовать;
+- добавить label alignment report.
+
+Task 5 — Preprocessing pipeline
+-------------------------------
+
+Реализуй preprocessing fit/transform pipeline.
+
+Требования:
+
+- fit только на TRAIN;
+- transform для TRAIN/VALIDATION/TEST;
+- поддержать:
+  - type casting;
+  - missing value imputation;
+  - categorical encoding;
+  - boolean/binary conversion;
+  - scaling profiles;
+- зарегистрировать PreprocessingArtifact;
+- запретить fit на VALIDATION/TEST через runtime validation и tests.
+
+Task 6 — Class balancing
+------------------------
+
+Реализуй class balancing только для TRAIN.
+
+Требования:
+
+- поддержать class_weight metadata;
+- поддержать random undersampling/oversampling как optional;
+- SMOTE сделать optional и disabled by default;
+- не изменять VALIDATION/TEST;
+- создать class_balance_report.md/json.
+
+Task 7 — Model-ready builder
+----------------------------
+
+Реализуй model-ready builder.
+
+Требования:
+
+- собрать X/y/metadata/traceability artifacts;
+- собрать sequence artifacts, если задан sequence profile;
+- проверить forbidden columns в X;
+- проверить одинаковую схему X между TRAIN/VALIDATION/TEST;
+- зарегистрировать ModelReadyArtifact;
+- создать model_ready_report.md/json.
+
+Task 8 — Stage Three quality/leakage/readiness
+----------------------------------------------
+
+Реализуй Stage Three quality/leakage/readiness checks.
+
+Требования:
+
+- проверить empty artifacts;
+- required columns;
+- dtype consistency;
+- class balance;
+- label coverage;
+- split contamination;
+- TEST leakage;
+- preprocessing fit role;
+- forbidden X columns;
+- traceability chain;
+- создать final Stage Three readiness report.
+
+================================================================================
+29. ИТОГОВОЕ РЕШЕНИЕ
+================================================================================
+
+Следующий этап после Stage Two должен быть оформлен как:
+
+    Stage Three — Feature Extraction, Preprocessing and Model-Ready Dataset Preparation
+
+Критически важная последовательность:
+
+    Stage Two checks
+    -> feature catalog
+    -> feature extraction
+    -> label alignment
+    -> X/y separation
+    -> type casting
+    -> missing handling
+    -> categorical encoding
+    -> scaling
+    -> TRAIN-only balancing
+    -> model-ready build
+    -> quality/leakage/traceability checks
+    -> Stage Four training
+
+Главный результат Stage Three:
+
+    leakage-safe, split-safe, traceable model-ready artifacts,
+    готовые для обучения RF/XGBoost/CNN/LSTM и последующей оценки.
