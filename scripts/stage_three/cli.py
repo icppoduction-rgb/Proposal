@@ -31,6 +31,11 @@ from scripts.stage_three.feature_catalog.validator import (
     FAIL as CATALOG_FAIL,
     validate_feature_catalog,
 )
+from scripts.stage_three.extraction.report import save_dns_feature_extraction_reports
+from scripts.stage_three.extraction.runner import (
+    fetch_dns_normalized_artifacts,
+    run_dns_feature_extraction,
+)
 from scripts.stage_three.readiness.report import save_validate_inputs_reports
 from scripts.stage_three.readiness.validator import (
     FAIL,
@@ -123,6 +128,8 @@ def router_stage_three(
             _run_build_feature_catalog(request)
         elif isinstance(request, ProbeRuntimeBackendRequest) and not request.dry_run:
             _run_probe_runtime_backend(request)
+        elif isinstance(request, ExtractFeaturesRequest) and not request.dry_run:
+            _run_extract_features(request)
         elif isinstance(request, ValidateInputsRequest) and not request.dry_run:
             _run_validate_inputs(request)
         else:
@@ -467,6 +474,51 @@ def _run_probe_runtime_backend(request: ProbeRuntimeBackendRequest) -> None:
             "peak_rss_gb": memory_snapshot.peak_rss_gb,
             "report_paths": report.report_paths,
             "message": "Stage Three runtime backend probe completed.",
+        }
+    )
+
+
+def _run_extract_features(request: ExtractFeaturesRequest) -> None:
+    """Run implemented Stage Three feature extraction commands."""
+    if request.branch != "dns":
+        raise ValueError("extract-features MVP currently supports only --branch dns")
+    try:
+        with session_scope() as session:
+            artifacts = fetch_dns_normalized_artifacts(
+                session,
+                branch=request.branch,
+                role=request.role,
+            )
+    except SQLAlchemyError as exc:
+        console.print(
+            {
+                "service": "stage-three extract-features",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "PostgreSQL catalog is not reachable; DNS feature artifacts were not extracted.",
+            }
+        )
+        raise SystemExit(1) from exc
+    result = run_dns_feature_extraction(
+        artifacts=artifacts,
+        branch=request.branch,
+        role=request.role,
+        feature_group=request.feature_group,
+    )
+    result = save_dns_feature_extraction_reports(result)
+    console.print(
+        {
+            "service": "stage-three extract-features",
+            "status": result.status,
+            "request": asdict(request),
+            "input_normalized_artifacts": len(result.input_normalized_artifacts),
+            "output_feature_artifacts": len(result.output_feature_artifacts),
+            "rows_read": result.rows_read,
+            "rows_written": result.rows_written,
+            "columns_created": result.columns_created,
+            "report_paths": result.report_paths,
+            "message": "Stage Three DNS feature extraction completed.",
         }
     )
 

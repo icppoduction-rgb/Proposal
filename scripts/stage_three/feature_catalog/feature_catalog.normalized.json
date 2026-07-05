@@ -37,7 +37,7 @@
       "extractor_mappings": [
         {
           "output_features": [
-            "dns_query_entropy"
+            "dns_entropy"
           ],
           "source_fields": [
             "domain",
@@ -49,7 +49,7 @@
         {
           "allow_in_X": true,
           "dtype": "numeric",
-          "name": "dns_query_entropy",
+          "name": "dns_entropy",
           "nullable": false,
           "preprocessing": {
             "encoding": "none",
@@ -97,7 +97,13 @@
       "extractor_mappings": [
         {
           "output_features": [
-            "dns_query_length"
+            "dns_query_length",
+            "dns_subdomain_length",
+            "dns_label_count",
+            "dns_label_avg_len",
+            "dns_label_max_len",
+            "dns_digit_count",
+            "dns_special_char_count"
           ],
           "source_fields": [
             "domain",
@@ -109,7 +115,73 @@
         {
           "allow_in_X": true,
           "dtype": "integer",
+          "name": "dns_digit_count",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "dns_label_avg_len",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "dns_label_count",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "dns_label_max_len",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
           "name": "dns_query_length",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "dns_special_char_count",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "standard"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "integer",
+          "name": "dns_subdomain_length",
           "nullable": false,
           "preprocessing": {
             "encoding": "none",
@@ -157,7 +229,10 @@
       "extractor_mappings": [
         {
           "output_features": [
-            "dns_queries_per_window"
+            "dns_queries_per_window",
+            "dns_inter_query_interval_mean",
+            "dns_inter_query_interval_std",
+            "dns_burst_score"
           ],
           "source_fields": [
             "event_timestamp",
@@ -167,6 +242,39 @@
         }
       ],
       "features": [
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "dns_burst_score",
+          "nullable": false,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "zero",
+            "scaling": "robust"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "dns_inter_query_interval_mean",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "median",
+            "scaling": "robust"
+          }
+        },
+        {
+          "allow_in_X": true,
+          "dtype": "numeric",
+          "name": "dns_inter_query_interval_std",
+          "nullable": true,
+          "preprocessing": {
+            "encoding": "none",
+            "missing": "median",
+            "scaling": "robust"
+          }
+        },
         {
           "allow_in_X": true,
           "dtype": "integer",

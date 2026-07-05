@@ -36,9 +36,64 @@ feature_groups:
     planned: true
     extractor_mappings:
       - source_fields: ["domain", "features_json"]
-        output_features: ["dns_query_length"]
+        output_features:
+          - "dns_query_length"
+          - "dns_subdomain_length"
+          - "dns_label_count"
+          - "dns_label_avg_len"
+          - "dns_label_max_len"
+          - "dns_digit_count"
+          - "dns_special_char_count"
     features:
       - name: "dns_query_length"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+      - name: "dns_subdomain_length"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+      - name: "dns_label_count"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+      - name: "dns_label_avg_len"
+        dtype: "numeric"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+      - name: "dns_label_max_len"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+      - name: "dns_digit_count"
+        dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "standard"
+          encoding: "none"
+      - name: "dns_special_char_count"
         dtype: "integer"
         nullable: false
         allow_in_X: true
@@ -53,9 +108,9 @@ feature_groups:
     planned: true
     extractor_mappings:
       - source_fields: ["domain", "features_json"]
-        output_features: ["dns_query_entropy"]
+        output_features: ["dns_entropy"]
     features:
-      - name: "dns_query_entropy"
+      - name: "dns_entropy"
         dtype: "numeric"
         nullable: false
         allow_in_X: true
@@ -70,10 +125,38 @@ feature_groups:
     planned: true
     extractor_mappings:
       - source_fields: ["event_timestamp", "event_order", "domain"]
-        output_features: ["dns_queries_per_window"]
+        output_features:
+          - "dns_queries_per_window"
+          - "dns_inter_query_interval_mean"
+          - "dns_inter_query_interval_std"
+          - "dns_burst_score"
     features:
       - name: "dns_queries_per_window"
         dtype: "integer"
+        nullable: false
+        allow_in_X: true
+        preprocessing:
+          missing: "zero"
+          scaling: "robust"
+          encoding: "none"
+      - name: "dns_inter_query_interval_mean"
+        dtype: "numeric"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "median"
+          scaling: "robust"
+          encoding: "none"
+      - name: "dns_inter_query_interval_std"
+        dtype: "numeric"
+        nullable: true
+        allow_in_X: true
+        preprocessing:
+          missing: "median"
+          scaling: "robust"
+          encoding: "none"
+      - name: "dns_burst_score"
+        dtype: "numeric"
         nullable: false
         allow_in_X: true
         preprocessing:
