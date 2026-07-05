@@ -107,6 +107,23 @@ STAGE_TWO_TEXT_ENCODINGS: tuple[str, ...] = (
     "latin-1",
 )
 
+# --------------------- STAGE THREE RESOURCE LIMITS ------------------ #
+
+STAGE_THREE_DEFAULT_PROFILE: str = os.getenv("STAGE_THREE_DEFAULT_PROFILE", "balanced").strip() or "balanced"
+STAGE_THREE_ACCELERATION_BACKEND: str = (
+    os.getenv("STAGE_THREE_ACCELERATION_BACKEND", "auto").strip().lower() or "auto"
+)
+STAGE_THREE_RESERVED_RAM_GB: int = _positive_int_env("STAGE_THREE_RESERVED_RAM_GB", 8)
+STAGE_THREE_SOFT_RAM_LIMIT_GB: int = _positive_int_env("STAGE_THREE_SOFT_RAM_LIMIT_GB", 48)
+STAGE_THREE_HARD_RAM_LIMIT_GB: int = _positive_int_env("STAGE_THREE_HARD_RAM_LIMIT_GB", 56)
+STAGE_THREE_DEFAULT_WORKERS: int = _positive_int_env("STAGE_THREE_DEFAULT_WORKERS", 8)
+STAGE_THREE_MAX_WORKERS: int = _positive_int_env("STAGE_THREE_MAX_WORKERS", 12)
+STAGE_THREE_DB_WORKERS: int = _positive_int_env("STAGE_THREE_DB_WORKERS", 4)
+STAGE_THREE_BATCH_ROWS: int = _positive_int_env("STAGE_THREE_BATCH_ROWS", 250_000)
+STAGE_THREE_PARQUET_ROW_GROUP_SIZE: int = _positive_int_env("STAGE_THREE_PARQUET_ROW_GROUP_SIZE", 250_000)
+STAGE_THREE_GPU_MEMORY_SOFT_LIMIT_GB: int = _positive_int_env("STAGE_THREE_GPU_MEMORY_SOFT_LIMIT_GB", 12)
+STAGE_THREE_GPU_MEMORY_HARD_LIMIT_GB: int = _positive_int_env("STAGE_THREE_GPU_MEMORY_HARD_LIMIT_GB", 14)
+
 # --------------------------- PATH DUCKDB ----------------------------- #
 
 POSTGRES_RELATIVE: str = "postgres"
@@ -157,6 +174,10 @@ REPORTS_RU_STAGE_TWO: str = "reports/ru/stage-two"
 REPORTS_EN_STAGE_TWO_QUALITY: str = "reports/en/stage-two/quality"
 REPORTS_EN_STAGE_TWO_LEAKAGE: str = "reports/en/stage-two/leakage"
 REPORTS_RU_STAGE_TWO_LEAKAGE: str = "reports/ru/stage-two/leakage"
+REPORTS_RU_STAGE_THREE: str = _storage_path("reports", "ru", "stage-three")
+REPORTS_EN_STAGE_THREE: str = _storage_path("reports", "en", "stage-three")
+LOGS_STAGE_THREE: str = _storage_path("logs", "stage-three")
+TEMP_DATA_STAGE_THREE: str = _storage_path("temp_data", "stage_three")
 
 EN_PATH_REPORT: str = _storage_path("reports", "en")
 RU_PATH_REPORT: str = _storage_path("reports", "ru")
@@ -239,6 +260,12 @@ NORMALIZED_SCHEMA_PATH: str = _project_path("schemas", "normalized", "normalized
 FEATURE_ARTIFACT_SCHEMA_PATH: str = _project_path("schemas", "features", "feature_artifact_v1.json")
 MODEL_READY_SCHEMA_PATH: str = _project_path("schemas", "model_ready", "model_ready_v1.json")
 ALEMBIC_INI_PATH: str = _project_path("scripts", "db", "migrations", "alembic.ini")
+STAGE_THREE_FEATURE_CATALOG_PATH: str = _project_path(
+    "scripts",
+    "stage_three",
+    "feature_catalog",
+    "feature_catalog.yml",
+)
 
 # --------------------------- PATH DOCS ------------------------------- #
 
