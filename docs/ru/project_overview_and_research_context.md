@@ -31,9 +31,10 @@
 flowchart TD
     A["DNS/network datasets"] --> D["Multi-source feature integration"]
     B["Host telemetry datasets"] --> D
-    C["Stage Two normalization"] --> D
-    D --> E["Hybrid ML/DL classification: RF, XGBoost, CNN"]
-    D --> F["Behavioural sequence modelling: LSTM"]
+    C["Stage Two normalization"] --> S3["Stage Three feature/model-ready preparation"]
+    S3 --> D["Multi-source feature integration"]
+    D --> E["Stage Four classifiers: RF, XGBoost, CNN"]
+    D --> F["Stage Four sequence modelling: LSTM"]
     E --> G["Late fusion"]
     F --> G
     G --> H["Detection decision"]
@@ -42,9 +43,10 @@ flowchart TD
 
 | Слой | Назначение | Статус |
 | --- | --- | --- |
-| Multi-source integration | Нормализация host/network признаков в единое представление. | Proposal / Stage Two design target. |
-| Hybrid ML/DL classification | Random Forest, XGBoost, CNN для structured/local feature patterns. | Proposal; модельный код не подтвержден. |
-| Behavioural sequence modelling | LSTM по ordered event sequences. | Proposal; sequence builder/model code не подтвержден. |
+| Stage Three preparation | Feature catalog, extraction, label alignment, X/y/metadata/traceability separation, preprocessing, model-ready artifacts, checks, final report. | Реализовано как preparation layer; готовность зависит от `final-report`. |
+| Multi-source integration | Нормализация host/network признаков в единое представление. | Частично покрывается Stage Three feature/model-ready layer; production Host/Network/Hybrid expansion еще требует отдельных runs. |
+| Hybrid ML/DL classification | Random Forest, XGBoost, CNN для structured/local feature patterns. | Stage Four; модельный код не подтвержден. |
+| Behavioural sequence modelling | LSTM по ordered event sequences. | Stage Four; Stage Three готовит sequence artifacts, но LSTM training не реализован. |
 | Late fusion | Агрегация вероятностей classifier и sequence model. | Proposal; веса/формула не заданы. |
 | SHAP explainability | Global/local explanations и rank-order consistency. | Proposal; SHAP variants не зафиксированы. |
 
@@ -125,7 +127,8 @@ Proposal использует **Design Science Research (DSR)**:
 | Категория | Статус |
 | --- | --- |
 | Stage One dataset preparation, sorting, JSON path maps. | Подтверждено текущим репозиторием. |
-| Stage Two normalization/catalog/parquet/parser design. | Частично реализовано/задокументировано в Stage Two документации; проверять по коду. |
+| Stage Two normalization/catalog/parquet/parser design. | Реализовано/задокументировано в Stage Two документации; проверять готовность по checks. |
+| Stage Three feature/model-ready preparation. | Реализовано/задокументировано; проверять конкретный `experiment_id` через `stage-three final-report`. |
 | RF/XGBoost/CNN/LSTM training. | Proposal-level, в QA документе модельная реализация не подтверждена. |
 | SHAP explanations. | Proposal-level. |
-| Feature catalogue. | Архитектурный контракт для будущей реализации feature extraction. |
+| Feature catalogue. | Machine-readable Stage Three contract в `scripts/stage_three/feature_catalog/feature_catalog.yml`. |

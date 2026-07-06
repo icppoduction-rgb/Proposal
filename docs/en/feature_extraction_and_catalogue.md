@@ -1,6 +1,23 @@
 # Feature extraction map and feature catalogue
 
-This document merges `dataset_feature_extraction_map.md`, `feature_catalogue_full.md`, and feature-related sections from `functional_project_cheatsheet.md`. It defines the contract for Stage Two feature extraction, Parquet artifacts, and model-ready datasets.
+This document merges `dataset_feature_extraction_map.md`, `feature_catalogue_full.md`, and feature-related sections from `functional_project_cheatsheet.md`. It defines the contract for Stage Three feature extraction, Parquet artifacts, and model-ready datasets.
+
+## Current Stage Three Implementation
+
+The machine-readable feature catalog lives at `scripts/stage_three/feature_catalog/feature_catalog.yml`.
+
+Stage Three CLI:
+
+```bash
+python manage.py stage-three build-feature-catalog
+python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
+python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three run-quality-checks --experiment-id exp001
+python manage.py stage-three run-leakage-checks --experiment-id exp001
+python manage.py stage-three final-report --experiment-id exp001
+```
+
+Current runbooks: [stage-three/usage_guide.md](stage-three/usage_guide.md) and [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md).
 
 ## Principles
 
@@ -130,7 +147,7 @@ This document merges `dataset_feature_extraction_map.md`, `feature_catalogue_ful
 | P1 | Domain enrichment; hybrid correlations; resource telemetry; archive/compression; sensitive file access; graph/baseline features. |
 | P2 | Advanced command-line tokenization; template mining; long-term per-user/per-host baselines; feature stability checks. |
 
-## Stage Two link
+## Stage Two and Stage Three Link
 
 | Stage Two layer | Requirement |
 | --- | --- |
@@ -140,3 +157,4 @@ This document merges `dataset_feature_extraction_map.md`, `feature_catalogue_ful
 | DuckDB checks | Validate Parquet counts, schema drift, split contamination, leakage columns. |
 | LabelResolver | Fills label fields separately from X features. |
 | Traceability | Feature/model-ready artifacts must link back to normalized -> parser run -> raw dataset file. |
+| Stage Three final report | Records whether a concrete `experiment_id` is ready for Stage Four. |

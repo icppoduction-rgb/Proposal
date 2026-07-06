@@ -1,6 +1,6 @@
 # Proposal Project Documentation
 
-This README is the main entry point for the project documentation. It helps locate materials for the research context, Stage One, Stage Two normalization, code architecture, datasets, PostgreSQL Catalog, Parquet/DuckDB, labels, features, and leakage checks.
+This README is the main entry point for the project documentation. It helps locate materials for the research context, Stage One, Stage Two normalization, Stage Three feature/model-ready preparation, code architecture, datasets, PostgreSQL Catalog, Parquet/DuckDB, labels, features, and leakage checks.
 
 The documentation separates:
 
@@ -11,12 +11,13 @@ The documentation separates:
 
 ## Current Code Sync
 
-Last checked against code on 2026-07-04.
+Last checked against code on 2026-07-06.
 
 - Stage Two routing is implemented in `scripts/stage_two/cli.py`; this file is the authoritative source for supported `stage-two` commands.
 - The fallback command list printed from `config.manage_commands` is older than the router and does not list every current Stage Two command, including `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, and `split-large-files`.
 - Runtime defaults without a resource profile are conservative: `workers=1`, `batch_size=50000`, and `max_output_part_rows=50000`. Resource profiles and the `normalize-format` format policy can change the resolved values before execution.
-- Feature and model-ready writer/registry services exist, but full end-to-end feature extraction, model-ready build, model training, and evaluation CLIs are still proposal/follow-up work.
+- Stage Three routing is implemented in `scripts/stage_three/cli.py`; it covers `validate-inputs`, `build-feature-catalog`, `probe-runtime-backend`, `extract-features`, `align-labels`, `build-sequences`, `build-model-ready`, `run-quality-checks`, `run-leakage-checks`, `trace-artifact`, and `final-report`.
+- Stage Three is a preparation layer: it builds feature/model-ready artifacts and runs quality/leakage/traceability checks, but it does not train RF/XGBoost/CNN/LSTM models or run Stage Four evaluation.
 
 ## Quick Start
 
@@ -28,6 +29,7 @@ Last checked against code on 2026-07-04.
 | Understand code structure and CLI | [code-documentation/README.md](code-documentation/README.md) |
 | Find Stage One dataset analysis | [analysis-dataset/README.md](analysis-dataset/README.md) |
 | Run Stage Two normalization | [normalization/README.md](normalization/README.md), [normalization/stage_two_commands.md](normalization/stage_two_commands.md) |
+| Run Stage Three feature/model-ready preparation | [stage-three/README.md](stage-three/README.md), [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md) |
 | Choose DNS/Host strategy and split roles | [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md) |
 | Review feature engineering and leakage exclusions | [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) |
 
@@ -38,6 +40,7 @@ Last checked against code on 2026-07-04.
 | [analysis-dataset/](analysis-dataset/README.md) | Stage One DNS/Host bucket analysis, counts, formats, labels, readiness, and parser recommendations. | Factual dataset analysis |
 | [code-documentation/](code-documentation/README.md) | Code architecture: CLI/routing, Stage One handlers, Stage Two, PostgreSQL Catalog, SQLAlchemy, schemas, parsers, labels, Parquet/DuckDB, checks, risks. | Technical code documentation |
 | [normalization/](normalization/README.md) | Operational guide for Stage Two normalization: storage, catalog ingestion, parser registry, `READY_FOR_PARSING`, normalization commands, DuckDB/leakage checks, traceability. | Implemented behavior and runbooks |
+| [stage-three/](stage-three/README.md) | Operational guide for Stage Three: readiness gate, feature catalog, extraction, label alignment, preprocessing, model-ready build, checks, final report. | Implemented behavior and runbooks |
 | [project_documentation_index.md](project_documentation_index.md) | Index of top-level documents and map of merged legacy materials. | Navigation |
 | [project_overview_and_research_context.md](project_overview_and_research_context.md) | Research context, objectives, methodology, proposal-level architecture, and limitations. | Research/proposal |
 | [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md) | DNS/Host dataset strategy with explicit `TRAIN`, `VALIDATION`, and `TEST` separation. | Dataset strategy |
@@ -64,11 +67,20 @@ Last checked against code on 2026-07-04.
 - [normalization/runtime_resource_runbook.md](normalization/runtime_resource_runbook.md) - operations, recovery, and large-file scenarios.
 - [normalization/performance_tuning.md](normalization/performance_tuning.md) - `workers`, `batch-size`, `max-output-part-rows`, packet modes.
 
+### Stage Three / Feature and Model-ready Preparation
+
+- [stage-three/README.md](stage-three/README.md) - Stage Three boundaries, DNS MVP path, and production expansion.
+- [stage-three/usage_guide.md](stage-three/usage_guide.md) - execution order for `validate-inputs -> feature catalog -> extraction -> model-ready -> checks -> final-report`.
+- [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md) - CLI reference for `python manage.py stage-three ...`.
+- [stage-three/performance_tuning.md](stage-three/performance_tuning.md) - CPU-first/streaming-first policy, RAM/GPU profile, and production tuning.
+- [code-documentation/stage_three_overview.md](code-documentation/stage_three_overview.md) - architecture of `scripts/stage_three`.
+
 ### Code Architecture
 
 - [code-documentation/README.md](code-documentation/README.md) - technical documentation map.
 - [code-documentation/cli_and_routing.md](code-documentation/cli_and_routing.md) - `manage.py`, routing layer, Stage One/Stage Two commands.
 - [code-documentation/stage_two_overview.md](code-documentation/stage_two_overview.md) - Stage Two pipeline.
+- [code-documentation/stage_three_overview.md](code-documentation/stage_three_overview.md) - Stage Three pipeline.
 - [code-documentation/extension_points.md](code-documentation/extension_points.md) - how to extend handlers, parsers, schemas, labels, checks, and stages.
 - [code-documentation/risks_and_technical_debt.md](code-documentation/risks_and_technical_debt.md) - known limitations, parser gaps, leakage/timestamp/large-file risks.
 
@@ -110,6 +122,7 @@ Last checked against code on 2026-07-04.
 5. [normalization/README.md](normalization/README.md) - Stage Two implementation guide.
 6. [normalization/stage_two_commands.md](normalization/stage_two_commands.md) - exact run commands.
 7. [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) - feature engineering and model-ready constraints.
+8. [stage-three/README.md](stage-three/README.md) - practical Stage Three execution and Stage Four readiness.
 
 ## Core Invariants
 

@@ -7,7 +7,8 @@
 | Fallback Host role в TEST | `HostDatasetHandler._detect_role` | файлы без role token попадут в TEST | проверить `host-path-file.json` | требовать явные role directories, добавить strict mode |
 | Жестко заданный Host filter whitelist | `HostDatasetFilterHandler` | новые datasets/formats исключаются | причины в filter log | вынести rules в config с тестами |
 | Статусы Stage One могут отставать от Stage Two parsers | analysis docs vs parser registry | формат помечен `NEEDS_CUSTOM_PARSER`, хотя parser уже есть | `parser-coverage` | обновлять analysis docs после parser work |
-| Неполная orchestration feature/model-ready | `features/`, `model_ready/` services есть, full CLI отсутствует | нет полного e2e X/y build | ревью CLI routes | реализовать explicit build-feature/build-model-ready commands |
+| Stage Four отсутствует | model training/evaluation layer | нельзя обучать/оценивать модели штатной командой проекта | ревью CLI routes и `docs/stage-three` final report | добавить отдельный Stage Four CLI после `READY_FOR_STAGE_FOUR` |
+| Production Host/Network/Hybrid expansion неполный | Stage Three MVP path начинается с DNS | DNS MVP может быть готов раньше полного hybrid scope | `stage-three final-report`, feature group coverage | расширять Stage Three по branch/feature_group с `--resume` и checks |
 
 ## Gaps в parser layer
 
@@ -63,8 +64,8 @@
 ## Follow-up по technical debt
 
 1. Добавить config-driven Host filter rules.
-2. Добавить полный feature extraction CLI с traceability enforcement.
-3. Добавить model-ready build CLI с automatic leakage gate.
+2. Добавить Stage Four CLI для training/evaluation только поверх `READY_FOR_STAGE_FOUR` artifacts.
+3. Расширить Stage Three production path на Host/Network/Hybrid feature groups.
 4. Добавить отдельный WLS parser, если текущий netflow mapping семантически недостаточен.
-5. Добавить schema-version registration для feature/model-ready schemas, а не только для normalized schema.
-6. Добавить CI command для parser registry validation, leakage contract tests и docs link checks.
+5. Уточнить schema-version lifecycle для feature/model-ready schemas в production migrations.
+6. Добавить CI command для parser registry validation, Stage Three tests, leakage contract tests и docs link checks.

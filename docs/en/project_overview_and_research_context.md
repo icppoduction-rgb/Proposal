@@ -29,9 +29,10 @@ Conclusion: multi-source integration should happen at the level of features, tim
 flowchart TD
     A["DNS/network datasets"] --> D["Multi-source feature integration"]
     B["Host telemetry datasets"] --> D
-    C["Stage Two normalization"] --> D
-    D --> E["Hybrid ML/DL classification: RF, XGBoost, CNN"]
-    D --> F["Behavioural sequence modelling: LSTM"]
+    C["Stage Two normalization"] --> S3["Stage Three feature/model-ready preparation"]
+    S3 --> D["Multi-source feature integration"]
+    D --> E["Stage Four classifiers: RF, XGBoost, CNN"]
+    D --> F["Stage Four sequence modelling: LSTM"]
     E --> G["Late fusion"]
     F --> G
     G --> H["Detection decision"]
@@ -40,9 +41,10 @@ flowchart TD
 
 | Layer | Purpose | Status |
 | --- | --- | --- |
-| Multi-source integration | Normalize host/network features into one representation. | Proposal / Stage Two design target. |
-| Hybrid ML/DL classification | Random Forest, XGBoost, CNN for structured/local feature patterns. | Proposal; model training code is not confirmed. |
-| Behavioural sequence modelling | LSTM over ordered event sequences. | Proposal; sequence builder/model code is not confirmed. |
+| Stage Three preparation | Feature catalog, extraction, label alignment, X/y/metadata/traceability separation, preprocessing, model-ready artifacts, checks, final report. | Implemented as the preparation layer; readiness depends on `final-report`. |
+| Multi-source integration | Normalize host/network features into one representation. | Partly covered by the Stage Three feature/model-ready layer; production Host/Network/Hybrid expansion still requires dedicated runs. |
+| Hybrid ML/DL classification | Random Forest, XGBoost, CNN for structured/local feature patterns. | Stage Four; model training code is not confirmed. |
+| Behavioural sequence modelling | LSTM over ordered event sequences. | Stage Four; Stage Three prepares sequence artifacts, but LSTM training is not implemented. |
 | Late fusion | Aggregate classifier and sequence-model probabilities. | Proposal; weights/formula are not specified. |
 | SHAP explainability | Global/local explanations and rank-order consistency. | Proposal; SHAP variants are not fixed. |
 
@@ -103,7 +105,8 @@ Planned timeline: 12 weeks, May-August 2026.
 | Category | Status |
 | --- | --- |
 | Stage One dataset preparation, sorting, JSON path maps. | Confirmed by the current repository. |
-| Stage Two normalization/catalog/parquet/parser design. | Partly implemented/documented; verify against code. |
+| Stage Two normalization/catalog/parquet/parser design. | Implemented/documented; verify readiness through checks. |
+| Stage Three feature/model-ready preparation. | Implemented/documented; verify each `experiment_id` through `stage-three final-report`. |
 | RF/XGBoost/CNN/LSTM training. | Proposal-level; model implementation is not confirmed in QA. |
 | SHAP explanations. | Proposal-level. |
-| Feature catalogue. | Architecture contract for future feature extraction implementation. |
+| Feature catalogue. | Machine-readable Stage Three contract in `scripts/stage_three/feature_catalog/feature_catalog.yml`. |

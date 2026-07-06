@@ -1,6 +1,6 @@
 # Документация по коду проекта
 
-Этот раздел описывает кодовую базу `Proposal`: инвентаризацию и анализ Stage One, pipeline нормализации Stage Two, каталог PostgreSQL, контракты схем, стратегию парсеров, обработку меток, Parquet/DuckDB-артефакты, проверки качества/утечек и точки расширения.
+Этот раздел описывает кодовую базу `Proposal`: инвентаризацию и анализ Stage One, pipeline нормализации Stage Two, Stage Three feature/model-ready preparation, каталог PostgreSQL, контракты схем, стратегию парсеров, обработку меток, Parquet/DuckDB-артефакты, проверки качества/утечек и точки расширения.
 
 Документация нужна разработчику, который подключается к проекту без предварительного чтения всего кода. Она фиксирует не только назначение файлов, но и контракты данных, порядок запуска, статусы, ограничения и зоны риска.
 
@@ -11,6 +11,7 @@
 | [cli_and_routing.md](cli_and_routing.md) | `manage.py`, слой маршрутизации, команды Stage One/Stage Two, порядок запуска |
 | [stage_one_handlers.md](stage_one_handlers.md) | handlers Stage One: анализ, фильтрация, сортировка, экспорт путей, анализ содержимого, JSON |
 | [stage_two_overview.md](stage_two_overview.md) | pipeline Stage Two: storage, ingestion, registry, normalization, checks |
+| [stage_three_overview.md](stage_three_overview.md) | pipeline Stage Three: feature catalog, extraction, preprocessing, model-ready build, checks, final report |
 | [storage_architecture.md](storage_architecture.md) | `PATH_DATA_STORAGE`, обязательные директории, пути артефактов |
 | [postgresql_catalog.md](postgresql_catalog.md) | таблицы PostgreSQL catalog и цепочка трассируемости |
 | [sqlalchemy_layer.md](sqlalchemy_layer.md) | config/session/models/repositories/migrations/smoke check |
@@ -30,13 +31,14 @@
 1. [cli_and_routing.md](cli_and_routing.md)
 2. [stage_one_handlers.md](stage_one_handlers.md)
 3. [stage_two_overview.md](stage_two_overview.md)
-4. [postgresql_catalog.md](postgresql_catalog.md)
-5. [normalized_event_schema.md](normalized_event_schema.md)
-6. [parser_strategy.md](parser_strategy.md)
-7. [label_resolver.md](label_resolver.md)
-8. [data_leakage_prevention.md](data_leakage_prevention.md)
-9. [dataset_contracts.md](dataset_contracts.md)
-10. [risks_and_technical_debt.md](risks_and_technical_debt.md)
+4. [stage_three_overview.md](stage_three_overview.md)
+5. [postgresql_catalog.md](postgresql_catalog.md)
+6. [normalized_event_schema.md](normalized_event_schema.md)
+7. [parser_strategy.md](parser_strategy.md)
+8. [label_resolver.md](label_resolver.md)
+9. [data_leakage_prevention.md](data_leakage_prevention.md)
+10. [dataset_contracts.md](dataset_contracts.md)
+11. [risks_and_technical_debt.md](risks_and_technical_debt.md)
 
 ## Stage One
 
@@ -68,7 +70,15 @@ Stage Two создает storage-структуру, регистрирует ra
 - `router_stage_two()` поддерживает `bootstrap-storage`, `catalog-ingest`, `seed-parser-registry`, `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, `split-large-files`, `normalize-dns`, `normalize-host`, `run-duckdb-checks`, `run-leakage-checks` и `trace-artifact`.
 - `config.manage_commands` является только fallback-списком для вывода в консоль и не полон для новых Stage Two команд.
 - `normalize-format` и `benchmark-normalization` перед запуском применяют resource profiles и format-specific runtime policy; `normalize-all` получает общие runtime options, но не применяет per-format policy на уровне CLI route.
-- В `features/` и `model_ready/` есть contracts и registry/writer services, но полный training/evaluation pipeline через `manage.py` не опубликован.
+- Stage Three feature/model-ready preparation вынесен в `scripts/stage_three` и опубликован через `python manage.py stage-three ...`. Training/evaluation pipeline через `manage.py` относится к Stage Four и пока не опубликован.
+
+## Stage Three
+
+Stage Three читает catalog-backed normalized artifacts, валидирует feature catalog, извлекает features, разделяет X/y/metadata/traceability, применяет preprocessing utilities, строит model-ready artifacts, выполняет checks и пишет final report.
+
+Фактические компоненты находятся в `scripts/stage_three`.
+
+Подробно: [stage_three_overview.md](stage_three_overview.md).
 
 ## Ключевые инварианты
 
@@ -109,6 +119,15 @@ python manage.py stage-two normalize-all --branch host --limit 100
 python manage.py stage-two run-duckdb-checks
 python manage.py stage-two run-leakage-checks
 python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
+
+python manage.py stage-three validate-inputs --branch dns --role TRAIN
+python manage.py stage-three build-feature-catalog
+python manage.py stage-three probe-runtime-backend --backend auto
+python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
+python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three run-quality-checks --experiment-id exp001
+python manage.py stage-three run-leakage-checks --experiment-id exp001
+python manage.py stage-three final-report --experiment-id exp001
 ```
 
 Подробные аргументы и порядок запуска описаны в [cli_and_routing.md](cli_and_routing.md).

@@ -71,7 +71,7 @@ PATH_DATA_STORAGE/
 | features | `parquet/features/{feature_group}/{role}/{dataset_slug}/schema={schema_version}/part-{run_id}.parquet` | `FeatureArtifactWriter.write_and_register()` |
 | model-ready | `parquet/model_ready/{artifact_type}/{branch}/{role}/schema={schema_version}/{file_name}` | `ModelReadyRegistryService.write_table_artifact()` |
 
-В текущем CLI есть команды normalization и checks. Полноценная CLI-команда feature/model-ready build не реализована; соответствующий слой представлен contracts/writers/registry services.
+Stage Two пишет normalized layer. Feature/model-ready layers теперь собираются Stage Three командами `extract-features` и `build-model-ready` из `scripts/stage_three/cli.py`; Stage Two storage bootstrap заранее создает эти директории, чтобы сохранить единый `PATH_DATA_STORAGE`.
 
 ## Reports
 

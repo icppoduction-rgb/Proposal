@@ -139,13 +139,15 @@ python manage.py stage-two parser-coverage <branch>
 
 Если check защищает от leakage, failed severity должен быть `CRITICAL`.
 
-## Добавить stage для feature/model-ready
+## Расширить Stage Three feature/model-ready
 
 Где менять:
 
-- feature logic в `scripts/stage_two/features`;
-- model-ready logic в `scripts/stage_two/model_ready`;
-- CLI route в `scripts/stage_two/cli.py` только после появления реализации.
+- feature logic в `scripts/stage_three/extraction`;
+- preprocessing logic в `scripts/stage_three/preprocessing`;
+- model-ready logic в `scripts/stage_three/model_ready`;
+- quality/leakage logic в `scripts/stage_three/quality`;
+- CLI route в `scripts/stage_three/cli.py`, если появляется новая команда.
 
 Контракт:
 
@@ -155,11 +157,26 @@ python manage.py stage-two parser-coverage <branch>
 - писать y отдельно;
 - выполнять fit preprocessing только на TRAIN;
 - регистрировать artifacts в catalog;
-- запускать leakage checks перед использованием model-ready artifacts.
+- запускать quality/leakage/traceability checks перед использованием model-ready artifacts;
+- обновлять `stage-three/` docs и `stage_three_overview.md`.
 
 Проверки:
 
 ```bash
-python -m pytest -q tests/stage_two/test_leakage_contracts.py
-python manage.py stage-two run-leakage-checks
+python -m pytest -q tests/stage_three
+python manage.py stage-three run-quality-checks --experiment-id <id>
+python manage.py stage-three run-leakage-checks --experiment-id <id>
+python manage.py stage-three final-report --experiment-id <id>
 ```
+
+## Добавить Stage Four training/evaluation layer
+
+Stage Four пока не реализован. Новый слой должен читать только artifacts, которые прошли `stage-three final-report` со статусом `READY_FOR_STAGE_FOUR`.
+
+Минимальный контракт:
+
+- не читать raw files как training input;
+- не использовать TEST для training, preprocessing fit, threshold tuning или feature selection;
+- фиксировать seeds, metrics, model configs и artifact versions;
+- сохранять evaluation reports отдельно от Stage Three final report;
+- запускать SHAP/XAI только после leakage checks.

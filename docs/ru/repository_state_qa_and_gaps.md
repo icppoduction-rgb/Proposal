@@ -6,7 +6,7 @@
 
 Исходный QA документ фиксировал просмотр репозитория (`scripts`, `docs`, `report`, `planning`, `temp_data`, `logs`, конфиги). Ключевой вывод сохраняется:
 
-> В текущем репозитории подтвержден этап подготовки датасетов, а не обучение/оценка моделей.
+> В текущем репозитории подтверждены этапы подготовки датасетов, Stage Two normalization и Stage Three feature/model-ready preparation. Обучение и оценка моделей остаются Stage Four.
 
 ## Что подтверждено текущей реализацией
 
@@ -18,18 +18,18 @@
 | Pipeline separation | DNS и Host обрабатываются отдельными ветками. |
 | Confirmed volumes | DNS sorted/exported files: 35; Host filtered kept paths: 361646 в старом QA, 361670 total files по актуальной analysis-dataset сводке с 64 buckets. |
 | Stage Two normalization | Реализованные CLI routes покрывают storage bootstrap, catalog ingestion, parser registry seed, parser coverage, mark-ready, normalization точного bucket, benchmark runs, splitting больших line-based files, DuckDB checks, leakage checks и traceability. |
-| Feature/model-ready services | Contracts и writer/registry services есть в `scripts/stage_two/features` и `scripts/stage_two/model_ready`, но полный end-to-end orchestration не опубликован через `manage.py`. |
-| Current docs | Stage One/Stage Two architecture, normalization, parser strategy, labels, leakage, performance controls и traceability задокументированы в `analysis-dataset/`, `normalization/`, `code-documentation/`. |
+| Stage Three feature/model-ready preparation | Реализован CLI `python manage.py stage-three ...` для readiness gate, feature catalog, runtime backend probe, feature extraction, label alignment, sequence build, model-ready build, quality checks, leakage/traceability checks и final report. |
+| Stage Three reports | Task01-Task20 reports пишутся в `PATH_DATA_STORAGE/reports/{ru,en}/stage-three`; `final-report` явно сообщает `READY_FOR_STAGE_FOUR` или `NOT_READY_FOR_STAGE_FOUR`. |
+| Current docs | Stage One/Stage Two/Stage Three architecture, normalization, parser strategy, labels, leakage, performance controls и traceability задокументированы в `analysis-dataset/`, `normalization/`, `stage-three/`, `code-documentation/`. |
 
 ## Что является proposal/планом, а не подтвержденной реализацией
 
 | Область | Proposal-level утверждение | Gap |
 | --- | --- | --- |
-| ML preprocessing | Missing value handling, scaling, categorical encoding. | В коде не подтверждены `MinMaxScaler`, `StandardScaler`, encoders или preprocessing fit pipeline. |
-| Class imbalance | SMOTE/undersampling/class weights. | Реализация не найдена. |
+| Physical resampling strategy | SMOTE/undersampling как production default. | Stage Three поддерживает class balance reporting и TRAIN-only balancing constraints; SMOTE не должен быть default до отдельной проверки. |
 | Random Forest / XGBoost | Baseline classifiers. | Параметры, training code и tuning не зафиксированы. |
 | CNN | Deep learning branch for local feature patterns. | Архитектура не указана. |
-| LSTM | Sequence-level binary classification, 50-100 events per sequence. | Sequence builder, step/overlap, alignment и model config не реализованы. |
+| LSTM | Sequence-level binary classification, 50-100 events per sequence. | Stage Three может готовить sequence artifacts; модель LSTM, training config и evaluation остаются Stage Four. |
 | Late fusion | Aggregation of classifier + sequence probabilities. | Формула/веса/threshold не заданы. |
 | SHAP | Feature attribution and rank stability. | TreeSHAP/DeepSHAP/KernelSHAP не выбраны и не реализованы. |
 | Evaluation | Stratified k-fold CV, ablation, baseline comparisons. | Значение `k`, statistical tests, seeds и reports не зафиксированы. |
@@ -42,7 +42,7 @@
 - Stage Two routing находится в `scripts/stage_two/cli.py`; `config.manage_commands` является старым печатным списком команд и не полон для текущего Stage Two.
 - `normalize-format` и `benchmark-normalization` перед запуском применяют resource profiles и format-specific runtime policy. `normalize-all` получает общие runtime options, но не применяет per-format policy на уровне CLI route.
 - Реализованные quality gates: parser reports, post-run validation для `normalize-format`, DuckDB checks, leakage checks и traceability lookup. Это проверки вокруг normalized/features/model-ready artifacts, а не полный ML experiment pipeline.
-- Репозиторий по-прежнему не подтверждает RF/XGBoost/CNN/LSTM training, preprocessing fit/transform orchestration, feature extraction CLI, model-ready build CLI, SHAP analysis или evaluation reports.
+- Репозиторий теперь подтверждает Stage Three CLI для feature extraction, model-ready build, checks и final report. RF/XGBoost/CNN/LSTM training, SHAP analysis и evaluation reports остаются не реализованными в Stage Four.
 
 ## QA по разделам proposal 3.3-3.8
 
@@ -59,14 +59,14 @@
 
 | Вопрос | Ответ |
 | --- | --- |
-| Missing values | Реализация обработки model-feature пропусков не подтверждена. |
-| Normalization/scaling | Не найдено. |
-| Categorical encoding | Не найдено. |
+| Missing values | Реализованы Stage Three preprocessing utilities и reports; production readiness зависит от конкретного `experiment_id` и финальных checks. |
+| Normalization/scaling | Scaling profiles и preprocessing metadata реализованы как Stage Three preparation layer. |
+| Categorical encoding | Реализованы Stage Three encoding utilities; TEST не используется для fit. |
 | Train/test split | Числовой split не задан; есть role-based strategy и плановая stratified k-fold CV. |
 
 ### Class Imbalance
 
-Методы SMOTE, undersampling, class weights или аналогичные механизмы не подтверждены кодом.
+Stage Three формирует class balance reports и class-weight metadata; physical resampling разрешается только для TRAIN и не является default для MVP DNS path.
 
 ### Model Architecture
 
@@ -81,10 +81,10 @@
 
 | Вопрос | Состояние |
 | --- | --- |
-| Sequence length | Proposal указывает 50-100 событий. |
-| Window step / overlap | Не задано. |
-| Multi-modal time alignment | Явный алгоритм не найден. |
-| Labels for sequence windows | План: label based on exfiltration activity within window; implementation не подтверждена. |
+| Sequence length | Stage Three содержит sequence/window builder; production policy должна фиксироваться в experiment metadata. |
+| Window step / overlap | Должны быть заданы в Stage Three sequence policy перед Stage Four training. |
+| Multi-modal time alignment | Hybrid alignment остается production expansion area. |
+| Labels for sequence windows | Stage Three поддерживает label policies; конкретная политика должна быть зафиксирована для experiment_id. |
 
 ### Decision Fusion
 
@@ -124,15 +124,14 @@ Proposal говорит о **late fusion** через агрегацию вер�
 
 ## Follow-up tasks
 
-1. Зафиксировать `feature_catalog.yml/json` как machine-readable contract.
-2. Реализовать Stage Two feature extraction layers по [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md).
-3. Добавить preprocessing contracts: missing values, categorical encoding, scaling, fit/transform separation.
-4. Добавить model configs для RF/XGBoost/CNN/LSTM.
-5. Описать sequence window policy: length, step, overlap, label assignment, time alignment.
-6. Описать late fusion formula и threshold policy.
-7. Выбрать SHAP variants по model family.
-8. Добавить experiment config: CV folds, random seeds, hardware/software versions, statistical tests.
-9. Расширить data quality reports: class balance, label coverage, timestamp coverage, schema drift, leakage.
+1. Для каждого `experiment_id` прогонять `stage-three final-report` и не переходить в Stage Four без `READY_FOR_STAGE_FOUR`.
+2. Расширить production Stage Three path на Host/Network/Hybrid feature groups после DNS MVP.
+3. Зафиксировать production sequence window policy: length, step, overlap, label assignment, time alignment.
+4. Добавить model configs для RF/XGBoost/CNN/LSTM в Stage Four.
+5. Описать late fusion formula и threshold policy.
+6. Выбрать SHAP variants по model family.
+7. Добавить experiment config: CV folds, random seeds, hardware/software versions, statistical tests.
+8. Добавить Stage Four training/evaluation reports.
 
 ## Связанные документы
 
@@ -141,4 +140,5 @@ Proposal говорит о **late fusion** через агрегацию вер�
 - [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md)
 - [analysis-dataset/README.md](analysis-dataset/README.md)
 - [normalization/README.md](normalization/README.md)
+- [stage-three/README.md](stage-three/README.md)
 - [code-documentation/README.md](code-documentation/README.md)

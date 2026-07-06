@@ -8,7 +8,7 @@ Main entry point: `manage.py`.
 
 | Argument | Meaning |
 |---|---|
-| `module` | top-level namespace: `handlers` or `stage-two` |
+| `module` | top-level namespace: `handlers`, `stage-two`, or `stage-three` |
 | `service` | service/action group inside the module |
 | `action` | first action or first positional argument for a service command |
 | `extra_args` | remaining arguments for Stage Two commands |
@@ -17,6 +17,7 @@ Actual routing:
 
 ```text
 manage.py
+  -> stage-three shortcut: scripts.stage_three.cli.router_stage_three(service, extra_args)
   -> scripts.router_script.router_commands(module, service, action, extra_args)
      -> handlers: scripts.handlers.router_handler.router_commands_handlers(service, action)
      -> stage-two: scripts.stage_two.cli.router_stage_two(service, action, extra_args)
@@ -24,7 +25,7 @@ manage.py
 
 Unknown modules print `config.manage_commands`.
 
-Code sync note, checked on 2026-07-04: `config.manage_commands` is a fallback printed string and is older than the current Stage Two router. Use `scripts/stage_two/cli.py` and this document as the authoritative command list for Stage Two commands.
+Code sync note, checked on 2026-07-06: `config.manage_commands` is a fallback printed string. Use `scripts/stage_two/cli.py` for Stage Two and `scripts/stage_three/cli.py` for Stage Three.
 
 ## Stage One Routes
 
@@ -94,6 +95,39 @@ File: `scripts/stage_two/cli.py`.
 | `run-leakage-checks` | none | check model-ready leakage and preprocessing fit role |
 | `trace-artifact` | `<model_ready_id_or_artifact_path>` | print traceability chain |
 
+## Stage Three Routes
+
+File: `scripts/stage_three/cli.py`.
+
+| Command | Arguments | Purpose |
+|---|---|---|
+| `validate-inputs` | `--branch`, `--role` | readiness gate for Stage Two normalized artifacts |
+| `build-feature-catalog` | `[--feature-group]` | validate feature catalog contract |
+| `probe-runtime-backend` | `--backend`, `[--profile]`, `[--skip-probe]` | select CPU/GPU backend and memory guard |
+| `extract-features` | `--branch`, `--role`, `--feature-group`, `[--experiment-id]`, `[--resume]` | extract feature artifacts from normalized Parquet |
+| `align-labels` | `--branch`, `--role`, `--label-policy`, `[--experiment-id]` | apply label policy without leakage into X |
+| `build-sequences` | `--branch`, `[--role]`, `[--feature-group]`, `[--experiment-id]` | build sequence/window artifacts |
+| `build-model-ready` | `--experiment-id`, `--branch`, `--target`, `--preprocessing-profile` | build X/y/metadata/traceability artifacts |
+| `run-quality-checks` | `--experiment-id`, optional scope flags | validate artifacts and register reports |
+| `run-leakage-checks` | `--experiment-id`, optional scope flags | check leakage and traceability |
+| `trace-artifact` | `<model_ready_artifact_id>` or `--experiment-id` | resolve lineage |
+| `final-report` | `--experiment-id`, `[--branch]` | generate the Task20 RU/EN final report |
+
+### Baseline Stage Three Order
+
+```bash
+python manage.py stage-three validate-inputs --branch dns --role TRAIN
+python manage.py stage-three validate-inputs --branch dns --role VALIDATION
+python manage.py stage-three validate-inputs --branch dns --role TEST
+python manage.py stage-three build-feature-catalog
+python manage.py stage-three probe-runtime-backend --backend auto
+python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
+python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three run-quality-checks --experiment-id exp001
+python manage.py stage-three run-leakage-checks --experiment-id exp001
+python manage.py stage-three final-report --experiment-id exp001
+```
+
 ### Baseline Stage Two Order
 
 ```bash
@@ -134,4 +168,6 @@ python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
 - `benchmark-normalization` uses the same exact bucket inputs as `normalize-format`; actual benchmark runs force resume behavior unless `--dry-run` is set.
 - `normalize-all` groups by `role/source_format` and preserves role order from `ACTIVE_DATASET_ROLE_VALUES`: `TRAIN`, `VALIDATION`, `TEST`.
 - `split-large-files` is intended for line-based formats. Do not use it for binary `cap`, `pcap`, `pcapng`, or `bson`.
+- Stage Two `trace-artifact` and Stage Three `trace-artifact` work only for registered `model_ready_artifacts`.
+- Stage Three `final-report` can write a report with `NOT_READY_FOR_STAGE_FOUR` if the PostgreSQL Catalog is unavailable or checks do not confirm artifact readiness.
 - TEST must never be used for training, preprocessing fit, threshold tuning, or feature selection.

@@ -131,6 +131,6 @@ reports/en/stage-two/quality/duckdb_analytics_report.json
 ## Ограничения
 
 - DuckDB читает уже записанные Parquet files; он не заменяет PostgreSQL Catalog.
-- Feature/model-ready paths могут существовать только после вызова соответствующих writer/registry services; CLI build step для них сейчас не реализован.
+- Feature/model-ready paths появляются после Stage Three `extract-features` и `build-model-ready`; готовность для Stage Four подтверждается `stage-three final-report`.
 - Перемещение Parquet files без обновления catalog ломает traceability.
 - `TRAIN`, `VALIDATION`, `TEST` должны оставаться раздельными на уровне path, catalog metadata и downstream artifacts.

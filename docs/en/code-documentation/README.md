@@ -1,8 +1,8 @@
 # Project Code Documentation
 
-This section documents the `Proposal` codebase for a developer who needs to understand the DNS/Host dataset preparation and normalization pipeline without reading every source file first.
+This section documents the `Proposal` codebase for a developer who needs to understand the DNS/Host dataset preparation, normalization, and Stage Three feature/model-ready pipeline without reading every source file first.
 
-The documentation covers Stage One filesystem analysis, Stage Two catalog-backed normalization, PostgreSQL metadata, SQLAlchemy repositories, parser strategy, label handling, Parquet/DuckDB artifacts, quality and leakage checks, storage layout, dataset contracts, risks, and extension points.
+The documentation covers Stage One filesystem analysis, Stage Two catalog-backed normalization, Stage Three feature/model-ready preparation, PostgreSQL metadata, SQLAlchemy repositories, parser strategy, label handling, Parquet/DuckDB artifacts, quality and leakage checks, storage layout, dataset contracts, risks, and extension points.
 
 ## Document Map
 
@@ -11,6 +11,7 @@ The documentation covers Stage One filesystem analysis, Stage Two catalog-backed
 | [cli_and_routing.md](cli_and_routing.md) | `manage.py`, routing layer, Stage One/Stage Two commands, execution order |
 | [stage_one_handlers.md](stage_one_handlers.md) | Stage One handlers: dataset analysis, filtering, sorting, path export, content analysis, JSON management |
 | [stage_two_overview.md](stage_two_overview.md) | End-to-end Stage Two pipeline: storage, ingestion, registry, normalization, checks |
+| [stage_three_overview.md](stage_three_overview.md) | Stage Three pipeline: feature catalog, extraction, preprocessing, model-ready build, checks, final report |
 | [storage_architecture.md](storage_architecture.md) | `PATH_DATA_STORAGE`, required directories, artifact paths |
 | [postgresql_catalog.md](postgresql_catalog.md) | PostgreSQL catalog tables and traceability chain |
 | [sqlalchemy_layer.md](sqlalchemy_layer.md) | config, session handling, models, repositories, migrations, smoke check |
@@ -30,13 +31,14 @@ The documentation covers Stage One filesystem analysis, Stage Two catalog-backed
 1. [cli_and_routing.md](cli_and_routing.md)
 2. [stage_one_handlers.md](stage_one_handlers.md)
 3. [stage_two_overview.md](stage_two_overview.md)
-4. [postgresql_catalog.md](postgresql_catalog.md)
-5. [normalized_event_schema.md](normalized_event_schema.md)
-6. [parser_strategy.md](parser_strategy.md)
-7. [label_resolver.md](label_resolver.md)
-8. [data_leakage_prevention.md](data_leakage_prevention.md)
-9. [dataset_contracts.md](dataset_contracts.md)
-10. [risks_and_technical_debt.md](risks_and_technical_debt.md)
+4. [stage_three_overview.md](stage_three_overview.md)
+5. [postgresql_catalog.md](postgresql_catalog.md)
+6. [normalized_event_schema.md](normalized_event_schema.md)
+7. [parser_strategy.md](parser_strategy.md)
+8. [label_resolver.md](label_resolver.md)
+9. [data_leakage_prevention.md](data_leakage_prevention.md)
+10. [dataset_contracts.md](dataset_contracts.md)
+11. [risks_and_technical_debt.md](risks_and_technical_debt.md)
 
 ## Stage One
 
@@ -68,7 +70,15 @@ Current code sync, checked on 2026-07-04:
 - `router_stage_two()` supports `bootstrap-storage`, `catalog-ingest`, `seed-parser-registry`, `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, `split-large-files`, `normalize-dns`, `normalize-host`, `run-duckdb-checks`, `run-leakage-checks`, and `trace-artifact`.
 - `config.manage_commands` is only a fallback printed command list and is not complete for newer Stage Two commands.
 - `normalize-format` and `benchmark-normalization` resolve resource profiles and format-specific runtime policy before execution; `normalize-all` resolves shared runtime options but does not apply per-format policy in the CLI route.
-- `features/` and `model_ready/` contain contracts and registry/writer services, but no complete training/evaluation pipeline is exposed through `manage.py`.
+- Stage Three feature/model-ready preparation lives under `scripts/stage_three` and is exposed through `python manage.py stage-three ...`. The training/evaluation pipeline belongs to Stage Four and is not exposed yet.
+
+## Stage Three
+
+Stage Three reads catalog-backed normalized artifacts, validates the feature catalog, extracts features, separates X/y/metadata/traceability, applies preprocessing utilities, builds model-ready artifacts, runs checks, and writes the final report.
+
+Implemented components live under `scripts/stage_three`.
+
+Details: [stage_three_overview.md](stage_three_overview.md).
 
 ## Core Invariants
 
@@ -109,6 +119,15 @@ python manage.py stage-two normalize-all --branch host --limit 100
 python manage.py stage-two run-duckdb-checks
 python manage.py stage-two run-leakage-checks
 python manage.py stage-two trace-artifact <model_ready_id_or_artifact_path>
+
+python manage.py stage-three validate-inputs --branch dns --role TRAIN
+python manage.py stage-three build-feature-catalog
+python manage.py stage-three probe-runtime-backend --backend auto
+python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
+python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three run-quality-checks --experiment-id exp001
+python manage.py stage-three run-leakage-checks --experiment-id exp001
+python manage.py stage-three final-report --experiment-id exp001
 ```
 
 Detailed arguments and ordering are documented in [cli_and_routing.md](cli_and_routing.md).

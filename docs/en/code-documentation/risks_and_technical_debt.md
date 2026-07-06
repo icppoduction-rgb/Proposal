@@ -7,7 +7,8 @@
 | Host role fallback to TEST | `HostDatasetHandler._detect_role` | files without role token land in TEST | inspect `host-path-file.json` | require explicit role directories, add strict mode |
 | Hardcoded Host filter whitelist | `HostDatasetFilterHandler` | new datasets/formats are excluded | filter log reasons | move rules to config with tests |
 | Stage One statuses can lag Stage Two parsers | analysis docs vs parser registry | format may show `NEEDS_CUSTOM_PARSER` though parser exists | `parser-coverage` | update analysis docs after parser work |
-| Feature/model-ready orchestration incomplete | `features/`, `model_ready/` services exist, full CLI does not | no complete e2e X/y build | review CLI routes | implement explicit build-feature/build-model-ready commands |
+| Stage Four is missing | model training/evaluation layer | models cannot be trained/evaluated through a project command | review CLI routes and `docs/stage-three` final report | add a separate Stage Four CLI after `READY_FOR_STAGE_FOUR` |
+| Production Host/Network/Hybrid expansion is incomplete | Stage Three MVP path starts with DNS | DNS MVP can be ready before the full hybrid scope | `stage-three final-report`, feature group coverage | expand Stage Three by branch/feature_group with `--resume` and checks |
 
 ## Parser Layer Gaps
 
@@ -63,8 +64,8 @@
 ## Technical Debt Follow-up
 
 1. Add config-driven Host filter rules.
-2. Add full feature extraction CLI with traceability enforcement.
-3. Add model-ready build CLI with automatic leakage gate.
-4. Add dedicated WLS parser if current netflow mapping is semantically insufficient.
-5. Add schema-version registration for feature/model-ready schemas, not only normalized schema.
-6. Add CI command that runs parser registry validation, leakage contract tests, and docs link checks.
+2. Add a Stage Four CLI for training/evaluation only on `READY_FOR_STAGE_FOUR` artifacts.
+3. Expand the Stage Three production path to Host/Network/Hybrid feature groups.
+4. Add a dedicated WLS parser if current netflow mapping is semantically insufficient.
+5. Clarify feature/model-ready schema-version lifecycle in production migrations.
+6. Add a CI command that runs parser registry validation, Stage Three tests, leakage contract tests, and docs link checks.

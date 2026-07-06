@@ -1,6 +1,6 @@
 # Feature extraction map и каталог признаков
 
-Документ объединяет `dataset_feature_extraction_map.md`, `feature_catalogue_full.md` и feature-related разделы `functional_project_cheatsheet.md`. Он задает контракт для Stage Two feature extraction, Parquet artifacts и model-ready datasets.
+Документ объединяет `dataset_feature_extraction_map.md`, `feature_catalogue_full.md` и feature-related разделы `functional_project_cheatsheet.md`. Он задает контракт для Stage Three feature extraction, Parquet artifacts и model-ready datasets.
 
 ## Назначение
 
@@ -8,6 +8,23 @@
 
 1. Из каких датасетов какие группы признаков извлекаются.
 2. Какие признаки и поля должны существовать в feature artifacts без нарушения traceability и anti-leakage правил.
+
+## Текущая реализация Stage Three
+
+Machine-readable feature catalog находится в `scripts/stage_three/feature_catalog/feature_catalog.yml`.
+
+Stage Three CLI:
+
+```bash
+python manage.py stage-three build-feature-catalog
+python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
+python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three run-quality-checks --experiment-id exp001
+python manage.py stage-three run-leakage-checks --experiment-id exp001
+python manage.py stage-three final-report --experiment-id exp001
+```
+
+Актуальные runbooks: [stage-three/usage_guide.md](stage-three/usage_guide.md) и [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md).
 
 ## Принципы отбора признаков
 
@@ -155,29 +172,16 @@
 | P1 | Domain enrichment; hybrid correlations; resource telemetry; archive/compression; sensitive file access; graph/baseline features. |
 | P2 | Advanced command-line tokenization; template mining; long-term per-user/per-host baselines; feature stability checks. |
 
-## Рекомендуемый порядок реализации в коде
+## Рекомендуемый порядок расширения в коде
 
-1. Сформировать machine-readable `feature_catalog.yml/json` из этого документа.
-2. Проверить, что parser outputs соответствуют normalized event schema.
-3. Реализовать extractors по группам:
-   - `dns_lexical_extractor`
-   - `dns_protocol_extractor`
-   - `dns_temporal_extractor`
-   - `network_flow_extractor`
-   - `host_syscall_extractor`
-   - `host_auth_extractor`
-   - `windows_event_extractor`
-   - `resource_telemetry_extractor`
-   - `hybrid_correlation_extractor`
-   - `sequence_window_builder`
-4. Сохранять результаты в Parquet layers:
-   - `normalized_events/`
-   - `feature_windows/`
-   - `sequence_windows/`
-   - `model_ready/`
-5. Для каждого output сохранять `feature_extraction_report.md`: rows, missing values, label coverage, leakage checks.
+1. Обновить `scripts/stage_three/feature_catalog/feature_catalog.yml`.
+2. Добавить extractor в `scripts/stage_three/extraction`.
+3. Сохранить feature artifacts через Stage Three writer/registry.
+4. Проверить X/y/metadata/traceability separation.
+5. Прогнать quality/leakage/traceability checks.
+6. Сгенерировать `stage-three final-report` и переходить в Stage Four только при `READY_FOR_STAGE_FOUR`.
 
-## Связь со Stage Two
+## Связь со Stage Two и Stage Three
 
 | Stage Two layer | Требование |
 | --- | --- |
@@ -187,3 +191,4 @@
 | DuckDB checks | Проверяют Parquet counts, schema drift, split contamination, leakage columns. |
 | LabelResolver | Заполняет label fields отдельно от X features. |
 | Traceability | Feature/model-ready artifacts должны вести к normalized -> parser run -> raw dataset file. |
+| Stage Three final report | Фиксирует готовность конкретного `experiment_id` к Stage Four. |

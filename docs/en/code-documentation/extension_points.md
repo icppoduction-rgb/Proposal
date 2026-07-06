@@ -139,13 +139,15 @@ Contract:
 
 If the check protects against leakage, failed severity should be `CRITICAL`.
 
-## Add a Feature/Model-ready Stage
+## Extend Stage Three Feature/Model-ready Logic
 
 Where to change:
 
-- feature logic under `scripts/stage_two/features`;
-- model-ready logic under `scripts/stage_two/model_ready`;
-- CLI route in `scripts/stage_two/cli.py` only after implementation exists.
+- feature logic under `scripts/stage_three/extraction`;
+- preprocessing logic under `scripts/stage_three/preprocessing`;
+- model-ready logic under `scripts/stage_three/model_ready`;
+- quality/leakage logic under `scripts/stage_three/quality`;
+- CLI route in `scripts/stage_three/cli.py` if a new command is needed.
 
 Contract:
 
@@ -155,11 +157,26 @@ Contract:
 - write y separately;
 - fit preprocessing only on TRAIN;
 - register artifacts in catalog;
-- run leakage checks before using model-ready artifacts.
+- run quality/leakage/traceability checks before using model-ready artifacts;
+- update `stage-three/` docs and `stage_three_overview.md`.
 
 Tests:
 
 ```bash
-python -m pytest -q tests/stage_two/test_leakage_contracts.py
-python manage.py stage-two run-leakage-checks
+python -m pytest -q tests/stage_three
+python manage.py stage-three run-quality-checks --experiment-id <id>
+python manage.py stage-three run-leakage-checks --experiment-id <id>
+python manage.py stage-three final-report --experiment-id <id>
 ```
+
+## Add a Stage Four Training/Evaluation Layer
+
+Stage Four is not implemented yet. The new layer must read only artifacts whose `stage-three final-report` status is `READY_FOR_STAGE_FOUR`.
+
+Minimal contract:
+
+- do not read raw files as training input;
+- do not use TEST for training, preprocessing fit, threshold tuning, or feature selection;
+- fix seeds, metrics, model configs, and artifact versions;
+- store evaluation reports separately from the Stage Three final report;
+- run SHAP/XAI only after leakage checks.

@@ -8,7 +8,7 @@
 
 | Аргумент | Назначение |
 |---|---|
-| `module` | верхний routing namespace: `handlers` или `stage-two` |
+| `module` | верхний routing namespace: `handlers`, `stage-two` или `stage-three` |
 | `service` | service/action group внутри module |
 | `action` | первый action или первый positional argument service-команды |
 | `extra_args` | остаток аргументов для Stage Two команд |
@@ -17,6 +17,7 @@
 
 ```text
 manage.py
+  -> stage-three shortcut: scripts.stage_three.cli.router_stage_three(service, extra_args)
   -> scripts.router_script.router_commands(module, service, action, extra_args)
      -> handlers: scripts.handlers.router_handler.router_commands_handlers(service, action)
      -> stage-two: scripts.stage_two.cli.router_stage_two(service, action, extra_args)
@@ -24,7 +25,7 @@ manage.py
 
 Если `module` неизвестен, печатается `config.manage_commands`.
 
-Сверка с кодом от 2026-07-04: `config.manage_commands` является fallback-строкой для вывода в консоль и старше текущего Stage Two router. Для Stage Two используйте `scripts/stage_two/cli.py` и этот документ как актуальный список команд.
+Сверка с кодом от 2026-07-06: `config.manage_commands` является fallback-строкой для вывода в консоль. Для Stage Two используйте `scripts/stage_two/cli.py`, для Stage Three — `scripts/stage_three/cli.py`.
 
 ## Маршруты Stage One
 
@@ -93,6 +94,39 @@ Host content actions включают `analyze-csv-content`, `analyze-auth-log-c
 | `run-duckdb-checks` | нет | создать DuckDB views и analytics report |
 | `run-leakage-checks` | нет | проверить model-ready leakage и preprocessing fit role |
 | `trace-artifact` | `<model_ready_id_or_artifact_path>` | вывести traceability chain |
+
+## Маршруты Stage Three
+
+Файл: `scripts/stage_three/cli.py`.
+
+| Команда | Аргументы | Назначение |
+|---|---|---|
+| `validate-inputs` | `--branch`, `--role` | readiness gate для Stage Two normalized artifacts |
+| `build-feature-catalog` | `[--feature-group]` | validate feature catalog contract |
+| `probe-runtime-backend` | `--backend`, `[--profile]`, `[--skip-probe]` | выбрать CPU/GPU backend и memory guard |
+| `extract-features` | `--branch`, `--role`, `--feature-group`, `[--experiment-id]`, `[--resume]` | извлечь feature artifacts из normalized Parquet |
+| `align-labels` | `--branch`, `--role`, `--label-policy`, `[--experiment-id]` | применить label policy без leakage в X |
+| `build-sequences` | `--branch`, `[--role]`, `[--feature-group]`, `[--experiment-id]` | собрать sequence/window artifacts |
+| `build-model-ready` | `--experiment-id`, `--branch`, `--target`, `--preprocessing-profile` | собрать X/y/metadata/traceability artifacts |
+| `run-quality-checks` | `--experiment-id`, optional scope flags | проверить artifacts и зарегистрировать reports |
+| `run-leakage-checks` | `--experiment-id`, optional scope flags | проверить leakage и traceability |
+| `trace-artifact` | `<model_ready_artifact_id>` или `--experiment-id` | восстановить lineage |
+| `final-report` | `--experiment-id`, `[--branch]` | сгенерировать Task20 RU/EN final report |
+
+### Базовый порядок Stage Three
+
+```bash
+python manage.py stage-three validate-inputs --branch dns --role TRAIN
+python manage.py stage-three validate-inputs --branch dns --role VALIDATION
+python manage.py stage-three validate-inputs --branch dns --role TEST
+python manage.py stage-three build-feature-catalog
+python manage.py stage-three probe-runtime-backend --backend auto
+python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
+python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three run-quality-checks --experiment-id exp001
+python manage.py stage-three run-leakage-checks --experiment-id exp001
+python manage.py stage-three final-report --experiment-id exp001
+```
 
 ### Базовый порядок Stage Two
 
@@ -200,6 +234,11 @@ python manage.py stage-two split-large-files \
 | `stage-two normalize-*` | `dataset_files.status=READY_FOR_PARSING` | `parser_runs`, `normalized_artifacts`, Parquet |
 | `stage-two run-duckdb-checks` | Parquet layers | JSON quality report, `data_quality_reports` |
 | `stage-two run-leakage-checks` | model-ready Parquet + preprocessing catalog | leakage report, `data_quality_reports` |
+| `stage-three extract-features` | normalized Parquet + feature catalog | feature Parquet, `feature_artifacts`, Task07/08/09 reports |
+| `stage-three build-model-ready` | feature Parquet + feature catalog | X/y/metadata/traceability Parquet, `model_ready_artifacts`, Task17 report |
+| `stage-three run-quality-checks` | feature/model-ready/preprocessing artifacts | `data_quality_reports`, Task18 report |
+| `stage-three run-leakage-checks` | model-ready artifacts + preprocessing catalog | leakage/traceability reports, blocking statuses |
+| `stage-three final-report` | Stage Three catalog state | Task20 RU/EN report, Stage Four readiness status |
 
 ## Важные ограничения CLI
 
@@ -210,4 +249,5 @@ python manage.py stage-two split-large-files \
 - `normalize-format` и `normalize-all` обрабатывают только `READY_FOR_PARSING`.
 - `benchmark-normalization` использует те же точные bucket-входы, что и `normalize-format`; actual benchmark принудительно включает resume behavior, если не указан `--dry-run`.
 - `normalize-all` группирует по `role/source_format` и сохраняет порядок ролей из `ACTIVE_DATASET_ROLE_VALUES`: `TRAIN`, `VALIDATION`, `TEST`.
-- `trace-artifact` работает только для уже зарегистрированных `model_ready_artifacts`.
+- Stage Two `trace-artifact` и Stage Three `trace-artifact` работают только для уже зарегистрированных `model_ready_artifacts`.
+- Stage Three `final-report` может записать отчет с `NOT_READY_FOR_STAGE_FOUR`, если PostgreSQL Catalog недоступен или checks не подтверждают готовность artifacts.
