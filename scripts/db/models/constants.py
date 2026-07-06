@@ -24,6 +24,8 @@ RUN_STATUS_VALUES: tuple[str, ...] = (
     "FAILED",
     "SKIPPED",
     "BLOCKED",
+    "BLOCKED_BY_LEAKAGE",
+    "BLOCKED_BY_QUALITY",
 )
 PARSER_RUN_STATUS_VALUES: tuple[str, ...] = (
     "RUNNING",

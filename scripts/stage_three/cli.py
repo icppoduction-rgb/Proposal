@@ -21,6 +21,7 @@ except ModuleNotFoundError:
 
 from config import DATABASE_URL, PATH_DATA_STORAGE, STAGE_THREE_FEATURE_CATALOG_PATH
 from scripts.db import session_scope
+from scripts.db.models import ModelReadyArtifact
 from scripts.db.models.constants import ACTIVE_DATASET_ROLE_VALUES, BRANCH_VALUES
 from scripts.db.repositories import ArtifactRepository
 from scripts.stage_three.feature_catalog.loader import (
@@ -51,6 +52,9 @@ from scripts.stage_three.model_ready.builder import build_model_ready_artifacts
 from scripts.stage_three.model_ready.report import save_model_ready_builder_reports
 from scripts.stage_three.quality.report import save_stage_three_quality_reports
 from scripts.stage_three.quality.runner import run_stage_three_quality_checks
+from scripts.stage_three.quality.leakage import run_stage_three_leakage_checks
+from scripts.stage_three.quality.leakage_report import save_stage_three_leakage_reports
+from scripts.stage_three.quality.traceability import trace_model_ready_artifact
 from scripts.stage_three.readiness.report import save_validate_inputs_reports
 from scripts.stage_three.readiness.validator import (
     FAIL,
@@ -76,6 +80,7 @@ from scripts.stage_three.runtime.backend import select_feature_extraction_backen
 from scripts.stage_three.runtime.memory_guard import MemoryGuard
 from scripts.stage_three.runtime.report import RuntimeBackendReport, save_runtime_backend_reports
 from scripts.stage_three.runtime.resources import resolve_stage_three_runtime_settings
+from sqlalchemy import select
 
 
 console = Console()
@@ -149,6 +154,10 @@ def router_stage_three(
             _run_build_model_ready(request)
         elif isinstance(request, RunQualityChecksRequest) and not request.dry_run:
             _run_quality_checks(request)
+        elif isinstance(request, RunLeakageChecksRequest) and not request.dry_run:
+            _run_leakage_checks(request)
+        elif isinstance(request, TraceArtifactRequest) and not request.dry_run:
+            _run_trace_artifact(request)
         elif isinstance(request, ValidateInputsRequest) and not request.dry_run:
             _run_validate_inputs(request)
         else:
@@ -416,6 +425,10 @@ def _print_command_skeleton(request: StageThreeBaseRequest) -> None:
         if isinstance(request, BuildModelReadyRequest)
         else "run-quality-checks is implemented; dry-run only validates routing and configuration."
         if isinstance(request, RunQualityChecksRequest)
+        else "run-leakage-checks is implemented; dry-run only validates routing and configuration."
+        if isinstance(request, RunLeakageChecksRequest)
+        else "trace-artifact is implemented; dry-run only validates routing and configuration."
+        if isinstance(request, TraceArtifactRequest)
         else "CLI route and typed request are registered; business logic is reserved for later Stage Three tasks."
     )
     console.print(
@@ -710,6 +723,88 @@ def _run_quality_checks(request: RunQualityChecksRequest) -> None:
         raise SystemExit(1)
 
 
+def _run_leakage_checks(request: RunLeakageChecksRequest) -> None:
+    """Run Stage Three leakage and traceability checks."""
+    try:
+        with session_scope() as session:
+            result = run_stage_three_leakage_checks(
+                session,
+                experiment_id=request.experiment_id,
+                branch=request.branch,
+                role=request.role,
+                feature_group=request.feature_group,
+                storage_root=PATH_DATA_STORAGE,
+            )
+    except (SQLAlchemyError, ValueError, OSError) as exc:
+        console.print(
+            {
+                "service": "stage-three run-leakage-checks",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "Stage Three leakage checks were not completed.",
+            }
+        )
+        raise SystemExit(1) from exc
+
+    result = save_stage_three_leakage_reports(result)
+    console.print(
+        {
+            "service": "stage-three run-leakage-checks",
+            "status": result.status,
+            "request": asdict(request),
+            "quality_report_ids": result.quality_report_ids,
+            "blocked_artifact_ids": result.blocked_artifact_ids,
+            "missing_links": result.missing_links,
+            "report_paths": result.report_paths,
+            "message": "Stage Three leakage and traceability checks completed.",
+        }
+    )
+    if result.status == FAIL:
+        raise SystemExit(1)
+
+
+def _run_trace_artifact(request: TraceArtifactRequest) -> None:
+    """Trace a model-ready artifact back to the raw catalog source."""
+    try:
+        with session_scope() as session:
+            if request.artifact_ref is not None:
+                artifact_id = _parse_artifact_id(request.artifact_ref)
+            else:
+                artifact_id = _first_model_ready_artifact_id_for_experiment(
+                    session,
+                    _required_text(request.experiment_id, "experiment-id"),
+                )
+            chain = trace_model_ready_artifact(
+                session,
+                artifact_id,
+                apply_blocking_status=True,
+            )
+    except (SQLAlchemyError, ValueError) as exc:
+        console.print(
+            {
+                "service": "stage-three trace-artifact",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "Traceability chain was not resolved.",
+            }
+        )
+        raise SystemExit(1) from exc
+
+    console.print(
+        {
+            "service": "stage-three trace-artifact",
+            "status": chain.status,
+            "request": asdict(request),
+            "chain": chain.to_dict(),
+            "message": "Traceability chain resolved." if chain.status != FAIL else "Traceability chain has missing links.",
+        }
+    )
+    if chain.status == FAIL:
+        raise SystemExit(1)
+
+
 def _run_validate_inputs(request: ValidateInputsRequest) -> None:
     """Run the Stage Three readiness gate and stop downstream on blocking failures."""
     try:
@@ -808,6 +903,30 @@ def _optional_text(value: str | None) -> str | None:
     if value is None or not value.strip():
         return None
     return value.strip()
+
+
+def _parse_artifact_id(value: str) -> int:
+    text = _required_text(value, "artifact_ref")
+    try:
+        artifact_id = int(text)
+    except ValueError as exc:
+        raise ValueError("trace-artifact currently expects a numeric model_ready_artifact_id") from exc
+    if artifact_id <= 0:
+        raise ValueError("model_ready_artifact_id must be positive")
+    return artifact_id
+
+
+def _first_model_ready_artifact_id_for_experiment(session: Any, experiment_id: str) -> int:
+    statement = (
+        select(ModelReadyArtifact.id)
+        .where(ModelReadyArtifact.metadata_json["experiment_id"].as_string() == experiment_id)
+        .order_by(ModelReadyArtifact.id.asc())
+        .limit(1)
+    )
+    artifact_id = session.execute(statement).scalar_one_or_none()
+    if artifact_id is None:
+        raise ValueError(f"no model_ready_artifacts found for experiment_id={experiment_id}")
+    return int(artifact_id)
 
 
 def _command_args(action: str | None, extra_args: Sequence[str] | None) -> list[str]:
