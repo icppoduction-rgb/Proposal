@@ -64,6 +64,27 @@ class StageThreeCliRoutingTest(unittest.TestCase):
         self.assertIn("'role': 'TRAIN'", output)
         self.assertIn("'feature_group': 'dns_lexical'", output)
 
+    def test_final_report_request_is_typed_and_dry_run_safe(self) -> None:
+        with patch("scripts.stage_three.cli.PATH_DATA_STORAGE", "C:\\storage"):
+            output = _capture_router(
+                lambda: router_stage_three(
+                    "final-report",
+                    extra_args=[
+                        "--experiment-id",
+                        "exp001",
+                        "--branch",
+                        "dns",
+                        "--dry-run",
+                    ],
+                )
+            )
+
+        self.assertIn("DRY_RUN", output)
+        self.assertIn("stage-three final-report", output)
+        self.assertIn("'experiment_id': 'exp001'", output)
+        self.assertIn("'branch': 'dns'", output)
+        self.assertIn("final-report is implemented", output)
+
     def test_missing_path_data_storage_has_clear_error(self) -> None:
         with patch("scripts.stage_three.cli.PATH_DATA_STORAGE", ""):
             output, exit_code = _capture_router_exit(

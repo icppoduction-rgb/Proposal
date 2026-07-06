@@ -62,6 +62,10 @@ from scripts.stage_three.readiness.validator import (
     StageThreeReadinessResult,
     validate_stage_three_inputs,
 )
+from scripts.stage_three.reports.final_report import (
+    generate_catalog_unavailable_final_report,
+    generate_final_stage_three_report,
+)
 from scripts.stage_three.requests import (
     AlignLabelsRequest,
     BuildFeatureCatalogRequest,
@@ -158,6 +162,8 @@ def router_stage_three(
             _run_leakage_checks(request)
         elif isinstance(request, TraceArtifactRequest) and not request.dry_run:
             _run_trace_artifact(request)
+        elif isinstance(request, FinalReportRequest) and not request.dry_run:
+            _run_final_report(request)
         elif isinstance(request, ValidateInputsRequest) and not request.dry_run:
             _run_validate_inputs(request)
         else:
@@ -429,6 +435,8 @@ def _print_command_skeleton(request: StageThreeBaseRequest) -> None:
         if isinstance(request, RunLeakageChecksRequest)
         else "trace-artifact is implemented; dry-run only validates routing and configuration."
         if isinstance(request, TraceArtifactRequest)
+        else "final-report is implemented; dry-run only validates routing and configuration."
+        if isinstance(request, FinalReportRequest)
         else "CLI route and typed request are registered; business logic is reserved for later Stage Three tasks."
     )
     console.print(
@@ -830,6 +838,62 @@ def _run_validate_inputs(request: ValidateInputsRequest) -> None:
     )
     if result.status == FAIL:
         raise SystemExit(1)
+
+
+def _run_final_report(request: FinalReportRequest) -> None:
+    """Generate the final Stage Three report from catalog state."""
+    try:
+        with session_scope() as session:
+            result = generate_final_stage_three_report(
+                session,
+                experiment_id=request.experiment_id,
+                branch=request.branch,
+                storage_root=PATH_DATA_STORAGE,
+            )
+    except SQLAlchemyError as exc:
+        result = generate_catalog_unavailable_final_report(
+            experiment_id=request.experiment_id,
+            branch=request.branch,
+            error=str(exc),
+            storage_root=PATH_DATA_STORAGE,
+        )
+        console.print(
+            {
+                "service": "stage-three final-report",
+                "status": result.status,
+                "request": asdict(request),
+                "stage_four_readiness_status": result.stage_four_readiness_status,
+                "report_paths": result.report_paths,
+                "documentation_files": result.documentation_files,
+                "readiness_blockers": result.readiness_blockers,
+                "message": "Final Stage Three report completed with catalog-unavailable blockers.",
+            }
+        )
+        return
+    except (ValueError, OSError) as exc:
+        console.print(
+            {
+                "service": "stage-three final-report",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "Final Stage Three report was not completed.",
+            }
+        )
+        raise SystemExit(1) from exc
+
+    console.print(
+        {
+            "service": "stage-three final-report",
+            "status": result.status,
+            "request": asdict(request),
+            "stage_four_readiness_status": result.stage_four_readiness_status,
+            "report_paths": result.report_paths,
+            "documentation_files": result.documentation_files,
+            "readiness_blockers": result.readiness_blockers,
+            "message": "Final Stage Three report completed.",
+        }
+    )
 
 
 def _database_failure_result(
