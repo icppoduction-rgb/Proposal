@@ -1,5 +1,6 @@
 alembic==1.18.4
 duckdb==1.5.2
+polars==1.42.1
 psycopg[binary]==3.3.4
 pyarrow==16.1.0
 PyYAML==6.0.3

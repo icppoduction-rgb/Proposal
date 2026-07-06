@@ -11,8 +11,9 @@ from typing import Any
 
 import pyarrow as pa
 import pyarrow.dataset as ds
-import pyarrow.parquet as pq
 
+from config import STAGE_TWO_PARQUET_COMPRESSION
+from scripts.stage_three.extraction.artifact_writer import write_atomic_parquet_table
 from scripts.stage_three.runtime.benchmark_probe import (
     BackendProbeResult,
     run_backend_correctness_probe,
@@ -100,6 +101,8 @@ class CpuFeatureExtractionBackend:
         batch_rows: int,
         memory_guard: MemoryGuard,
         transform: ArrowTransform | None = None,
+        part_name_prefix: str = "part",
+        compression: str | None = None,
     ) -> FeatureExtractionRunResult:
         """Read only required columns in bounded batches and write Parquet parts."""
         if not required_columns:
@@ -126,8 +129,12 @@ class CpuFeatureExtractionBackend:
             table = pa.Table.from_batches([record_batch])
             rows_read += table.num_rows
             output_table = transform(table) if transform is not None else table
-            part_path = output_dir / f"part-{batch_index:05d}.parquet"
-            pq.write_table(output_table, part_path)
+            part_path = output_dir / f"{part_name_prefix}-{batch_index:05d}.parquet"
+            write_atomic_parquet_table(
+                output_table,
+                final_path=part_path,
+                compression=compression or STAGE_TWO_PARQUET_COMPRESSION,
+            )
             rows_written += output_table.num_rows
             output_parts.append(str(part_path))
             batch_metrics.append(

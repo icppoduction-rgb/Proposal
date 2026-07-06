@@ -33,6 +33,13 @@ class FeatureExtractionArtifact:
     missing_ratios: dict[str, float]
     runtime_seconds: float
     peak_rss_gb: float | None
+    warnings: list[str] = field(default_factory=list)
+    runtime_stats: dict[str, Any] = field(default_factory=dict)
+    catalog_artifact_id: int | None = None
+    feature_schema_version: str | None = None
+    source_artifact_ids: list[int] = field(default_factory=list)
+    column_count: int | None = None
+    artifact_checksum_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -52,7 +59,12 @@ class FeatureExtractionResult:
     runtime_seconds: float
     backend_used: str
     peak_rss_gb: float | None
+    warnings: list[str] = field(default_factory=list)
+    runtime_stats: dict[str, Any] = field(default_factory=dict)
     report_paths: dict[str, str] = field(default_factory=dict)
+    registered_catalog_ids: list[int] = field(default_factory=list)
+    skipped_feature_artifacts: list[dict[str, Any]] = field(default_factory=list)
+    resume_skipped_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON/Markdown friendly payload."""

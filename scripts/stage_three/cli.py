@@ -22,6 +22,7 @@ except ModuleNotFoundError:
 from config import DATABASE_URL, PATH_DATA_STORAGE, STAGE_THREE_FEATURE_CATALOG_PATH
 from scripts.db import session_scope
 from scripts.db.models.constants import ACTIVE_DATASET_ROLE_VALUES, BRANCH_VALUES
+from scripts.db.repositories import ArtifactRepository
 from scripts.stage_three.feature_catalog.loader import (
     load_feature_catalog,
     save_normalized_catalog_snapshot,
@@ -31,9 +32,19 @@ from scripts.stage_three.feature_catalog.validator import (
     FAIL as CATALOG_FAIL,
     validate_feature_catalog,
 )
-from scripts.stage_three.extraction.report import save_dns_feature_extraction_reports
+from scripts.stage_three.extraction.report import (
+    save_feature_artifact_registration_reports,
+    save_dns_feature_extraction_reports,
+    save_host_network_feature_extraction_reports,
+)
+from scripts.stage_three.extraction.registry import (
+    FEATURE_ARTIFACT_SCHEMA_VERSION,
+    FeatureArtifactRegistryService,
+)
 from scripts.stage_three.extraction.runner import (
     fetch_dns_normalized_artifacts,
+    fetch_normalized_artifacts,
+    run_host_network_feature_extraction,
     run_dns_feature_extraction,
 )
 from scripts.stage_three.readiness.report import save_validate_inputs_reports
@@ -480,14 +491,33 @@ def _run_probe_runtime_backend(request: ProbeRuntimeBackendRequest) -> None:
 
 def _run_extract_features(request: ExtractFeaturesRequest) -> None:
     """Run implemented Stage Three feature extraction commands."""
-    if request.branch != "dns":
-        raise ValueError("extract-features MVP currently supports only --branch dns")
+    skipped_feature_artifacts = []
     try:
         with session_scope() as session:
-            artifacts = fetch_dns_normalized_artifacts(
-                session,
+            if request.branch == "dns":
+                artifacts = fetch_dns_normalized_artifacts(
+                    session,
+                    branch=request.branch,
+                    role=request.role,
+                )
+            elif request.branch in {"host", "network"}:
+                artifacts = fetch_normalized_artifacts(
+                    session,
+                    branch=request.branch,
+                    role=request.role,
+                )
+            else:
+                raise ValueError("extract-features supports --branch dns, host, or network")
+            repository = ArtifactRepository(session)
+            registry = FeatureArtifactRegistryService(storage_root=PATH_DATA_STORAGE)
+            artifacts, skipped_feature_artifacts = registry.filter_resume_inputs(
+                repository,
+                artifacts,
                 branch=request.branch,
                 role=request.role,
+                feature_group=request.feature_group,
+                schema_version=FEATURE_ARTIFACT_SCHEMA_VERSION,
+                resume=request.resume,
             )
     except SQLAlchemyError as exc:
         console.print(
@@ -500,13 +530,50 @@ def _run_extract_features(request: ExtractFeaturesRequest) -> None:
             }
         )
         raise SystemExit(1) from exc
-    result = run_dns_feature_extraction(
-        artifacts=artifacts,
-        branch=request.branch,
-        role=request.role,
-        feature_group=request.feature_group,
-    )
-    result = save_dns_feature_extraction_reports(result)
+    if request.branch == "dns":
+        result = run_dns_feature_extraction(
+            artifacts=artifacts,
+            branch=request.branch,
+            role=request.role,
+            feature_group=request.feature_group,
+            run_id=request.experiment_id,
+            schema_version=FEATURE_ARTIFACT_SCHEMA_VERSION,
+        )
+    else:
+        result = run_host_network_feature_extraction(
+            artifacts=artifacts,
+            branch=request.branch,
+            role=request.role,
+            feature_group=request.feature_group,
+            run_id=request.experiment_id,
+            schema_version=FEATURE_ARTIFACT_SCHEMA_VERSION,
+        )
+    try:
+        with session_scope() as session:
+            repository = ArtifactRepository(session)
+            registry = FeatureArtifactRegistryService(storage_root=PATH_DATA_STORAGE)
+            result, registration = registry.register_result(
+                repository,
+                result,
+                schema_version=FEATURE_ARTIFACT_SCHEMA_VERSION,
+                skipped=skipped_feature_artifacts,
+            )
+    except SQLAlchemyError as exc:
+        console.print(
+            {
+                "service": "stage-three extract-features",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "Feature Parquet artifacts were written, but PostgreSQL catalog registration failed.",
+            }
+        )
+        raise SystemExit(1) from exc
+    if request.branch == "dns":
+        result = save_dns_feature_extraction_reports(result)
+    else:
+        result = save_host_network_feature_extraction_reports(result)
+    result = save_feature_artifact_registration_reports(result)
     console.print(
         {
             "service": "stage-three extract-features",
@@ -517,8 +584,12 @@ def _run_extract_features(request: ExtractFeaturesRequest) -> None:
             "rows_read": result.rows_read,
             "rows_written": result.rows_written,
             "columns_created": result.columns_created,
+            "registered_catalog_ids": registration.registered_catalog_ids,
+            "resume_skipped_count": result.resume_skipped_count,
+            "warnings": result.warnings,
+            "runtime_stats": result.runtime_stats,
             "report_paths": result.report_paths,
-            "message": "Stage Three DNS feature extraction completed.",
+            "message": "Stage Three feature extraction completed.",
         }
     )
 

@@ -36,6 +36,33 @@ class ArtifactRepository(BaseRepository[NormalizedArtifact]):
         self.session.flush()
         return artifact
 
+    def find_successful_feature_artifact(
+        self,
+        *,
+        dataset_id: int,
+        normalized_artifact_id: int,
+        branch: str,
+        role: str,
+        feature_group: str,
+        schema_version: str,
+    ) -> FeatureArtifact | None:
+        """Return a successful matching feature artifact for resume checks."""
+        statement = (
+            select(FeatureArtifact)
+            .where(
+                FeatureArtifact.dataset_id == dataset_id,
+                FeatureArtifact.normalized_artifact_id == normalized_artifact_id,
+                FeatureArtifact.branch == branch,
+                FeatureArtifact.role == role,
+                FeatureArtifact.feature_group == feature_group,
+                FeatureArtifact.feature_schema_version == schema_version,
+                FeatureArtifact.status == "SUCCESS",
+            )
+            .order_by(FeatureArtifact.id.desc())
+            .limit(1)
+        )
+        return self.session.execute(statement).scalar_one_or_none()
+
     def register_model_ready_artifact(self, **values: Any) -> ModelReadyArtifact:
         """Register a model-ready artifact without committing."""
         artifact = ModelReadyArtifact(**values)
