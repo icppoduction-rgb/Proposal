@@ -16,6 +16,8 @@ MODEL_READY_SCHEMA_VERSION = "v1"
 MODEL_READY_DATA_TYPES: tuple[str, ...] = (
     "X",
     "y",
+    "metadata",
+    "traceability",
     "sequence",
     "split_index",
     "preprocessing_metadata",

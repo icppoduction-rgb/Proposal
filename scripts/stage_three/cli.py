@@ -47,6 +47,10 @@ from scripts.stage_three.extraction.runner import (
     run_host_network_feature_extraction,
     run_dns_feature_extraction,
 )
+from scripts.stage_three.model_ready.builder import build_model_ready_artifacts
+from scripts.stage_three.model_ready.report import save_model_ready_builder_reports
+from scripts.stage_three.quality.report import save_stage_three_quality_reports
+from scripts.stage_three.quality.runner import run_stage_three_quality_checks
 from scripts.stage_three.readiness.report import save_validate_inputs_reports
 from scripts.stage_three.readiness.validator import (
     FAIL,
@@ -141,6 +145,10 @@ def router_stage_three(
             _run_probe_runtime_backend(request)
         elif isinstance(request, ExtractFeaturesRequest) and not request.dry_run:
             _run_extract_features(request)
+        elif isinstance(request, BuildModelReadyRequest) and not request.dry_run:
+            _run_build_model_ready(request)
+        elif isinstance(request, RunQualityChecksRequest) and not request.dry_run:
+            _run_quality_checks(request)
         elif isinstance(request, ValidateInputsRequest) and not request.dry_run:
             _run_validate_inputs(request)
         else:
@@ -225,6 +233,7 @@ def build_stage_three_parser() -> argparse.ArgumentParser:
     build_model_ready.add_argument("--feature-group")
     build_model_ready.add_argument("--target", default="label_binary")
     build_model_ready.add_argument("--preprocessing-profile", default="tree_unscaled")
+    build_model_ready.add_argument("--include-sequences", action="store_true")
     _add_execution_flags(build_model_ready)
 
     run_quality_checks = subparsers.add_parser(
@@ -347,6 +356,7 @@ def _request_from_namespace(namespace: argparse.Namespace) -> StageThreeBaseRequ
                 namespace.preprocessing_profile,
                 "preprocessing-profile",
             ),
+            include_sequences=bool(namespace.include_sequences),
         )
     if command == "run-quality-checks":
         return RunQualityChecksRequest(
@@ -402,6 +412,10 @@ def _print_command_skeleton(request: StageThreeBaseRequest) -> None:
         if isinstance(request, BuildFeatureCatalogRequest)
         else "probe-runtime-backend selection is implemented; dry-run only validates routing and configuration."
         if isinstance(request, ProbeRuntimeBackendRequest)
+        else "build-model-ready is implemented; dry-run only validates routing and configuration."
+        if isinstance(request, BuildModelReadyRequest)
+        else "run-quality-checks is implemented; dry-run only validates routing and configuration."
+        if isinstance(request, RunQualityChecksRequest)
         else "CLI route and typed request are registered; business logic is reserved for later Stage Three tasks."
     )
     console.print(
@@ -592,6 +606,108 @@ def _run_extract_features(request: ExtractFeaturesRequest) -> None:
             "message": "Stage Three feature extraction completed.",
         }
     )
+
+
+def _run_build_model_ready(request: BuildModelReadyRequest) -> None:
+    """Build and register final model-ready artifacts."""
+    try:
+        with session_scope() as session:
+            repository = ArtifactRepository(session)
+            result = build_model_ready_artifacts(
+                repository,
+                experiment_id=request.experiment_id,
+                branch=request.branch,
+                preprocessing_profile=request.preprocessing_profile,
+                target=request.target,
+                role=request.role,
+                feature_group=request.feature_group,
+                storage_root=PATH_DATA_STORAGE,
+                resume=request.resume,
+                include_sequences=request.include_sequences,
+            )
+    except (SQLAlchemyError, ValueError) as exc:
+        console.print(
+            {
+                "service": "stage-three build-model-ready",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "Model-ready artifacts were not completed.",
+            }
+        )
+        raise SystemExit(1) from exc
+
+    result = save_model_ready_builder_reports(result)
+    console.print(
+        {
+            "service": "stage-three build-model-ready",
+            "status": result.status,
+            "request": asdict(request),
+            "roles": result.roles,
+            "feature_count": result.feature_count,
+            "x_schema": result.x_schema,
+            "artifacts": [
+                artifact.to_dict()
+                for role_result in result.role_results
+                for artifact in role_result.artifacts
+            ],
+            "split_index_artifact": (
+                result.split_index_artifact.to_dict()
+                if result.split_index_artifact is not None
+                else None
+            ),
+            "preprocessing_metadata_artifact": (
+                result.preprocessing_metadata_artifact.to_dict()
+                if result.preprocessing_metadata_artifact is not None
+                else None
+            ),
+            "report_paths": result.report_paths,
+            "message": "Stage Three model-ready artifact build completed.",
+        }
+    )
+
+
+def _run_quality_checks(request: RunQualityChecksRequest) -> None:
+    """Run Stage Three feature/preprocessing/model-ready quality checks."""
+    try:
+        with session_scope() as session:
+            result = run_stage_three_quality_checks(
+                session,
+                experiment_id=request.experiment_id,
+                branch=request.branch,
+                role=request.role,
+                feature_group=request.feature_group,
+                storage_root=PATH_DATA_STORAGE,
+            )
+    except (SQLAlchemyError, ValueError, OSError) as exc:
+        console.print(
+            {
+                "service": "stage-three run-quality-checks",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "Stage Three quality checks were not completed.",
+            }
+        )
+        raise SystemExit(1) from exc
+
+    result = save_stage_three_quality_reports(result)
+    console.print(
+        {
+            "service": "stage-three run-quality-checks",
+            "status": result.status,
+            "request": asdict(request),
+            "feature_artifact_count": result.feature_artifact_count,
+            "model_ready_artifact_count": result.model_ready_artifact_count,
+            "preprocessing_artifact_count": result.preprocessing_artifact_count,
+            "quality_report_ids": result.quality_report_ids,
+            "blocking_issues": result.blocking_issues,
+            "report_paths": result.report_paths,
+            "message": "Stage Three quality checks completed.",
+        }
+    )
+    if result.status == FAIL:
+        raise SystemExit(1)
 
 
 def _run_validate_inputs(request: ValidateInputsRequest) -> None:

@@ -44,6 +44,8 @@ LABEL_STATUS_VALUES: tuple[str, ...] = (
 MODEL_READY_DATA_TYPE_VALUES: tuple[str, ...] = (
     "X",
     "y",
+    "metadata",
+    "traceability",
     "sequence",
     "split_index",
     "preprocessing_metadata",

@@ -78,6 +78,7 @@ class BuildModelReadyRequest(StageThreeBaseRequest):
     feature_group: str | None = None
     target: str = "label_binary"
     preprocessing_profile: str = "tree_unscaled"
+    include_sequences: bool = False
 
 
 @dataclass(frozen=True)

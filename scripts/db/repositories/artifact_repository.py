@@ -36,6 +36,27 @@ class ArtifactRepository(BaseRepository[NormalizedArtifact]):
         self.session.flush()
         return artifact
 
+    def list_successful_feature_artifacts(
+        self,
+        *,
+        branch: str,
+        role: str,
+        feature_group: str | None = None,
+    ) -> list[FeatureArtifact]:
+        """Return successful feature artifacts for one branch/role."""
+        statement = (
+            select(FeatureArtifact)
+            .where(
+                FeatureArtifact.branch == branch,
+                FeatureArtifact.role == role,
+                FeatureArtifact.status == "SUCCESS",
+            )
+            .order_by(FeatureArtifact.id.asc())
+        )
+        if feature_group is not None:
+            statement = statement.where(FeatureArtifact.feature_group == feature_group)
+        return list(self.session.execute(statement).scalars())
+
     def find_successful_feature_artifact(
         self,
         *,
@@ -69,6 +90,31 @@ class ArtifactRepository(BaseRepository[NormalizedArtifact]):
         self.session.add(artifact)
         self.session.flush()
         return artifact
+
+    def find_successful_model_ready_artifact(
+        self,
+        *,
+        branch: str,
+        role: str,
+        data_type: str,
+        artifact_path: str,
+        schema_version: str,
+    ) -> ModelReadyArtifact | None:
+        """Return a successful model-ready artifact for resume checks."""
+        statement = (
+            select(ModelReadyArtifact)
+            .where(
+                ModelReadyArtifact.branch == branch,
+                ModelReadyArtifact.role == role,
+                ModelReadyArtifact.data_type == data_type,
+                ModelReadyArtifact.artifact_path == artifact_path,
+                ModelReadyArtifact.schema_version == schema_version,
+                ModelReadyArtifact.status == "SUCCESS",
+            )
+            .order_by(ModelReadyArtifact.id.desc())
+            .limit(1)
+        )
+        return self.session.execute(statement).scalar_one_or_none()
 
     def trace_model_ready_to_raw_files(self, model_ready_artifact_id: int) -> list[dict[str, Any]]:
         """Return raw file metadata linked to a model-ready artifact."""
