@@ -73,20 +73,22 @@ def run_stage_three_quality_checks(
     feature_group: str | None = None,
 ) -> StageThreeQualityResult:
     """Run feature, preprocessing, and model-ready quality checks."""
-    feature_artifacts = _list_feature_artifacts(
-        session,
-        branch=branch,
-        role=role,
-        feature_group=feature_group,
-    )
     model_ready_artifacts = _list_model_ready_artifacts(
         session,
         experiment_id=experiment_id,
         branch=branch,
         role=role,
     )
+    feature_artifacts = _list_feature_artifacts(
+        session,
+        model_ready_artifacts=model_ready_artifacts,
+        branch=branch,
+        role=role,
+        feature_group=feature_group,
+    )
     preprocessing_artifacts = _list_preprocessing_artifacts(
         session,
+        model_ready_artifacts=model_ready_artifacts,
         branch=branch,
         feature_group=feature_group,
     )
@@ -149,15 +151,26 @@ def run_stage_three_quality_checks(
 def _list_feature_artifacts(
     session: Session,
     *,
+    model_ready_artifacts: list[ModelReadyArtifact],
     branch: str | None,
     role: str | None,
     feature_group: str | None,
 ) -> list[FeatureArtifact]:
+    linked_ids = sorted(
+        {
+            int(artifact.feature_artifact_id)
+            for artifact in model_ready_artifacts
+            if artifact.feature_artifact_id is not None
+        }
+    )
+    if not linked_ids:
+        return []
     statement = (
         select(FeatureArtifact)
         .where(FeatureArtifact.status == "SUCCESS")
         .order_by(FeatureArtifact.id.asc())
     )
+    statement = statement.where(FeatureArtifact.id.in_(linked_ids))
     if branch is not None:
         statement = statement.where(FeatureArtifact.branch == branch)
     if role is not None:
@@ -192,12 +205,25 @@ def _list_model_ready_artifacts(
 def _list_preprocessing_artifacts(
     session: Session,
     *,
+    model_ready_artifacts: list[ModelReadyArtifact],
     branch: str | None,
     feature_group: str | None,
 ) -> list[PreprocessingArtifact]:
+    linked_ids = sorted(
+        {
+            int(artifact.preprocessing_artifact_id)
+            for artifact in model_ready_artifacts
+            if artifact.preprocessing_artifact_id is not None
+        }
+    )
+    if not linked_ids:
+        return []
     statement = (
         select(PreprocessingArtifact)
-        .where(PreprocessingArtifact.status == "SUCCESS")
+        .where(
+            PreprocessingArtifact.status == "SUCCESS",
+            PreprocessingArtifact.id.in_(linked_ids),
+        )
         .order_by(PreprocessingArtifact.id.asc())
     )
     if branch is not None:

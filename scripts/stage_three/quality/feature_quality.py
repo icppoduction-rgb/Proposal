@@ -34,6 +34,7 @@ KNOWN_NON_FEATURE_COLUMNS = {
     "feature_group",
     "source_file",
     "source_path",
+    "source_normalized_path",
     "source_file_path",
     "source_file_id",
     "file_id",
@@ -55,6 +56,11 @@ KNOWN_NON_FEATURE_COLUMNS = {
     "label_status",
     "label_confidence",
     "label_mapping_rule_id",
+    "role",
+    "source_event_uid_refs",
+    "feature_schema_name",
+    "feature_schema_version",
+    "created_at",
 }
 DEFAULT_MISSING_RATIO_THRESHOLD = 0.95
 
@@ -95,6 +101,7 @@ def _check_feature_artifact(
         storage_root=storage_root,
     )
     group_name = getattr(artifact, "feature_group")
+    group_config = _catalog_group(feature_catalog, group_name)
     group_features = _catalog_features(feature_catalog, group_name)
     expected_feature_names = [feature["name"] for feature in group_features]
     records: list[QualityCheckRecord] = []
@@ -133,7 +140,16 @@ def _check_feature_artifact(
     records.append(_check_missing_ratios(artifact_id, paths, columns, group_features, row_count, missing_ratio_threshold))
     label_record, label_distribution = _check_label_coverage(artifact_id, paths, columns, row_count)
     records.append(label_record)
-    records.append(_check_timestamp_coverage(artifact_id, paths, columns, row_count))
+    records.append(
+        _check_timestamp_coverage(
+            artifact_id,
+            paths,
+            columns,
+            row_count,
+            timestamp_required=_timestamp_required(group_config),
+            feature_group=group_name,
+        )
+    )
     records.append(_check_schema_drift(artifact_id, columns, expected_feature_names))
     records.append(_check_class_distribution(artifact_id, columns, label_distribution))
     records.append(_check_forbidden_feature_fields(artifact_id, expected_feature_names))
@@ -391,9 +407,23 @@ def _check_timestamp_coverage(
     paths: list[Path],
     columns: list[str],
     row_count: int,
+    *,
+    timestamp_required: bool,
+    feature_group: str,
 ) -> QualityCheckRecord:
     timestamp_column = _first_present(columns, ("event_timestamp", "timestamp"))
     if timestamp_column is None:
+        if not timestamp_required:
+            coverage = {"missing_timestamp_columns": True, "timestamp_required": False}
+            return pass_check(
+                check_group="feature_quality",
+                check_name="timestamp_coverage_calculated",
+                artifact_type="feature",
+                artifact_id=artifact_id,
+                message="timestamp coverage is not required for this feature group",
+                rows_total=row_count,
+                details={"feature_group": feature_group, **coverage},
+            )
         coverage = {"missing_timestamp_columns": True}
         return warn_check(
             check_group="feature_quality",
@@ -403,6 +433,7 @@ def _check_timestamp_coverage(
             message="timestamp coverage is unavailable because no timestamp column is present",
             rows_total=row_count,
             timestamp_coverage=coverage,
+            details={"feature_group": feature_group, "timestamp_required": True},
         )
     non_null = int(duckdb_scalar(paths, f"COUNT({quoted_identifier(timestamp_column)})"))
     coverage = {
@@ -517,8 +548,7 @@ def _check_forbidden_feature_fields(
 
 
 def _catalog_features(catalog: dict[str, Any], feature_group: str) -> list[dict[str, Any]]:
-    groups = catalog.get("feature_groups", {})
-    group = groups.get(feature_group, {}) if isinstance(groups, dict) else {}
+    group = _catalog_group(catalog, feature_group)
     features = group.get("features", []) if isinstance(group, dict) else []
     if not isinstance(features, list):
         return []
@@ -527,6 +557,27 @@ def _catalog_features(catalog: dict[str, Any], feature_group: str) -> list[dict[
         for feature in features
         if isinstance(feature, dict) and isinstance(feature.get("name"), str)
     ]
+
+
+def _catalog_group(catalog: dict[str, Any], feature_group: str) -> dict[str, Any]:
+    groups = catalog.get("feature_groups", {})
+    group = groups.get(feature_group, {}) if isinstance(groups, dict) else {}
+    return group if isinstance(group, dict) else {}
+
+
+def _timestamp_required(group_config: dict[str, Any]) -> bool:
+    mappings = group_config.get("extractor_mappings")
+    if not isinstance(mappings, list):
+        return True
+    for mapping in mappings:
+        if not isinstance(mapping, dict):
+            continue
+        source_fields = mapping.get("source_fields")
+        if not isinstance(source_fields, list):
+            continue
+        if any(str(field) in {"event_timestamp", "timestamp"} for field in source_fields):
+            return True
+    return False
 
 
 def _arrow_type_matches(expected: str, actual: pa.DataType) -> bool:

@@ -14,6 +14,7 @@ from scripts.stage_three.model_ready.builder import (
     TASK17_REPORT_FILENAME,
     build_model_ready_artifacts,
 )
+from scripts.stage_three.model_ready.registry import write_model_ready_row_batches
 from scripts.stage_three.model_ready.report import save_model_ready_builder_reports
 
 
@@ -152,6 +153,27 @@ class ModelReadyBuilderTest(unittest.TestCase):
         self.assertIn("Target Distribution", text)
         self.assertIn("Feature count", text)
         self.assertIn("en", written.report_paths)
+
+    def test_streaming_writer_preserves_schema_when_first_batch_is_null(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "y.parquet"
+            result = write_model_ready_row_batches(
+                [
+                    [{"sample_uid": "s1", "label_binary": None}],
+                    [{"sample_uid": "s2", "label_binary": 1}],
+                ],
+                columns=["sample_uid", "label_binary"],
+                schema=pa.schema([("sample_uid", pa.string()), ("label_binary", pa.int64())]),
+                final_path=path,
+                storage_root=temp_dir,
+                compression="zstd",
+            )
+
+            table = pq.read_table(path)
+
+        self.assertEqual(result.row_count, 2)
+        self.assertEqual(table.schema.field("label_binary").type, pa.int64())
+        self.assertEqual(table.column("label_binary").to_pylist(), [None, 1])
 
 
 class FakeArtifactRepository:

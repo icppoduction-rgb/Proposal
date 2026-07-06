@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
-from scripts.db.models import FeatureArtifact, ModelReadyArtifact, NormalizedArtifact
+from scripts.db.models import Dataset, FeatureArtifact, ModelReadyArtifact, NormalizedArtifact
 from scripts.db.repositories.base_repository import BaseRepository
 
 
@@ -46,10 +46,13 @@ class ArtifactRepository(BaseRepository[NormalizedArtifact]):
         """Return successful feature artifacts for one branch/role."""
         statement = (
             select(FeatureArtifact)
+            .join(Dataset, FeatureArtifact.dataset_id == Dataset.id)
             .where(
                 FeatureArtifact.branch == branch,
                 FeatureArtifact.role == role,
                 FeatureArtifact.status == "SUCCESS",
+                Dataset.is_active.is_(True),
+                or_(Dataset.source_group.is_(None), Dataset.source_group != "STAGE_TWO_E2E_DRY_RUN"),
             )
             .order_by(FeatureArtifact.id.asc())
         )
@@ -70,6 +73,7 @@ class ArtifactRepository(BaseRepository[NormalizedArtifact]):
         """Return a successful matching feature artifact for resume checks."""
         statement = (
             select(FeatureArtifact)
+            .join(Dataset, FeatureArtifact.dataset_id == Dataset.id)
             .where(
                 FeatureArtifact.dataset_id == dataset_id,
                 FeatureArtifact.normalized_artifact_id == normalized_artifact_id,
@@ -78,6 +82,8 @@ class ArtifactRepository(BaseRepository[NormalizedArtifact]):
                 FeatureArtifact.feature_group == feature_group,
                 FeatureArtifact.feature_schema_version == schema_version,
                 FeatureArtifact.status == "SUCCESS",
+                Dataset.is_active.is_(True),
+                or_(Dataset.source_group.is_(None), Dataset.source_group != "STAGE_TWO_E2E_DRY_RUN"),
             )
             .order_by(FeatureArtifact.id.desc())
             .limit(1)

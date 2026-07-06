@@ -80,14 +80,61 @@ Expected outputs:
 - `split_index.parquet`
 - `preprocessing_metadata.parquet`
 
+### 6.1. DNS supervised 70/30 rebalanced split
+
+For the DNS supervised baseline, use the reproducible split policy
+`dns_supervised_70_30_v1`. It writes the active model-ready experiment
+`dns_rebalanced_70_30_v1`.
+
+```powershell
+python manage.py stage-three rebalance-dns-supervised --experiment-id dns_rebalanced_70_30_v1
+
+python manage.py stage-three rebalance-dns-supervised `
+  --experiment-id dns_rebalanced_70_30_v1 `
+  --apply `
+  --apply-catalog `
+  --deactivate-existing-experiment exp001
+```
+
+Training-readiness verdict:
+
+- DNS model-ready data is ready for supervised tabular model training.
+- Use only experiment `dns_rebalanced_70_30_v1`.
+- `TRAIN`: `6,010,841` normal / `2,576,074` attack.
+- `VALIDATION`: `1,288,037` normal / `552,016` attack.
+- `TEST`: `1,288,037` normal / `552,016` attack.
+- `label_binary=NULL` is absent from the final supervised split.
+- Duplicate samples across `TRAIN` / `VALIDATION` / `TEST`: `0`.
+- `TEST` must not be used for training, preprocessing fit, feature selection, or threshold tuning.
+
+Model-ready root:
+
+```text
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled
+```
+
+Primary reports:
+
+```text
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\dns_rebalanced_70_30_v1_dns_rebalanced_split_report.md
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\dns_rebalanced_70_30_v1_dns_rebalanced_split_report.json
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task18-stage-three-quality-checks.md
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+```
+
 ### 7. Run checks
 
 ```powershell
 python manage.py stage-three run-quality-checks --experiment-id exp001
 python manage.py stage-three run-leakage-checks --experiment-id exp001
+python manage.py stage-three run-quality-checks --experiment-id dns_rebalanced_70_30_v1
+python manage.py stage-three run-leakage-checks --experiment-id dns_rebalanced_70_30_v1
 ```
 
 Blocking failures must be fixed before Stage Four.
+For `dns_rebalanced_70_30_v1`, `run-quality-checks` must return `PASS` with no
+`blocking_issues` and no timestamp warnings.
+`run-leakage-checks` for this experiment must return `PASS`.
 
 ### 8. Generate final report
 

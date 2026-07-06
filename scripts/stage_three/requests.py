@@ -82,6 +82,19 @@ class BuildModelReadyRequest(StageThreeBaseRequest):
 
 
 @dataclass(frozen=True)
+class RebalanceDnsSupervisedRequest(StageThreeBaseRequest):
+    """Request for rebuilding DNS supervised model-ready split artifacts."""
+
+    experiment_id: str = "dns_rebalanced_70_30_v1"
+    feature_group: str = "dns_lexical"
+    preprocessing_profile: str = "tree_unscaled"
+    target: str = "label_binary"
+    overwrite: bool = False
+    apply_catalog: bool = False
+    deactivate_existing_experiment: str | None = None
+
+
+@dataclass(frozen=True)
 class RunQualityChecksRequest(StageThreeBaseRequest):
     """Request for Stage Three quality checks."""
 

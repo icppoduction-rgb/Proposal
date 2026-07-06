@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from scripts.db.models import FeatureArtifact
 from scripts.db.repositories import ArtifactRepository
@@ -176,6 +177,7 @@ class FeatureArtifactRegistryService:
             "warnings": output.warnings,
         }
         return repository.register_feature_artifact(
+            artifact_uid=uuid4(),
             dataset_id=source.dataset_id,
             normalized_artifact_id=source.artifact_id,
             role=role,

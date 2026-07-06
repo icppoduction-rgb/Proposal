@@ -32,6 +32,82 @@ DNS TEST:
   - Mendeley DNS Exfiltration Dataset
 ```
 
+### DNS supervised split policy 70/30
+
+The active supervised DNS policy is `dns_supervised_70_30_v1`.
+It does not use the current broken `TEST/csv` source. It is built from valid
+labeled DNS rows with traceability through `dns_lexical` feature artifacts.
+
+Final split:
+
+| Role | normal | attack | total |
+| --- | ---: | ---: | ---: |
+| `TRAIN` | 6,010,841 | 2,576,074 | 8,586,915 |
+| `VALIDATION` | 1,288,037 | 552,016 | 1,840,053 |
+| `TEST` | 1,288,037 | 552,016 | 1,840,053 |
+
+Exclusion rules:
+
+- `dns/TEST/csv/dataset.csv` and its chunked downstream artifacts are not used for final test;
+- `dns/VALIDATION/pcap/ens33-dns_amplification_attack.pcap` is fully excluded;
+- `dns/VALIDATION/pcap/ens33-dns_amplification_attack__f291ed87a1.pcap` is used only as a capped attack source;
+- existing `TRAIN` attack rows (`409,076`) remain accounted for in the target distribution;
+- `label_binary=NULL` is not treated as normal and is not included in the supervised split;
+- raw files are not physically deleted; catalog/downstream artifacts are marked `SKIPPED` with traceability.
+
+Reproducible command:
+
+```powershell
+python manage.py stage-three rebalance-dns-supervised --experiment-id dns_rebalanced_70_30_v1
+
+python manage.py stage-three rebalance-dns-supervised `
+  --experiment-id dns_rebalanced_70_30_v1 `
+  --apply `
+  --apply-catalog `
+  --deactivate-existing-experiment exp001
+```
+
+Training-readiness verdict:
+
+- DNS model-ready data is ready for supervised tabular model training.
+- Use only experiment `dns_rebalanced_70_30_v1`.
+- `TRAIN` can be used for training and preprocessing fit.
+- `VALIDATION` can be used for tuning/threshold selection.
+- `TEST` must be used only for final evaluation.
+- `run-quality-checks` for `dns_rebalanced_70_30_v1` returns `PASS` with no `blocking_issues` and no timestamp warnings.
+- `run-leakage-checks` for `dns_rebalanced_70_30_v1` returns `PASS`.
+
+Full model-ready paths:
+
+```text
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\X.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\y.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\metadata.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\traceability.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\X.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\y.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\metadata.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\traceability.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\X.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\y.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\metadata.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\traceability.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\EXPERIMENTS\split_index.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\EXPERIMENTS\preprocessing_metadata.parquet
+```
+
+Full report paths:
+
+```text
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\dns_rebalanced_70_30_v1_dns_rebalanced_split_report.md
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\dns_rebalanced_70_30_v1_dns_rebalanced_split_report.json
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task18-stage-three-quality-checks.md
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task18-stage-three-quality-checks.md
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+```
+
 ## Host strategy
 
 | Role | Dataset | Purpose | Source |

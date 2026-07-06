@@ -127,6 +127,33 @@ raw -> normalized -> features -> model-ready
 - в artifact metadata;
 - в non-X columns, исключенных из training matrix.
 
+## DNS supervised 70/30 policy
+
+Для DNS supervised split `dns_supervised_70_30_v1` leakage prevention включает
+не только запрет label/source/path fields в `X`, но и запрет некорректных
+источников:
+
+- текущий DNS `TEST/csv` и его chunked downstream artifacts не используются в supervised evaluation;
+- `ens33-dns_amplification_attack.pcap` исключен полностью;
+- `ens33-dns_amplification_attack__f291ed87a1.pcap` ограничивается global target;
+- `label_binary=NULL` исключается, а не конвертируется в normal;
+- `split_index.parquet` проверяется на отсутствие пересечений `sample_uid` между `TRAIN`, `VALIDATION`, `TEST`;
+- `traceability.parquet` сохраняет `source_role`, `normalized_artifact_id`, `source_normalized_path` и `split_policy_id`, но эти поля не попадают в `X.parquet`.
+
+Проверочный отчет:
+
+```text
+reports/ru/stage-three/dns_rebalanced_70_30_v1_dns_rebalanced_split_report.json
+```
+
+Вердикт готовности:
+
+- активный experiment: `dns_rebalanced_70_30_v1`;
+- статус: готово для обучения supervised tabular модели;
+- quality checks: `PASS`, без `blocking_issues`, без предупреждений по timestamp;
+- leakage/traceability checks: `PASS`;
+- `TEST` остается только для финальной evaluation.
+
 ## Типовые ошибки
 
 | Ошибка | Последствие | Исправление |

@@ -115,6 +115,7 @@ class FeatureArtifactRegistrationTest(unittest.TestCase):
             self.assertEqual(annotated.registered_catalog_ids, [9001])
             self.assertEqual(annotated.output_feature_artifacts[0].catalog_artifact_id, 9001)
             values = repository.registered_values[0]
+            self.assertIsNotNone(values["artifact_uid"])
             self.assertEqual(values["dataset_id"], 202)
             self.assertEqual(values["normalized_artifact_id"], 101)
             self.assertEqual(values["feature_group"], "dns_lexical")

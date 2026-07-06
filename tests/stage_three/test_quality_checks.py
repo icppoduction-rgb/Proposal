@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from scripts.stage_three.quality.common import FAIL, PASS, register_quality_records
+from scripts.stage_three.quality.common import FAIL, PASS, WARN, register_quality_records
 from scripts.stage_three.quality.feature_quality import run_feature_quality_checks
 from scripts.stage_three.quality.model_ready_quality import run_model_ready_quality_checks
 from scripts.stage_three.quality.report import save_stage_three_quality_reports
@@ -98,6 +98,41 @@ class StageThreeQualityChecksTest(unittest.TestCase):
             self.assertTrue(failed_forbidden[0].blocking)
             self.assertEqual(failed_forbidden[0].leakage_issue_count, 1)
 
+    def test_timestamp_missing_passes_when_feature_group_does_not_require_timestamp(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            feature_artifact = _write_minimal_feature_artifact(root, feature_group="unit_lexical")
+            checks = run_feature_quality_checks(
+                [feature_artifact],
+                storage_root=root,
+                feature_catalog=_feature_catalog(source_fields=["domain", "features_json"]),
+            )
+
+            timestamp_checks = [check for check in checks if check.check_name == "timestamp_coverage_calculated"]
+
+            self.assertEqual(len(timestamp_checks), 1)
+            self.assertEqual(timestamp_checks[0].status, PASS)
+            self.assertFalse(timestamp_checks[0].details["timestamp_required"])
+
+    def test_timestamp_missing_warns_when_feature_group_requires_timestamp(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            feature_artifact = _write_minimal_feature_artifact(root, feature_group="unit_temporal")
+            checks = run_feature_quality_checks(
+                [feature_artifact],
+                storage_root=root,
+                feature_catalog=_feature_catalog(
+                    feature_group="unit_temporal",
+                    source_fields=["event_timestamp", "domain"],
+                ),
+            )
+
+            timestamp_checks = [check for check in checks if check.check_name == "timestamp_coverage_calculated"]
+
+            self.assertEqual(len(timestamp_checks), 1)
+            self.assertEqual(timestamp_checks[0].status, WARN)
+            self.assertTrue(timestamp_checks[0].details["timestamp_required"])
+
 
 class FakeDataQualityRepository:
     def __init__(self) -> None:
@@ -118,7 +153,13 @@ def _write_feature_artifact(root: Path) -> SimpleNamespace:
             "dataset_role": "TRAIN",
             "branch": "dns",
             "feature_group": "dns_lexical",
+            "role": "TRAIN",
+            "source_normalized_path": "parquet/normalized/dns/train/part-1.parquet",
             "source_path": r"C:\datasets\proposal\train\dns-1.csv",
+            "source_event_uid_refs": ["train-e1"],
+            "feature_schema_name": "feature_artifact",
+            "feature_schema_version": "v1",
+            "created_at": "2026-01-01T00:00:00Z",
             "event_timestamp": "2026-01-01T00:00:00Z",
             "dns_query_length": 11,
             "dns_subdomain_length": 5,
@@ -138,7 +179,13 @@ def _write_feature_artifact(root: Path) -> SimpleNamespace:
             "dataset_role": "TRAIN",
             "branch": "dns",
             "feature_group": "dns_lexical",
+            "role": "TRAIN",
+            "source_normalized_path": "parquet/normalized/dns/train/part-2.parquet",
             "source_path": r"C:\datasets\proposal\train\dns-2.csv",
+            "source_event_uid_refs": ["train-e2"],
+            "feature_schema_name": "feature_artifact",
+            "feature_schema_version": "v1",
+            "created_at": "2026-01-01T00:00:01Z",
             "event_timestamp": "2026-01-01T00:00:01Z",
             "dns_query_length": 10,
             "dns_subdomain_length": 4,
@@ -160,6 +207,49 @@ def _write_feature_artifact(root: Path) -> SimpleNamespace:
         feature_path=relative_path,
         metadata_json={"parts": [{"path": relative_path}]},
     )
+
+
+def _write_minimal_feature_artifact(root: Path, *, feature_group: str) -> SimpleNamespace:
+    path = root / "parquet" / "features" / feature_group / "dns" / "TRAIN" / "schema=v1" / "part.parquet"
+    rows = [
+        {"sample_uid": "sample-1", "dns_query_length": 11, "label_binary": 1},
+        {"sample_uid": "sample-2", "dns_query_length": 10, "label_binary": 0},
+    ]
+    _write_rows(path, rows)
+    relative_path = path.relative_to(root).as_posix()
+    return SimpleNamespace(
+        id=102,
+        feature_group=feature_group,
+        feature_path=relative_path,
+        metadata_json={"parts": [{"path": relative_path}]},
+    )
+
+
+def _feature_catalog(
+    *,
+    source_fields: list[str],
+    feature_group: str = "unit_lexical",
+) -> dict[str, object]:
+    return {
+        "feature_groups": {
+            feature_group: {
+                "extractor_mappings": [
+                    {
+                        "source_fields": source_fields,
+                        "output_features": ["dns_query_length"],
+                    }
+                ],
+                "features": [
+                    {
+                        "name": "dns_query_length",
+                        "dtype": "integer",
+                        "nullable": False,
+                        "preprocessing": {"missing": "zero"},
+                    }
+                ],
+            }
+        }
+    }
 
 
 def _write_model_ready_artifacts(

@@ -127,6 +127,34 @@ But traceability identifiers (`event_uid`, `sample_uid`, paths, hashes, parser I
 - artifact metadata;
 - non-X columns excluded from the training matrix.
 
+## DNS supervised 70/30 policy
+
+For the DNS supervised split `dns_supervised_70_30_v1`, leakage prevention
+includes both X-column exclusion and source exclusion:
+
+- the current DNS `TEST/csv` source and its chunked downstream artifacts are not used in supervised evaluation;
+- `ens33-dns_amplification_attack.pcap` is fully excluded;
+- `ens33-dns_amplification_attack__f291ed87a1.pcap` is capped by the global target;
+- `label_binary=NULL` is excluded, not converted to normal;
+- `split_index.parquet` is checked for no `sample_uid` overlap between `TRAIN`, `VALIDATION`, and `TEST`;
+- `traceability.parquet` keeps `source_role`, `normalized_artifact_id`, `source_normalized_path`, and `split_policy_id`, but these fields do not enter `X.parquet`.
+
+Training-readiness verdict:
+
+- active experiment: `dns_rebalanced_70_30_v1`;
+- status: ready for supervised tabular model training;
+- quality checks: `PASS`, no `blocking_issues`, no timestamp warnings;
+- leakage/traceability checks: `PASS`;
+- `TEST` remains final-evaluation only.
+
+Verification reports:
+
+```text
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\dns_rebalanced_70_30_v1_dns_rebalanced_split_report.json
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task18-stage-three-quality-checks.md
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+```
+
 ## Common Mistakes
 
 | Mistake | Consequence | Fix |

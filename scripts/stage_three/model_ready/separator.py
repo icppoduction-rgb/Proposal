@@ -88,6 +88,20 @@ class ModelReadyTables:
 
 
 @dataclass(frozen=True)
+class FeatureSeparationPlan:
+    """Column-level separation plan that can be applied to streaming batches."""
+
+    x_columns: list[str]
+    y_columns: list[str]
+    metadata_columns: list[str]
+    traceability_columns: list[str]
+    dropped_columns: list[DroppedColumn]
+    forbidden_x_columns: list[str]
+    source_columns: list[str]
+    row_count: int = 0
+
+
+@dataclass(frozen=True)
 class FeatureSeparationResult:
     """Result and audit metadata for X/y/metadata/traceability separation."""
 
@@ -135,6 +149,34 @@ def separate_feature_artifacts(
     )
 
 
+def plan_feature_artifact_separation(
+    paths: Iterable[str | Path],
+    *,
+    feature_catalog: dict[str, Any] | None = None,
+) -> FeatureSeparationPlan:
+    """Build a separation plan from Parquet metadata without loading rows."""
+    artifact_paths = [Path(path) for path in paths]
+    if not artifact_paths:
+        raise ValueError("at least one feature artifact path is required")
+
+    source_columns: list[str] = []
+    seen: set[str] = set()
+    row_count = 0
+    for path in artifact_paths:
+        metadata = pq.read_metadata(path)
+        schema = pq.read_schema(path)
+        row_count += int(metadata.num_rows)
+        for column in schema.names:
+            if column not in seen:
+                seen.add(column)
+                source_columns.append(column)
+    return _build_separation_plan(
+        source_columns,
+        row_count=row_count,
+        feature_catalog=feature_catalog,
+    )
+
+
 def separate_feature_artifact_table(
     table: pa.Table,
     *,
@@ -150,30 +192,10 @@ def separate_feature_artifact_rows(
     feature_catalog: dict[str, Any] | None = None,
 ) -> FeatureSeparationResult:
     """Split feature rows into X/y/metadata/traceability using the feature catalog."""
-    catalog = feature_catalog if feature_catalog is not None else load_feature_catalog()
-    allowed_x_columns = _allowed_x_columns(catalog)
-    forbidden_x_columns = _forbidden_x_columns(catalog)
-    source_columns = _ordered_source_columns(rows)
-    x_columns = [column for column in source_columns if column in allowed_x_columns and not _is_forbidden_column(column, forbidden_x_columns)]
-    y_columns = [column for column in source_columns if _is_label_column(column)]
-    metadata_columns = [
-        column
-        for column in source_columns
-        if column in AUDIT_METADATA_COLUMNS and column not in y_columns
-    ]
-    traceability_columns = [
-        column
-        for column in source_columns
-        if column in TRACEABILITY_COLUMNS and column not in y_columns
-    ]
-    dropped_columns = _dropped_columns(
-        source_columns,
-        x_columns=x_columns,
-        y_columns=y_columns,
-        metadata_columns=metadata_columns,
-        traceability_columns=traceability_columns,
-        allowed_x_columns=allowed_x_columns,
-        forbidden_x_columns=forbidden_x_columns,
+    plan = _build_separation_plan(
+        _ordered_source_columns(rows),
+        row_count=len(rows),
+        feature_catalog=feature_catalog,
     )
 
     x_rows: list[dict[str, Any]] = []
@@ -183,12 +205,12 @@ def separate_feature_artifact_rows(
 
     for index, row in enumerate(rows):
         sample_uid = _sample_uid(row, index)
-        x_rows.append({column: row.get(column) for column in x_columns})
-        y_rows.append(_row_with_sample_uid(row, y_columns, sample_uid))
-        metadata_rows.append(_row_with_sample_uid(row, metadata_columns, sample_uid))
-        traceability_rows.append(_row_with_sample_uid(row, traceability_columns, sample_uid))
+        x_rows.append({column: row.get(column) for column in plan.x_columns})
+        y_rows.append(_row_with_sample_uid(row, plan.y_columns, sample_uid))
+        metadata_rows.append(_row_with_sample_uid(row, plan.metadata_columns, sample_uid))
+        traceability_rows.append(_row_with_sample_uid(row, plan.traceability_columns, sample_uid))
 
-    validate_no_forbidden_x_columns(x_rows, forbidden_x_columns=forbidden_x_columns)
+    validate_no_forbidden_x_columns(x_rows, forbidden_x_columns=plan.forbidden_x_columns)
     return FeatureSeparationResult(
         status="SUCCESS",
         tables=ModelReadyTables(
@@ -197,14 +219,14 @@ def separate_feature_artifact_rows(
             metadata=metadata_rows,
             traceability=traceability_rows,
         ),
-        x_columns=x_columns,
-        y_columns=["sample_uid", *[column for column in y_columns if column != "sample_uid"]],
-        metadata_columns=["sample_uid", *[column for column in metadata_columns if column != "sample_uid"]],
-        traceability_columns=["sample_uid", *[column for column in traceability_columns if column != "sample_uid"]],
-        dropped_columns=dropped_columns,
-        forbidden_x_columns=sorted(forbidden_x_columns),
-        source_columns=source_columns,
-        row_count=len(rows),
+        x_columns=plan.x_columns,
+        y_columns=plan.y_columns,
+        metadata_columns=plan.metadata_columns,
+        traceability_columns=plan.traceability_columns,
+        dropped_columns=plan.dropped_columns,
+        forbidden_x_columns=plan.forbidden_x_columns,
+        source_columns=plan.source_columns,
+        row_count=plan.row_count,
     )
 
 
@@ -269,6 +291,52 @@ def _ordered_source_columns(rows: list[dict[str, Any]]) -> list[str]:
                 seen.add(column)
                 columns.append(column)
     return columns
+
+
+def _build_separation_plan(
+    source_columns: list[str],
+    *,
+    row_count: int,
+    feature_catalog: dict[str, Any] | None,
+) -> FeatureSeparationPlan:
+    catalog = feature_catalog if feature_catalog is not None else load_feature_catalog()
+    allowed_x_columns = _allowed_x_columns(catalog)
+    forbidden_x_columns = _forbidden_x_columns(catalog)
+    x_columns = [
+        column
+        for column in source_columns
+        if column in allowed_x_columns and not _is_forbidden_column(column, forbidden_x_columns)
+    ]
+    raw_y_columns = [column for column in source_columns if _is_label_column(column)]
+    raw_metadata_columns = [
+        column
+        for column in source_columns
+        if column in AUDIT_METADATA_COLUMNS and column not in raw_y_columns
+    ]
+    raw_traceability_columns = [
+        column
+        for column in source_columns
+        if column in TRACEABILITY_COLUMNS and column not in raw_y_columns
+    ]
+    dropped_columns = _dropped_columns(
+        source_columns,
+        x_columns=x_columns,
+        y_columns=raw_y_columns,
+        metadata_columns=raw_metadata_columns,
+        traceability_columns=raw_traceability_columns,
+        allowed_x_columns=allowed_x_columns,
+        forbidden_x_columns=forbidden_x_columns,
+    )
+    return FeatureSeparationPlan(
+        x_columns=x_columns,
+        y_columns=["sample_uid", *[column for column in raw_y_columns if column != "sample_uid"]],
+        metadata_columns=["sample_uid", *[column for column in raw_metadata_columns if column != "sample_uid"]],
+        traceability_columns=["sample_uid", *[column for column in raw_traceability_columns if column != "sample_uid"]],
+        dropped_columns=dropped_columns,
+        forbidden_x_columns=sorted(forbidden_x_columns),
+        source_columns=source_columns,
+        row_count=row_count,
+    )
 
 
 def _dropped_columns(

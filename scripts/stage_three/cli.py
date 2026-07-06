@@ -48,8 +48,14 @@ from scripts.stage_three.extraction.runner import (
     run_host_network_feature_extraction,
     run_dns_feature_extraction,
 )
+from scripts.stage_three.labels.report import save_label_alignment_reports
+from scripts.stage_three.labels.runner import run_label_alignment
 from scripts.stage_three.model_ready.builder import build_model_ready_artifacts
 from scripts.stage_three.model_ready.report import save_model_ready_builder_reports
+from scripts.stage_three.dns_rebalance import (
+    DnsRebalanceRequest,
+    run_dns_supervised_rebalance,
+)
 from scripts.stage_three.quality.report import save_stage_three_quality_reports
 from scripts.stage_three.quality.runner import run_stage_three_quality_checks
 from scripts.stage_three.quality.leakage import run_stage_three_leakage_checks
@@ -74,6 +80,7 @@ from scripts.stage_three.requests import (
     ExtractFeaturesRequest,
     FinalReportRequest,
     ProbeRuntimeBackendRequest,
+    RebalanceDnsSupervisedRequest,
     RunLeakageChecksRequest,
     RunQualityChecksRequest,
     StageThreeBaseRequest,
@@ -97,6 +104,7 @@ STAGE_THREE_COMMANDS: tuple[str, ...] = (
     "align-labels",
     "build-sequences",
     "build-model-ready",
+    "rebalance-dns-supervised",
     "run-quality-checks",
     "run-leakage-checks",
     "trace-artifact",
@@ -110,6 +118,7 @@ COMMANDS_REQUIRING_DATABASE: frozenset[str] = frozenset(
         "align-labels",
         "build-sequences",
         "build-model-ready",
+        "rebalance-dns-supervised",
         "run-quality-checks",
         "run-leakage-checks",
         "trace-artifact",
@@ -154,8 +163,12 @@ def router_stage_three(
             _run_probe_runtime_backend(request)
         elif isinstance(request, ExtractFeaturesRequest) and not request.dry_run:
             _run_extract_features(request)
+        elif isinstance(request, AlignLabelsRequest) and not request.dry_run:
+            _run_align_labels(request)
         elif isinstance(request, BuildModelReadyRequest) and not request.dry_run:
             _run_build_model_ready(request)
+        elif isinstance(request, RebalanceDnsSupervisedRequest):
+            _run_rebalance_dns_supervised(request)
         elif isinstance(request, RunQualityChecksRequest) and not request.dry_run:
             _run_quality_checks(request)
         elif isinstance(request, RunLeakageChecksRequest) and not request.dry_run:
@@ -250,6 +263,20 @@ def build_stage_three_parser() -> argparse.ArgumentParser:
     build_model_ready.add_argument("--preprocessing-profile", default="tree_unscaled")
     build_model_ready.add_argument("--include-sequences", action="store_true")
     _add_execution_flags(build_model_ready)
+
+    rebalance_dns = subparsers.add_parser(
+        "rebalance-dns-supervised",
+        help="Dry-run or apply the DNS supervised 70/30 split rebuild.",
+    )
+    rebalance_dns.add_argument("--experiment-id", default="dns_rebalanced_70_30_v1")
+    rebalance_dns.add_argument("--feature-group", default="dns_lexical")
+    rebalance_dns.add_argument("--target", default="label_binary")
+    rebalance_dns.add_argument("--preprocessing-profile", default="tree_unscaled")
+    rebalance_dns.add_argument("--overwrite", action="store_true")
+    rebalance_dns.add_argument("--apply", action="store_true")
+    rebalance_dns.add_argument("--apply-catalog", action="store_true")
+    rebalance_dns.add_argument("--deactivate-existing-experiment")
+    rebalance_dns.add_argument("--dry-run", action="store_true")
 
     run_quality_checks = subparsers.add_parser(
         "run-quality-checks",
@@ -372,6 +399,21 @@ def _request_from_namespace(namespace: argparse.Namespace) -> StageThreeBaseRequ
                 "preprocessing-profile",
             ),
             include_sequences=bool(namespace.include_sequences),
+        )
+    if command == "rebalance-dns-supervised":
+        return RebalanceDnsSupervisedRequest(
+            command=command,
+            dry_run=not bool(namespace.apply) or dry_run,
+            experiment_id=_required_text(namespace.experiment_id, "experiment-id"),
+            feature_group=_required_text(namespace.feature_group, "feature-group"),
+            target=_required_text(namespace.target, "target"),
+            preprocessing_profile=_required_text(
+                namespace.preprocessing_profile,
+                "preprocessing-profile",
+            ),
+            overwrite=bool(namespace.overwrite),
+            apply_catalog=bool(namespace.apply_catalog),
+            deactivate_existing_experiment=_optional_text(namespace.deactivate_existing_experiment),
         )
     if command == "run-quality-checks":
         return RunQualityChecksRequest(
@@ -629,6 +671,50 @@ def _run_extract_features(request: ExtractFeaturesRequest) -> None:
     )
 
 
+def _run_align_labels(request: AlignLabelsRequest) -> None:
+    """Run streaming label alignment summaries for feature artifacts."""
+    try:
+        with session_scope() as session:
+            repository = ArtifactRepository(session)
+            result = run_label_alignment(
+                repository,
+                branch=request.branch,
+                role=request.role,
+                policy=request.label_policy,
+                storage_root=PATH_DATA_STORAGE,
+            )
+    except (SQLAlchemyError, ValueError, OSError) as exc:
+        console.print(
+            {
+                "service": "stage-three align-labels",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "Stage Three label alignment was not completed.",
+            }
+        )
+        raise SystemExit(1) from exc
+
+    result = save_label_alignment_reports(result)
+    status = "WARN" if result.summary.get("warnings") else "SUCCESS"
+    console.print(
+        {
+            "service": "stage-three align-labels",
+            "status": status,
+            "request": asdict(request),
+            "sample_count": result.summary["sample_count"],
+            "labeled_count": result.summary["labeled_count"],
+            "label_coverage": result.summary["label_coverage"],
+            "unlabeled_count": result.summary["unlabeled_count"],
+            "feature_artifact_count": result.summary["feature_artifact_count"],
+            "feature_groups": result.summary["feature_groups"],
+            "warnings": result.summary.get("warnings", []),
+            "report_paths": result.summary["report_paths"],
+            "message": "Stage Three label alignment completed.",
+        }
+    )
+
+
 def _run_build_model_ready(request: BuildModelReadyRequest) -> None:
     """Build and register final model-ready artifacts."""
     try:
@@ -686,6 +772,54 @@ def _run_build_model_ready(request: BuildModelReadyRequest) -> None:
             "message": "Stage Three model-ready artifact build completed.",
         }
     )
+
+
+def _run_rebalance_dns_supervised(request: RebalanceDnsSupervisedRequest) -> None:
+    """Run the DNS supervised split audit or apply the rebuild."""
+    try:
+        with session_scope() as session:
+            result = run_dns_supervised_rebalance(
+                session,
+                DnsRebalanceRequest(
+                    experiment_id=request.experiment_id,
+                    feature_group=request.feature_group,
+                    preprocessing_profile=request.preprocessing_profile,
+                    target=request.target,
+                    storage_root=PATH_DATA_STORAGE,
+                    dry_run=request.dry_run,
+                    overwrite=request.overwrite,
+                    apply_catalog=request.apply_catalog,
+                    deactivate_existing_experiment=request.deactivate_existing_experiment,
+                ),
+            )
+    except (SQLAlchemyError, ValueError, OSError) as exc:
+        console.print(
+            {
+                "service": "stage-three rebalance-dns-supervised",
+                "status": "ERROR",
+                "request": asdict(request),
+                "error": str(exc),
+                "message": "DNS supervised split rebalance was not completed.",
+            }
+        )
+        raise SystemExit(1) from exc
+
+    console.print(
+        {
+            "service": "stage-three rebalance-dns-supervised",
+            "status": result.status,
+            "request": asdict(request),
+            "selected_counts": result.selected_counts,
+            "duplicate_checks": result.duplicate_checks,
+            "catalog_updates": result.catalog_updates,
+            "output_artifacts": result.output_artifacts,
+            "warnings": result.warnings,
+            "report_paths": result.report_paths,
+            "message": "DNS supervised split rebalance completed.",
+        }
+    )
+    if result.status == "FAILED":
+        raise SystemExit(1)
 
 
 def _run_quality_checks(request: RunQualityChecksRequest) -> None:

@@ -42,6 +42,88 @@ DNS TEST:
   - Mendeley DNS Exfiltration Dataset
 ```
 
+### DNS supervised split policy 70/30
+
+Для supervised DNS baseline активная policy: `dns_supervised_70_30_v1`.
+Она строится не из исходного битого `TEST/csv`, а из валидных labeled DNS rows
+с traceability через `dns_lexical` feature artifacts.
+
+Итоговый split:
+
+| Роль | normal | attack | total |
+| --- | ---: | ---: | ---: |
+| `TRAIN` | 6,010,841 | 2,576,074 | 8,586,915 |
+| `VALIDATION` | 1,288,037 | 552,016 | 1,840,053 |
+| `TEST` | 1,288,037 | 552,016 | 1,840,053 |
+
+Правила исключения:
+
+- `dns/TEST/csv/dataset.csv` и все его chunked downstream artifacts не используются для final test;
+- `dns/VALIDATION/pcap/ens33-dns_amplification_attack.pcap` исключен полностью;
+- `dns/VALIDATION/pcap/ens33-dns_amplification_attack__f291ed87a1.pcap` используется только как ограниченный attack source;
+- существующие `TRAIN` attack rows (`409,076`) сохраняются в учете target distribution;
+- `label_binary=NULL` не трактуется как normal и не попадает в supervised split;
+- raw-файлы физически не удаляются, catalog/downstream artifacts помечаются `SKIPPED` с traceability.
+
+Команда воспроизведения:
+
+```powershell
+python manage.py stage-three rebalance-dns-supervised --experiment-id dns_rebalanced_70_30_v1
+
+python manage.py stage-three rebalance-dns-supervised `
+  --experiment-id dns_rebalanced_70_30_v1 `
+  --apply `
+  --apply-catalog `
+  --deactivate-existing-experiment exp001
+```
+
+Новый model-ready path:
+
+```text
+parquet/model_ready/dns_rebalanced_70_30_v1/dns/tree_unscaled/{TRAIN,VALIDATION,TEST}/
+```
+
+Вердикт готовности:
+
+- DNS model-ready данные готовы для обучения supervised tabular моделей.
+- Использовать только experiment `dns_rebalanced_70_30_v1`.
+- `TRAIN` можно использовать для обучения и fit preprocessing.
+- `VALIDATION` можно использовать для tuning/threshold selection.
+- `TEST` использовать только для финальной evaluation.
+- `run-quality-checks` для `dns_rebalanced_70_30_v1` возвращает `PASS` без `blocking_issues` и без предупреждений по timestamp.
+- `run-leakage-checks` для `dns_rebalanced_70_30_v1` возвращает `PASS`.
+
+Полные пути к model-ready данным:
+
+```text
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\X.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\y.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\metadata.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TRAIN\traceability.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\X.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\y.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\metadata.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\VALIDATION\traceability.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\X.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\y.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\metadata.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\TEST\traceability.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\EXPERIMENTS\split_index.parquet
+C:\Users\Public\PythonProjects\storage\parquet\model_ready\dns_rebalanced_70_30_v1\dns\tree_unscaled\EXPERIMENTS\preprocessing_metadata.parquet
+```
+
+Полные пути к отчетам:
+
+```text
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\dns_rebalanced_70_30_v1_dns_rebalanced_split_report.md
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\dns_rebalanced_70_30_v1_dns_rebalanced_split_report.json
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task18-stage-three-quality-checks.md
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task18-stage-three-quality-checks.md
+C:\Users\Public\PythonProjects\storage\reports\ru\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+C:\Users\Public\PythonProjects\storage\reports\en\stage-three\Task19-stage-three-leakage-and-traceability-checks.md
+```
+
 ### DNS feature purpose
 
 | Датасет | Attack lifecycle | Основные feature groups |

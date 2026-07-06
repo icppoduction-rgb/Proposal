@@ -7,9 +7,11 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
 import pyarrow.parquet as pq
+import pyarrow as pa
 
 from config import PATH_DATA_STORAGE
 from scripts.db.models import FeatureArtifact
@@ -19,7 +21,10 @@ from scripts.stage_three.model_ready.registry import (
     ModelReadyArtifactRegistryService,
     RegisteredModelReadyArtifact,
 )
-from scripts.stage_three.model_ready.separator import FeatureSeparationResult, separate_feature_artifacts
+from scripts.stage_three.model_ready.separator import (
+    FeatureSeparationPlan,
+    plan_feature_artifact_separation,
+)
 from scripts.stage_three.model_ready.sequence_builder import (
     SequencePolicy,
     build_sequence_windows,
@@ -27,7 +32,6 @@ from scripts.stage_three.model_ready.sequence_builder import (
 )
 from scripts.stage_three.model_ready.split_index import (
     SplitIndexSummary,
-    build_split_index_rows,
     validate_x_schema_consistency,
 )
 from scripts.stage_three.preprocessing.profiles import get_scaling_profile
@@ -115,6 +119,17 @@ class ModelReadyBuildResult:
         }
 
 
+@dataclass(frozen=True)
+class _RoleBuildInput:
+    role: str
+    feature_artifacts: list[FeatureArtifact]
+    part_paths: list[Path]
+    separation_plan: FeatureSeparationPlan
+    source_types: dict[str, pa.DataType]
+    source_feature_ids: list[int]
+    first_feature_artifact_id: int | None
+
+
 def build_model_ready_artifacts(
     repository: ArtifactRepository,
     *,
@@ -135,9 +150,10 @@ def build_model_ready_artifacts(
     registry = ModelReadyArtifactRegistryService(storage_root=storage_root or PATH_DATA_STORAGE)
     roles = [role] if role is not None else list(MODEL_READY_ROLES)
     role_results: list[ModelReadyRoleBuildResult] = []
-    y_rows_by_role: dict[str, list[dict[str, Any]]] = {}
+    y_artifact_paths_by_role: dict[str, Path] = {}
     x_columns_by_role: dict[str, list[str]] = {}
     warnings: list[str] = []
+    role_inputs: list[_RoleBuildInput] = []
 
     for split_role in roles:
         feature_artifacts = repository.list_successful_feature_artifacts(
@@ -149,13 +165,36 @@ def build_model_ready_artifacts(
             raise ValueError(
                 f"no successful feature_artifacts found for branch={branch}, role={split_role}, "
                 f"feature_group={feature_group or '*'}"
-            )
+        )
         part_paths = _feature_part_paths(feature_artifacts, storage_root=storage_root or PATH_DATA_STORAGE)
-        separation = separate_feature_artifacts(part_paths, feature_catalog=catalog)
-        if target not in separation.y_columns:
+        separation_plan = plan_feature_artifact_separation(part_paths, feature_catalog=catalog)
+        if target not in separation_plan.y_columns:
             raise ValueError(f"target column {target!r} is missing from y columns for role={split_role}")
+        source_types = _source_data_types(part_paths)
         source_feature_ids = [int(artifact.id) for artifact in feature_artifacts]
         first_feature_artifact_id = source_feature_ids[0] if source_feature_ids else None
+        x_columns_by_role[split_role] = list(separation_plan.x_columns)
+        role_inputs.append(
+            _RoleBuildInput(
+                role=split_role,
+                feature_artifacts=feature_artifacts,
+                part_paths=part_paths,
+                separation_plan=separation_plan,
+                source_types=source_types,
+                source_feature_ids=source_feature_ids,
+                first_feature_artifact_id=first_feature_artifact_id,
+            )
+        )
+
+    x_schema = validate_x_schema_consistency(x_columns_by_role)
+
+    for role_input in role_inputs:
+        split_role = role_input.role
+        part_paths = role_input.part_paths
+        separation_plan = role_input.separation_plan
+        source_types = role_input.source_types
+        source_feature_ids = role_input.source_feature_ids
+        first_feature_artifact_id = role_input.first_feature_artifact_id
         role_metadata = _role_metadata(
             experiment_id=experiment_id,
             branch=branch,
@@ -165,12 +204,15 @@ def build_model_ready_artifacts(
             role=split_role,
             source_feature_artifact_ids=source_feature_ids,
             part_paths=part_paths,
-            separation=separation,
+            separation=separation_plan,
         )
+        target_distribution: Counter[str] = Counter()
         artifacts = [
-            registry.register_rows(
+            registry.register_row_batches(
                 repository,
-                separation.tables.X,
+                _separated_row_batches(part_paths, separation_plan, data_type="X"),
+                columns=separation_plan.x_columns,
+                schema=_schema_for(separation_plan.x_columns, source_types),
                 experiment_id=experiment_id,
                 branch=branch,
                 preprocessing_profile=preprocessing_profile,
@@ -178,14 +220,22 @@ def build_model_ready_artifacts(
                 data_type="X",
                 file_name="X.parquet",
                 feature_artifact_id=first_feature_artifact_id,
-                feature_count=len(separation.x_columns),
-                excluded_columns_json={"dropped_columns": [asdict(item) for item in separation.dropped_columns]},
+                feature_count=len(separation_plan.x_columns),
+                excluded_columns_json={"dropped_columns": [asdict(item) for item in separation_plan.dropped_columns]},
                 metadata_json=role_metadata,
                 resume=resume,
             ),
-            registry.register_rows(
+            registry.register_row_batches(
                 repository,
-                _target_rows(separation.tables.y, target=target),
+                _separated_row_batches(
+                    part_paths,
+                    separation_plan,
+                    data_type="y",
+                    target=target,
+                    target_distribution=target_distribution,
+                ),
+                columns=["sample_uid", target],
+                schema=_schema_for(["sample_uid", target], source_types),
                 experiment_id=experiment_id,
                 branch=branch,
                 preprocessing_profile=preprocessing_profile,
@@ -193,13 +243,15 @@ def build_model_ready_artifacts(
                 data_type="y",
                 file_name="y.parquet",
                 feature_artifact_id=first_feature_artifact_id,
-                label_distribution_json=_target_distribution(separation.tables.y, target),
+                label_distribution_factory=lambda counter=target_distribution: dict(sorted(counter.items())),
                 metadata_json=role_metadata,
                 resume=resume,
             ),
-            registry.register_rows(
+            registry.register_row_batches(
                 repository,
-                separation.tables.metadata,
+                _separated_row_batches(part_paths, separation_plan, data_type="metadata"),
+                columns=separation_plan.metadata_columns,
+                schema=_schema_for(separation_plan.metadata_columns, source_types),
                 experiment_id=experiment_id,
                 branch=branch,
                 preprocessing_profile=preprocessing_profile,
@@ -210,9 +262,11 @@ def build_model_ready_artifacts(
                 metadata_json=role_metadata,
                 resume=resume,
             ),
-            registry.register_rows(
+            registry.register_row_batches(
                 repository,
-                separation.tables.traceability,
+                _separated_row_batches(part_paths, separation_plan, data_type="traceability"),
+                columns=separation_plan.traceability_columns,
+                schema=_schema_for(separation_plan.traceability_columns, source_types),
                 experiment_id=experiment_id,
                 branch=branch,
                 preprocessing_profile=preprocessing_profile,
@@ -237,33 +291,42 @@ def build_model_ready_artifacts(
             sequence_policy=sequence_policy,
             resume=resume,
         )
-        y_rows = _target_rows(separation.tables.y, target=target)
-        y_rows_by_role[split_role] = y_rows
-        x_columns_by_role[split_role] = list(separation.x_columns)
+        y_artifact_paths_by_role[split_role] = _resolve_storage_path(artifacts[1].artifact_path, storage_root=storage_root or PATH_DATA_STORAGE)
         role_results.append(
             ModelReadyRoleBuildResult(
                 role=split_role,
                 source_feature_artifact_ids=source_feature_ids,
                 artifacts=artifacts,
-                x_row_count=len(separation.tables.X),
-                y_row_count=len(y_rows),
-                feature_count=len(separation.x_columns),
-                target_distribution=_target_distribution(separation.tables.y, target),
-                x_columns=list(separation.x_columns),
+                x_row_count=separation_plan.row_count,
+                y_row_count=separation_plan.row_count,
+                feature_count=len(separation_plan.x_columns),
+                target_distribution=dict(sorted(target_distribution.items())),
+                x_columns=list(separation_plan.x_columns),
                 sequence_artifact=sequence_artifact,
             )
         )
 
-    x_schema = validate_x_schema_consistency(x_columns_by_role)
-    split_rows, split_summary = build_split_index_rows(
-        y_rows_by_role,
-        experiment_id=experiment_id,
-        branch=branch,
-        preprocessing_profile=preprocessing_profile,
-    )
-    split_index_artifact = registry.register_rows(
+    split_distribution: Counter[str] = Counter()
+    split_index_artifact = registry.register_row_batches(
         repository,
-        split_rows,
+        _split_index_row_batches(
+            y_artifact_paths_by_role,
+            experiment_id=experiment_id,
+            branch=branch,
+            preprocessing_profile=preprocessing_profile,
+            distribution=split_distribution,
+        ),
+        columns=["experiment_id", "branch", "preprocessing_profile", "role", "sample_uid", "row_index"],
+        schema=pa.schema(
+            [
+                ("experiment_id", pa.string()),
+                ("branch", pa.string()),
+                ("preprocessing_profile", pa.string()),
+                ("role", pa.string()),
+                ("sample_uid", pa.string()),
+                ("row_index", pa.int64()),
+            ]
+        ),
         experiment_id=experiment_id,
         branch=branch,
         preprocessing_profile=preprocessing_profile,
@@ -280,6 +343,10 @@ def build_model_ready_artifacts(
             "schema_version": MODEL_READY_SCHEMA_VERSION,
         },
         resume=resume,
+    )
+    split_summary = SplitIndexSummary(
+        row_count=split_index_artifact.sample_count or 0,
+        split_distribution=dict(split_distribution),
     )
     preprocessing_metadata_artifact = registry.register_rows(
         repository,
@@ -364,6 +431,25 @@ def _resolve_storage_path(path: str, *, storage_root: str | Path) -> Path:
     return Path(storage_root).expanduser() / resolved
 
 
+def _source_data_types(part_paths: list[Path]) -> dict[str, pa.DataType]:
+    data_types: dict[str, pa.DataType] = {}
+    for path in part_paths:
+        schema = pq.read_schema(path)
+        for field in schema:
+            data_types.setdefault(field.name, field.type)
+    return data_types
+
+
+def _schema_for(columns: list[str], source_types: dict[str, pa.DataType]) -> pa.Schema:
+    fields: list[pa.Field] = []
+    for column in columns:
+        if column == "sample_uid":
+            fields.append(pa.field(column, pa.string()))
+        else:
+            fields.append(pa.field(column, source_types.get(column, pa.string())))
+    return pa.schema(fields)
+
+
 def _role_metadata(
     *,
     experiment_id: str,
@@ -374,7 +460,7 @@ def _role_metadata(
     role: str,
     source_feature_artifact_ids: list[int],
     part_paths: list[Path],
-    separation: FeatureSeparationResult,
+    separation: FeatureSeparationPlan,
 ) -> dict[str, Any]:
     return {
         "experiment_id": experiment_id,
@@ -416,6 +502,81 @@ def _target_distribution(rows: list[dict[str, Any]], target: str) -> dict[str, i
         value = row.get(target)
         counter["unlabeled" if value is None else str(value)] += 1
     return dict(sorted(counter.items()))
+
+
+def _separated_row_batches(
+    part_paths: list[Path],
+    separation: FeatureSeparationPlan,
+    *,
+    data_type: str,
+    target: str | None = None,
+    target_distribution: Counter[str] | None = None,
+    batch_size: int = 50_000,
+) -> Iterable[list[dict[str, Any]]]:
+    row_offset = 0
+    for path in part_paths:
+        parquet_file = pq.ParquetFile(path)
+        for batch in parquet_file.iter_batches(batch_size=batch_size):
+            rows = batch.to_pylist()
+            output: list[dict[str, Any]] = []
+            for local_index, row in enumerate(rows):
+                sample_uid = _sample_uid(row, row_offset + local_index)
+                if data_type == "X":
+                    output.append({column: row.get(column) for column in separation.x_columns})
+                elif data_type == "y":
+                    if target is None:
+                        raise ValueError("target is required for y row batches")
+                    value = row.get(target)
+                    if target_distribution is not None:
+                        target_distribution["unlabeled" if value is None else str(value)] += 1
+                    output.append({"sample_uid": sample_uid, target: value})
+                elif data_type == "metadata":
+                    output.append(_row_with_sample_uid(row, separation.metadata_columns, sample_uid))
+                elif data_type == "traceability":
+                    output.append(_row_with_sample_uid(row, separation.traceability_columns, sample_uid))
+                else:
+                    raise ValueError(f"unsupported separated data_type: {data_type!r}")
+            row_offset += len(rows)
+            if output:
+                yield output
+
+
+def _split_index_row_batches(
+    y_artifact_paths_by_role: dict[str, Path],
+    *,
+    experiment_id: str,
+    branch: str,
+    preprocessing_profile: str,
+    distribution: Counter[str],
+    batch_size: int = 50_000,
+) -> Iterable[list[dict[str, Any]]]:
+    for role in MODEL_READY_ROLES:
+        path = y_artifact_paths_by_role.get(role)
+        if path is None:
+            continue
+        row_index = 0
+        parquet_file = pq.ParquetFile(path)
+        for batch in parquet_file.iter_batches(batch_size=batch_size, columns=["sample_uid"]):
+            rows = batch.to_pylist()
+            output: list[dict[str, Any]] = []
+            for row in rows:
+                sample_uid = row.get("sample_uid")
+                if sample_uid is None or not str(sample_uid).strip():
+                    raise ValueError(f"y row for role={role} is missing sample_uid at row_index={row_index}")
+                output.append(
+                    {
+                        "experiment_id": experiment_id,
+                        "branch": branch,
+                        "preprocessing_profile": preprocessing_profile,
+                        "role": role,
+                        "sample_uid": str(sample_uid),
+                        "row_index": row_index,
+                    }
+                )
+                row_index += 1
+                distribution[role] += 1
+            if output:
+                yield output
 
 
 def _build_sequence_artifact(
@@ -470,6 +631,22 @@ def _build_sequence_artifact(
         },
         resume=resume,
     )
+
+
+def _row_with_sample_uid(row: dict[str, Any], columns: list[str], sample_uid: str) -> dict[str, Any]:
+    output = {"sample_uid": sample_uid}
+    for column in columns:
+        if column != "sample_uid":
+            output[column] = row.get(column)
+    return output
+
+
+def _sample_uid(row: dict[str, Any], index: int) -> str:
+    for key in ("sample_uid", "event_uid", "window_id", "flow_id", "sequence_id"):
+        value = row.get(key)
+        if value is not None and str(value).strip():
+            return str(value)
+    return f"sample-{index}"
 
 
 def _preprocessing_metadata_row(

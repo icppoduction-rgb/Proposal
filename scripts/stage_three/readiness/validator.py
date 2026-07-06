@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pyarrow.parquet as pq
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from config import (
@@ -28,6 +28,7 @@ ALLOWED_PARSER_STATUSES = frozenset({"SUCCESS", "PARTIAL_SUCCESS"})
 ALLOWED_ARTIFACT_STATUSES = frozenset({"SUCCESS", "PARTIAL_SUCCESS"})
 ALLOWED_DATASET_FILE_STATUSES = frozenset({"PARSED", "PARTIALLY_PARSED"})
 
+DRY_RUN_SOURCE_GROUPS = frozenset({"STAGE_TWO_E2E_DRY_RUN"})
 BLOCKING_PARSER_STATUSES = frozenset({"RUNNING", "FAILED", "SKIPPED"})
 BLOCKING_ARTIFACT_STATUSES = frozenset({"PENDING", "RUNNING", "FAILED", "SKIPPED", "BLOCKED"})
 BLOCKING_DATASET_FILE_STATUSES = frozenset(
@@ -187,7 +188,12 @@ def _fetch_normalized_rows(session: Session, *, branch: str, role: str) -> list[
         .join(ParserRun, NormalizedArtifact.parser_run_id == ParserRun.id)
         .join(DatasetFile, NormalizedArtifact.file_id == DatasetFile.id)
         .join(Dataset, NormalizedArtifact.dataset_id == Dataset.id)
-        .where(NormalizedArtifact.branch == branch, NormalizedArtifact.role == role)
+        .where(
+            NormalizedArtifact.branch == branch,
+            NormalizedArtifact.role == role,
+            Dataset.is_active.is_(True),
+            or_(Dataset.source_group.is_(None), Dataset.source_group.notin_(DRY_RUN_SOURCE_GROUPS)),
+        )
         .order_by(NormalizedArtifact.id.asc())
     )
     return [

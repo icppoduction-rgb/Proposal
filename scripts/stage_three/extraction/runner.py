@@ -11,11 +11,11 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from config import FEATURES_PATH, PATH_DATA_STORAGE
-from scripts.db.models import NormalizedArtifact
+from scripts.db.models import Dataset, NormalizedArtifact
 from scripts.stage_three.extraction.base import (
     FeatureExtractionArtifact,
     FeatureExtractionResult,
@@ -55,6 +55,7 @@ from scripts.stage_three.runtime.resources import resolve_stage_three_runtime_se
 
 
 CORE_FEATURE_GROUPS: tuple[str, ...] = (*DNS_MVP_FEATURE_GROUPS, *HOST_FEATURE_GROUPS, *NETWORK_FEATURE_GROUPS)
+DRY_RUN_SOURCE_GROUPS = frozenset({"STAGE_TWO_E2E_DRY_RUN"})
 
 
 def fetch_dns_normalized_artifacts(session: Session, *, branch: str, role: str) -> list[NormalizedArtifactInput]:
@@ -74,10 +75,13 @@ def fetch_normalized_artifacts(
     """Fetch normalized artifacts by branch, role, and optional source-format filter."""
     statement = (
         select(NormalizedArtifact)
+        .join(Dataset, NormalizedArtifact.dataset_id == Dataset.id)
         .where(
             NormalizedArtifact.branch == branch,
             NormalizedArtifact.role == role,
             NormalizedArtifact.status.in_(("SUCCESS", "PARTIAL_SUCCESS")),
+            Dataset.is_active.is_(True),
+            or_(Dataset.source_group.is_(None), Dataset.source_group.notin_(DRY_RUN_SOURCE_GROUPS)),
         )
         .order_by(NormalizedArtifact.id.asc())
     )
