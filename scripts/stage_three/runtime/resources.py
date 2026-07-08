@@ -173,11 +173,22 @@ def resolve_stage_three_runtime_settings(
     profile_name: str | None = None,
     backend: str | None = None,
     psutil_module: Any | None = None,
+    batch_rows: int | None = None,
+    reserved_ram_gb: int | None = None,
+    soft_ram_limit_gb: int | None = None,
+    hard_ram_limit_gb: int | None = None,
 ) -> StageThreeRuntimeSettings:
     """Resolve config-backed Stage Three runtime settings without touching the DB."""
-    profile = _configured_profile(profile_name or STAGE_THREE_DEFAULT_PROFILE)
+    profile = _configured_profile(
+        profile_name or STAGE_THREE_DEFAULT_PROFILE,
+        batch_rows=batch_rows,
+        reserved_ram_gb=reserved_ram_gb,
+        soft_ram_limit_gb=soft_ram_limit_gb,
+        hard_ram_limit_gb=hard_ram_limit_gb,
+    )
     memory_probe = _probe_memory(psutil_module=psutil_module)
     warnings = tuple(memory_probe["warnings"])
+    profile = _clamp_memory_limits_to_host(profile=profile, total_ram_gb=memory_probe["total_ram_gb"])
 
     settings = StageThreeRuntimeSettings(
         resource_profile=profile,
@@ -203,21 +214,52 @@ def assert_stage_three_memory_available(settings: StageThreeRuntimeSettings) -> 
         )
 
 
-def _configured_profile(profile_name: str) -> StageThreeResourceProfile:
+def _configured_profile(
+    profile_name: str,
+    *,
+    batch_rows: int | None = None,
+    reserved_ram_gb: int | None = None,
+    soft_ram_limit_gb: int | None = None,
+    hard_ram_limit_gb: int | None = None,
+) -> StageThreeResourceProfile:
     base_profile = get_stage_three_resource_profile(profile_name)
     return replace(
         base_profile,
         default_workers=STAGE_THREE_DEFAULT_WORKERS,
         max_workers=STAGE_THREE_MAX_WORKERS,
         db_workers=STAGE_THREE_DB_WORKERS,
-        batch_rows=STAGE_THREE_BATCH_ROWS,
-        parquet_row_group_size=STAGE_THREE_PARQUET_ROW_GROUP_SIZE,
-        reserved_ram_gb=STAGE_THREE_RESERVED_RAM_GB,
-        soft_ram_limit_gb=STAGE_THREE_SOFT_RAM_LIMIT_GB,
-        hard_ram_limit_gb=STAGE_THREE_HARD_RAM_LIMIT_GB,
+        batch_rows=_resolve_positive_override(batch_rows, "batch_rows", fallback=STAGE_THREE_BATCH_ROWS),
+        parquet_row_group_size=_resolve_positive_override(
+            batch_rows,
+            "batch_rows",
+            fallback=STAGE_THREE_PARQUET_ROW_GROUP_SIZE,
+        ),
+        reserved_ram_gb=_resolve_positive_override(reserved_ram_gb, "reserved_ram_gb", fallback=STAGE_THREE_RESERVED_RAM_GB),
+        soft_ram_limit_gb=_resolve_positive_override(soft_ram_limit_gb, "soft_ram_limit_gb", fallback=STAGE_THREE_SOFT_RAM_LIMIT_GB),
+        hard_ram_limit_gb=_resolve_positive_override(hard_ram_limit_gb, "hard_ram_limit_gb", fallback=STAGE_THREE_HARD_RAM_LIMIT_GB),
         gpu_memory_soft_limit_gb=STAGE_THREE_GPU_MEMORY_SOFT_LIMIT_GB,
         gpu_memory_hard_limit_gb=STAGE_THREE_GPU_MEMORY_HARD_LIMIT_GB,
     )
+
+
+def _resolve_positive_override(value: int | None, name: str, *, fallback: int) -> int:
+    if value is None:
+        return fallback
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def _clamp_memory_limits_to_host(profile: StageThreeResourceProfile, total_ram_gb: int) -> StageThreeResourceProfile:
+    max_processing_gb = max(0, total_ram_gb - profile.reserved_ram_gb)
+    hard_ram_limit_gb = min(profile.hard_ram_limit_gb, max_processing_gb)
+    soft_ram_limit_gb = min(profile.soft_ram_limit_gb, hard_ram_limit_gb)
+    if hard_ram_limit_gb == 0:
+        raise ValueError(
+            "reserved RAM is too large for the host; reduce reserved-ram-gb "
+            f"or keep the default STAGE_THREE_RESERVED_RAM_GB={STAGE_THREE_RESERVED_RAM_GB}"
+        )
+    return replace(profile, hard_ram_limit_gb=hard_ram_limit_gb, soft_ram_limit_gb=soft_ram_limit_gb)
 
 
 def _probe_memory(*, psutil_module: Any | None) -> dict[str, object]:

@@ -87,6 +87,11 @@ python manage.py stage-three extract-features --branch host --role TRAIN --featu
 python manage.py stage-three extract-features --branch host --role TRAIN --feature-group host_logs --experiment-id exp001-host --resume
 ```
 
+```powershell
+python manage.py stage-three extract-features --branch host --role TRAIN --feature-group host_syscall --experiment-id exp001-host --resume `
+  --profile aggressive --batch-rows 1000000 --reserved-ram-gb 10 --soft-ram-limit-gb 50 --hard-ram-limit-gb 54
+```
+
 Для полноценного Host experiment повторить нужные feature groups для `VALIDATION` и `TEST`:
 
 ```powershell

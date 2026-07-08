@@ -6,6 +6,7 @@ This index replaces the scattered top-level documents and shows where the key in
 
 | Document | Purpose |
 | --- | --- |
+| [repository_analysis.md](repository_analysis.md) | Current repository analysis: entrypoints, CLI routing, Stage One/Two/Three, storage, tests, and gaps. |
 | [project_overview_and_research_context.md](project_overview_and_research_context.md) | Research context, proposal-level architecture, questions, objectives, methodology, scope, plan, and limitations. |
 | [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md) | Unified DNS and Host dataset strategy with explicit `TRAIN` / `VALIDATION` / `TEST` separation. |
 | [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) | Feature extraction map, feature catalogue groups, schema requirements, leakage exclusions, and implementation priorities. |
@@ -33,11 +34,11 @@ This index replaces the scattered top-level documents and shows where the key in
 
 ## Reading order
 
-1. For the research proposal, read [project_overview_and_research_context.md](project_overview_and_research_context.md).
-2. For dataset selection, read [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md).
-3. For feature engineering implementation, read [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md).
-4. For running Stage Three, read [stage-three/usage_guide.md](stage-three/usage_guide.md) and [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md).
-5. For current-code verification, read [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md).
+1. For current-code verification, read [repository_analysis.md](repository_analysis.md), then [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md).
+2. For the research proposal, read [project_overview_and_research_context.md](project_overview_and_research_context.md).
+3. For dataset selection, read [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md).
+4. For feature engineering implementation, read [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md).
+5. For running Stage Three, read [stage-three/usage_guide.md](stage-three/usage_guide.md) and [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md).
 
 ## Architecture invariants
 

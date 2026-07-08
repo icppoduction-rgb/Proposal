@@ -12,6 +12,9 @@ class StageThreeBaseRequest:
     command: str
     dry_run: bool = False
     resume: bool = False
+    json_output: bool = False
+    verbose: bool = False
+    quiet: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,10 @@ class ProbeRuntimeBackendRequest(StageThreeBaseRequest):
     backend: str = "auto"
     profile: str | None = None
     skip_probe: bool = False
+    batch_rows: int | None = None
+    reserved_ram_gb: int | None = None
+    soft_ram_limit_gb: int | None = None
+    hard_ram_limit_gb: int | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +53,12 @@ class ExtractFeaturesRequest(StageThreeBaseRequest):
     role: str = ""
     feature_group: str = ""
     experiment_id: str | None = None
+    profile: str | None = None
+    batch_rows: int | None = None
+    reserved_ram_gb: int | None = None
+    soft_ram_limit_gb: int | None = None
+    hard_ram_limit_gb: int | None = None
+    workers: int | None = None
 
 
 @dataclass(frozen=True)

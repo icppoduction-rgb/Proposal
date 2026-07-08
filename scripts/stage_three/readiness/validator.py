@@ -29,6 +29,8 @@ ALLOWED_ARTIFACT_STATUSES = frozenset({"SUCCESS", "PARTIAL_SUCCESS"})
 ALLOWED_DATASET_FILE_STATUSES = frozenset({"PARSED", "PARTIALLY_PARSED"})
 
 DRY_RUN_SOURCE_GROUPS = frozenset({"STAGE_TWO_E2E_DRY_RUN"})
+SUPERSEDED_MARKERS = frozenset({"quarantined", "superseded"})
+SPLIT_SOURCE_ORIGINAL_MARKER = "split-source original skipped"
 BLOCKING_PARSER_STATUSES = frozenset({"RUNNING", "FAILED", "SKIPPED"})
 BLOCKING_ARTIFACT_STATUSES = frozenset({"PENDING", "RUNNING", "FAILED", "SKIPPED", "BLOCKED"})
 BLOCKING_DATASET_FILE_STATUSES = frozenset(
@@ -126,7 +128,7 @@ def validate_stage_three_inputs(
 ) -> StageThreeReadinessResult:
     """Run the Stage Three input readiness gate for one branch/role."""
     root = _resolve_storage_root(storage_root)
-    rows = _fetch_normalized_rows(session, branch=request.branch, role=request.role)
+    rows = _filter_active_input_rows(_fetch_normalized_rows(session, branch=request.branch, role=request.role))
     checks: list[ReadinessCheck] = []
 
     checks.append(_check_required_schema_files(feature_schema_path, model_ready_schema_path))
@@ -152,7 +154,7 @@ def validate_stage_three_inputs(
         normalized_artifact_count=len(rows),
         normalized_artifacts_by_status=_count_statuses(row.artifact.status for row in rows),
         parser_runs_by_status=_count_statuses(row.parser_run.status for row in rows),
-        dataset_files_by_status=_count_statuses(row.dataset_file.status for row in rows),
+        dataset_files_by_status=_count_statuses(_effective_dataset_file_status(row) for row in rows),
         checks=checks,
         blocking_issues=blocking_issues,
         next_actions=_next_actions(status, request, blocking_issues),
@@ -205,6 +207,40 @@ def _fetch_normalized_rows(session: Session, *, branch: str, role: str) -> list[
         )
         for artifact, parser_run, dataset_file, dataset in session.execute(statement).all()
     ]
+
+
+def _filter_active_input_rows(rows: list[_ArtifactRow]) -> list[_ArtifactRow]:
+    """Drop catalog rows that should not be active Stage Three inputs."""
+    return [
+        row
+        for row in rows
+        if not (_is_superseded_quarantined_row(row) or _is_split_source_original_row(row))
+    ]
+
+
+def _is_superseded_quarantined_row(row: _ArtifactRow) -> bool:
+    if row.artifact.status != "SKIPPED" or row.parser_run.status != "SKIPPED":
+        return False
+    message = str(row.parser_run.error_message or row.artifact.metadata_json or "").lower()
+    return all(marker in message for marker in SUPERSEDED_MARKERS)
+
+
+def _is_split_source_original_row(row: _ArtifactRow) -> bool:
+    if (
+        row.artifact.status != "SKIPPED"
+        or row.parser_run.status != "SKIPPED"
+        or row.dataset_file.status != "SKIPPED"
+    ):
+        return False
+    message = " ".join(
+        str(value or "").lower()
+        for value in (
+            row.parser_run.error_message,
+            row.dataset_file.error_message,
+            row.artifact.metadata_json,
+        )
+    )
+    return SPLIT_SOURCE_ORIGINAL_MARKER in message
 
 
 def _check_required_schema_files(
@@ -268,15 +304,28 @@ def _check_parser_run_statuses(rows: list[_ArtifactRow]) -> ReadinessCheck:
 
 
 def _check_dataset_file_statuses(rows: list[_ArtifactRow]) -> ReadinessCheck:
-    counts = _count_statuses(row.dataset_file.status for row in rows)
+    effective_statuses = [_effective_dataset_file_status(row) for row in rows]
+    counts = _count_statuses(effective_statuses)
     blocking = _statuses_present(counts, BLOCKING_DATASET_FILE_STATUSES)
     partial_count = counts.get("PARTIALLY_PARSED", 0)
+    artifact_backed_skipped = [
+        {
+            "dataset_file_id": row.dataset_file.id,
+            "artifact_id": row.artifact.id,
+            "parser_run_id": row.parser_run.id,
+            "file_path": row.dataset_file.file_path,
+        }
+        for row, effective_status in zip(rows, effective_statuses, strict=True)
+        if row.dataset_file.status == "SKIPPED" and effective_status != "SKIPPED"
+    ]
     status = FAIL if blocking else (WARN if partial_count else PASS)
     message = "dataset_files statuses are compatible with feature extraction."
     if blocking:
         message = "Some dataset_files statuses are incompatible with downstream feature extraction."
     elif partial_count:
         message = "dataset_files include PARTIALLY_PARSED rows; downstream can proceed with warnings."
+    elif artifact_backed_skipped:
+        message = "dataset_files include SKIPPED helper/context rows with usable normalized artifacts."
     return ReadinessCheck(
         name="dataset_file_statuses",
         status=status,
@@ -285,8 +334,19 @@ def _check_dataset_file_statuses(rows: list[_ArtifactRow]) -> ReadinessCheck:
         details={
             "allowed_statuses": sorted(ALLOWED_DATASET_FILE_STATUSES),
             "counts": counts,
+            "artifact_backed_skipped": artifact_backed_skipped,
         },
     )
+
+
+def _effective_dataset_file_status(row: _ArtifactRow) -> str:
+    if (
+        row.dataset_file.status == "SKIPPED"
+        and row.parser_run.status in ALLOWED_PARSER_STATUSES
+        and row.artifact.status in ALLOWED_ARTIFACT_STATUSES
+    ):
+        return "PARTIALLY_PARSED" if row.artifact.status == "PARTIAL_SUCCESS" else "PARSED"
+    return str(row.dataset_file.status or "<NULL>")
 
 
 def _check_dataset_links(rows: list[_ArtifactRow], request: ValidateInputsRequest) -> ReadinessCheck:

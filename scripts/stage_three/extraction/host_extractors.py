@@ -76,6 +76,18 @@ SEVERITY_CODES = {
     "alert": 4,
     "emergency": 4,
 }
+_HOST_COLUMN_CACHE_KEYS: tuple[str, ...] = (
+    "event_type",
+    "raw_event_name",
+    "source_format",
+    "syscall_name",
+    "process_name",
+    "process",
+    "process_id",
+    "file_path",
+    "metric_value",
+    "metric_name",
+)
 
 
 def host_feature_columns(feature_group: str) -> tuple[str, ...]:
@@ -158,9 +170,11 @@ class _HostContext:
         self.features_rows = features_rows
         self.raw_rows = raw_rows
         self.metadata_rows = metadata_rows
-        self.event_types = string_values(table, "event_type")
-        self.raw_event_names = string_values(table, "raw_event_name")
-        self.source_formats = string_values(table, "source_format")
+        self._columns: dict[str, list[Any]] = self._build_column_cache(table)
+        self._missing_columns: list[Any] = [None] * table.num_rows
+        self.event_types = self._string_values("event_type")
+        self.raw_event_names = self._string_values("raw_event_name")
+        self.source_formats = self._string_values("source_format")
 
     @classmethod
     def from_table(cls, table: pa.Table) -> "_HostContext":
@@ -171,9 +185,23 @@ class _HostContext:
             metadata_rows=json_rows(table, "metadata_json"),
         )
 
+    @staticmethod
+    def _build_column_cache(table: pa.Table) -> dict[str, list[Any]]:
+        requested = {column for column in table.column_names if column in _HOST_COLUMN_CACHE_KEYS}
+        return {column: nullable_values(table, column) for column in requested}
+
+    def _column_values(self, column: str) -> list[Any]:
+        return self._columns.get(column, self._missing_columns)
+
+    def _string_values(self, column: str) -> list[str | None]:
+        return [
+            None if value is None else str(value).strip()
+            for value in self._column_values(column)
+        ]
+
     def column_or_payload(self, row_index: int, columns: tuple[str, ...], payload_keys: tuple[str, ...]) -> Any:
         for column in columns:
-            value = nullable_values(self.table, column)[row_index] if column in self.table.column_names else None
+            value = self._column_values(column)[row_index]
             if value not in (None, ""):
                 return value
         for source in (self.features_rows[row_index], self.raw_rows[row_index], self.metadata_rows[row_index]):
@@ -184,10 +212,10 @@ class _HostContext:
 
 
 def _syscall_vectors(context: _HostContext) -> list[list[float]]:
-    names = [_syscall_name(context, index) for index in range(context.table.num_rows)]
     bucket_counts: Counter[int] = Counter()
     row_buckets: list[int | None] = []
-    for name in names:
+    for index in range(context.table.num_rows):
+        name = _syscall_name(context, index)
         bucket = stable_hash_int(name, modulo=SYSCALL_VECTOR_BUCKETS)
         row_buckets.append(bucket)
         if bucket is not None:

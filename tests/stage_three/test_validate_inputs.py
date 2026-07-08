@@ -18,6 +18,7 @@ from scripts.stage_three.readiness.validator import (
     PASS,
     WARN,
     _ArtifactRow,
+    _filter_active_input_rows,
     validate_stage_three_inputs,
 )
 from scripts.stage_three.requests import ValidateInputsRequest
@@ -78,6 +79,69 @@ class StageThreeValidateInputsTest(unittest.TestCase):
             self.assertEqual(result.status, WARN)
             self.assertEqual(result.blocking_issues, [])
             self.assertIn("PARTIAL_SUCCESS", result.parser_runs_by_status)
+
+    def test_validate_inputs_ignores_superseded_quarantined_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage_root = Path(temp_dir)
+            relative_path = "parquet/normalized/dns/TRAIN/events/sample/schema=v1/part.parquet"
+            _write_normalized_parquet(storage_root / relative_path)
+            schema_paths = _write_schema_files(storage_root)
+            rows = [
+                _artifact_row(
+                    relative_path="parquet/normalized/dns/TRAIN/events/sample/schema=v1/stale.parquet",
+                    artifact_status="SKIPPED",
+                    parser_status="SKIPPED",
+                    parser_error="quarantined parser run superseded by successful re-normalization",
+                ),
+                _artifact_row(relative_path=relative_path),
+            ]
+
+            with patch(
+                "scripts.stage_three.readiness.validator._fetch_normalized_rows",
+                return_value=rows,
+            ):
+                result = validate_stage_three_inputs(
+                    _request(role="TRAIN"),
+                    session=object(),  # type: ignore[arg-type]
+                    storage_root=storage_root,
+                    feature_schema_path=schema_paths[0],
+                    model_ready_schema_path=schema_paths[1],
+                )
+
+            self.assertEqual(result.status, PASS)
+            self.assertEqual(result.normalized_artifact_count, 1)
+            self.assertEqual(result.normalized_artifacts_by_status, {"SUCCESS": 1})
+
+    def test_validate_inputs_allows_artifact_backed_skipped_helper_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage_root = Path(temp_dir)
+            relative_path = "parquet/normalized/dns/TRAIN/events/sample/schema=v1/helper.parquet"
+            _write_normalized_parquet(storage_root / relative_path, label_status="unlabeled")
+            schema_paths = _write_schema_files(storage_root)
+            rows = [
+                _artifact_row(
+                    relative_path=relative_path,
+                    artifact_status="PARTIAL_SUCCESS",
+                    parser_status="PARTIAL_SUCCESS",
+                    file_status="SKIPPED",
+                )
+            ]
+
+            with patch(
+                "scripts.stage_three.readiness.validator._fetch_normalized_rows",
+                return_value=rows,
+            ):
+                result = validate_stage_three_inputs(
+                    _request(role="TRAIN"),
+                    session=object(),  # type: ignore[arg-type]
+                    storage_root=storage_root,
+                    feature_schema_path=schema_paths[0],
+                    model_ready_schema_path=schema_paths[1],
+                )
+
+            self.assertEqual(result.status, WARN)
+            self.assertEqual(result.blocking_issues, [])
+            self.assertEqual(result.dataset_files_by_status, {"PARTIALLY_PARSED": 1})
 
     def test_validate_inputs_fails_when_parquet_file_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -163,6 +227,44 @@ class StageThreeValidateInputsTest(unittest.TestCase):
         self.assertTrue(result.blocking_issues)
         self.assertEqual(result.checks[0].name, "catalog_connection")
 
+    def test_superseded_quarantined_filter_is_narrow(self) -> None:
+        superseded = _artifact_row(
+            relative_path="superseded.parquet",
+            artifact_status="SKIPPED",
+            parser_status="SKIPPED",
+            parser_error="quarantined parser run superseded by successful re-normalization",
+        )
+        ordinary_skipped = _artifact_row(
+            relative_path="ordinary.parquet",
+            artifact_status="SKIPPED",
+            parser_status="SKIPPED",
+            parser_error="helper file skipped",
+        )
+
+        self.assertEqual(_filter_active_input_rows([superseded, ordinary_skipped]), [ordinary_skipped])
+
+    def test_split_source_original_filter_is_narrow(self) -> None:
+        split_source_original = _artifact_row(
+            relative_path="split-source-original.parquet",
+            artifact_status="SKIPPED",
+            parser_status="SKIPPED",
+            file_status="SKIPPED",
+            parser_error="split-source original skipped: use registered wls_day chunks only",
+            file_error="split-source original skipped: use registered wls_day chunks only",
+        )
+        ordinary_skipped = _artifact_row(
+            relative_path="ordinary.parquet",
+            artifact_status="SKIPPED",
+            parser_status="SKIPPED",
+            file_status="SKIPPED",
+            parser_error="unsupported parser output",
+        )
+
+        self.assertEqual(
+            _filter_active_input_rows([split_source_original, ordinary_skipped]),
+            [ordinary_skipped],
+        )
+
 
 def validate_stage_three_inputs_empty_for_report():
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -192,6 +294,8 @@ def _artifact_row(
     artifact_status: str = "SUCCESS",
     parser_status: str = "SUCCESS",
     file_status: str = "PARSED",
+    parser_error: str | None = None,
+    file_error: str | None = None,
     metadata_json: dict | None = None,
 ) -> _ArtifactRow:
     dataset = Dataset(
@@ -211,6 +315,7 @@ def _artifact_row(
         role=role,
         branch="dns",
         status=file_status,
+        error_message=file_error,
     )
     parser_run = ParserRun(
         id=30,
@@ -219,6 +324,7 @@ def _artifact_row(
         parser_name="DnsCsvParser",
         parser_version="v1",
         status=parser_status,
+        error_message=parser_error,
     )
     artifact = NormalizedArtifact(
         id=40,

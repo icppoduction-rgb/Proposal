@@ -28,10 +28,11 @@ RF/XGBoost/CNN/LSTM training, hyperparameter search, threshold tuning, SHAP/XAI,
 2. Build and validate the feature catalog.
 3. Extract DNS feature groups: `dns_lexical`, `dns_entropy`, `dns_temporal`.
 4. Build `tree_unscaled` model-ready artifacts for `label_binary`.
-5. Run quality checks.
-6. Run leakage and traceability checks.
-7. Generate the final report.
-8. Move to Stage Four only when the final report says `READY_FOR_STAGE_FOUR`.
+5. When needed, build the reproducible DNS supervised 70/30 split with `rebalance-dns-supervised`.
+6. Run quality checks.
+7. Run leakage and traceability checks.
+8. Generate the final report.
+9. Move to Stage Four only when the final report says `READY_FOR_STAGE_FOUR`.
 
 ## Production Path
 

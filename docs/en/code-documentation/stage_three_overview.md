@@ -29,6 +29,7 @@ Supported commands:
 | `align-labels` | Fixes label policy without putting labels into X. |
 | `build-sequences` | Creates sequence/window artifacts for Stage Four DL branches. |
 | `build-model-ready` | Builds X/y/metadata/traceability, split index, and preprocessing metadata. |
+| `rebalance-dns-supervised` | Builds a reproducible DNS supervised 70/30 model-ready split for a baseline experiment. |
 | `run-quality-checks` | Checks feature/model-ready/preprocessing artifacts. |
 | `run-leakage-checks` | Checks forbidden X columns, TEST leakage, fit role, and traceability. |
 | `trace-artifact` | Resolves model-ready lineage back to raw source. |
@@ -48,7 +49,7 @@ Supported commands:
 | `scripts/stage_three/preprocessing/` | Type casting, missing values, categorical encoding, scaling profiles, class balance. |
 | `scripts/stage_three/model_ready/` | X/y separation, split index, sequence builder, model-ready registry/builder. |
 | `scripts/stage_three/quality/` | Feature quality, preprocessing quality, model-ready quality, leakage, traceability. |
-| `scripts/stage_three/reports/` | Report path utilities and final Task20 report generation. |
+| `scripts/stage_three/reports/` | Report path utilities, console output helpers, and final Task20 report generation. |
 
 ## Artifact Lifecycle
 
@@ -57,9 +58,10 @@ Supported commands:
 3. `extract-features` creates Parquet feature artifacts and registers `feature_artifacts`.
 4. `align-labels` and model-ready separation keep labels outside X.
 5. `build-model-ready` writes `X`, `y`, `metadata`, `traceability`, `split_index`, `preprocessing_metadata`.
-6. `run-quality-checks` registers `data_quality_reports`.
-7. `run-leakage-checks` blocks unsafe artifacts with `BLOCKED_BY_LEAKAGE` or `BLOCKED_BY_QUALITY`.
-8. `final-report` summarizes readiness for Stage Four.
+6. `rebalance-dns-supervised` can create a separate DNS supervised baseline experiment without physically deleting raw files.
+7. `run-quality-checks` registers `data_quality_reports`.
+8. `run-leakage-checks` blocks unsafe artifacts with `BLOCKED_BY_LEAKAGE` or `BLOCKED_BY_QUALITY`.
+9. `final-report` summarizes readiness for Stage Four.
 
 ## Readiness Policy
 

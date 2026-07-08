@@ -4,6 +4,8 @@
 
 Документация нужна разработчику, который подключается к проекту без предварительного чтения всего кода. Она фиксирует не только назначение файлов, но и контракты данных, порядок запуска, статусы, ограничения и зоны риска.
 
+Последняя repo-wide сверка: 2026-07-08. В checkout найдено 334 Python-файла, 66 тестовых Python-файлов и 106 Markdown-документов в `docs/`. Сводный анализ см. в [../repository_analysis.md](../repository_analysis.md).
+
 ## Карта документов
 
 | Документ | Назначение |
@@ -65,11 +67,12 @@ Stage Two создает storage-структуру, регистрирует ra
 
 Фактические компоненты находятся в `scripts/stage_two`, `scripts/db`, `schemas`.
 
-Сверка с текущим кодом от 2026-07-04:
+Сверка с текущим кодом от 2026-07-08:
 
 - `router_stage_two()` поддерживает `bootstrap-storage`, `catalog-ingest`, `seed-parser-registry`, `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, `split-large-files`, `normalize-dns`, `normalize-host`, `run-duckdb-checks`, `run-leakage-checks` и `trace-artifact`.
 - `config.manage_commands` является только fallback-списком для вывода в консоль и не полон для новых Stage Two команд.
 - `normalize-format` и `benchmark-normalization` перед запуском применяют resource profiles и format-specific runtime policy; `normalize-all` получает общие runtime options, но не применяет per-format policy на уровне CLI route.
+- `python manage.py stage-two --help` не является надежным help в текущем checkout: фактический список команд находится в `router_stage_two()`.
 - Stage Three feature/model-ready preparation вынесен в `scripts/stage_three` и опубликован через `python manage.py stage-three ...`. Training/evaluation pipeline через `manage.py` относится к Stage Four и пока не опубликован.
 
 ## Stage Three
@@ -125,6 +128,7 @@ python manage.py stage-three build-feature-catalog
 python manage.py stage-three probe-runtime-backend --backend auto
 python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
 python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three rebalance-dns-supervised --experiment-id dns_rebalanced_70_30_v1
 python manage.py stage-three run-quality-checks --experiment-id exp001
 python manage.py stage-three run-leakage-checks --experiment-id exp001
 python manage.py stage-three final-report --experiment-id exp001

@@ -4,6 +4,8 @@ This section documents the `Proposal` codebase for a developer who needs to unde
 
 The documentation covers Stage One filesystem analysis, Stage Two catalog-backed normalization, Stage Three feature/model-ready preparation, PostgreSQL metadata, SQLAlchemy repositories, parser strategy, label handling, Parquet/DuckDB artifacts, quality and leakage checks, storage layout, dataset contracts, risks, and extension points.
 
+Last repo-wide sync: 2026-07-08. The checkout contains 334 Python files, 66 test Python files, and 106 Markdown documents in `docs/`. See [../repository_analysis.md](../repository_analysis.md) for the consolidated analysis.
+
 ## Document Map
 
 | Document | Purpose |
@@ -65,11 +67,12 @@ Stage Two creates the storage structure, registers raw/sorted files in PostgreSQ
 
 Implemented components live under `scripts/stage_two`, `scripts/db`, and `schemas`.
 
-Current code sync, checked on 2026-07-04:
+Current code sync, checked on 2026-07-08:
 
 - `router_stage_two()` supports `bootstrap-storage`, `catalog-ingest`, `seed-parser-registry`, `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, `split-large-files`, `normalize-dns`, `normalize-host`, `run-duckdb-checks`, `run-leakage-checks`, and `trace-artifact`.
 - `config.manage_commands` is only a fallback printed command list and is not complete for newer Stage Two commands.
 - `normalize-format` and `benchmark-normalization` resolve resource profiles and format-specific runtime policy before execution; `normalize-all` resolves shared runtime options but does not apply per-format policy in the CLI route.
+- `python manage.py stage-two --help` is not reliable help in the current checkout; the actual command list is in `router_stage_two()`.
 - Stage Three feature/model-ready preparation lives under `scripts/stage_three` and is exposed through `python manage.py stage-three ...`. The training/evaluation pipeline belongs to Stage Four and is not exposed yet.
 
 ## Stage Three
@@ -125,6 +128,7 @@ python manage.py stage-three build-feature-catalog
 python manage.py stage-three probe-runtime-backend --backend auto
 python manage.py stage-three extract-features --branch dns --role TRAIN --feature-group dns_lexical --experiment-id exp001 --resume
 python manage.py stage-three build-model-ready --experiment-id exp001 --branch dns --target label_binary --preprocessing-profile tree_unscaled --resume
+python manage.py stage-three rebalance-dns-supervised --experiment-id dns_rebalanced_70_30_v1
 python manage.py stage-three run-quality-checks --experiment-id exp001
 python manage.py stage-three run-leakage-checks --experiment-id exp001
 python manage.py stage-three final-report --experiment-id exp001

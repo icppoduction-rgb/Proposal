@@ -11,12 +11,12 @@ The documentation separates:
 
 ## Current Code Sync
 
-Last checked against code on 2026-07-06.
+Last checked against code on 2026-07-08.
 
 - Stage Two routing is implemented in `scripts/stage_two/cli.py`; this file is the authoritative source for supported `stage-two` commands.
-- The fallback command list printed from `config.manage_commands` is older than the router and does not list every current Stage Two command, including `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization`, and `split-large-files`.
+- `python manage.py stage-two --help` is not a reliable help source in the current checkout: it falls back to `config.manage_commands` and may print `unknown Stage Two command`. Check `scripts/stage_two/cli.py` and [normalization/stage_two_commands.md](normalization/stage_two_commands.md) for the full Stage Two command list.
 - Runtime defaults without a resource profile are conservative: `workers=1`, `batch_size=50000`, and `max_output_part_rows=50000`. Resource profiles and the `normalize-format` format policy can change the resolved values before execution.
-- Stage Three routing is implemented in `scripts/stage_three/cli.py`; it covers `validate-inputs`, `build-feature-catalog`, `probe-runtime-backend`, `extract-features`, `align-labels`, `build-sequences`, `build-model-ready`, `run-quality-checks`, `run-leakage-checks`, `trace-artifact`, and `final-report`.
+- Stage Three routing is implemented in `scripts/stage_three/cli.py`; it covers `validate-inputs`, `build-feature-catalog`, `probe-runtime-backend`, `extract-features`, `align-labels`, `build-sequences`, `build-model-ready`, `rebalance-dns-supervised`, `run-quality-checks`, `run-leakage-checks`, `trace-artifact`, and `final-report`.
 - Stage Three is a preparation layer: it builds feature/model-ready artifacts and runs quality/leakage/traceability checks, but it does not train RF/XGBoost/CNN/LSTM models or run Stage Four evaluation.
 
 ## Quick Start
@@ -24,6 +24,7 @@ Last checked against code on 2026-07-06.
 | Need | Read |
 | --- | --- |
 | Understand the project and research context | [project_overview_and_research_context.md](project_overview_and_research_context.md) |
+| See the repo-wide code and CLI analysis | [repository_analysis.md](repository_analysis.md) |
 | See the key documentation map | [project_documentation_index.md](project_documentation_index.md) |
 | Check what is implemented and what is proposal-level | [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md) |
 | Understand code structure and CLI | [code-documentation/README.md](code-documentation/README.md) |
@@ -41,6 +42,7 @@ Last checked against code on 2026-07-06.
 | [code-documentation/](code-documentation/README.md) | Code architecture: CLI/routing, Stage One handlers, Stage Two, PostgreSQL Catalog, SQLAlchemy, schemas, parsers, labels, Parquet/DuckDB, checks, risks. | Technical code documentation |
 | [normalization/](normalization/README.md) | Operational guide for Stage Two normalization: storage, catalog ingestion, parser registry, `READY_FOR_PARSING`, normalization commands, DuckDB/leakage checks, traceability. | Implemented behavior and runbooks |
 | [stage-three/](stage-three/README.md) | Operational guide for Stage Three: readiness gate, feature catalog, extraction, label alignment, preprocessing, model-ready build, checks, final report. | Implemented behavior and runbooks |
+| [repository_analysis.md](repository_analysis.md) | Current repository analysis: entrypoints, Stage One/Two/Three, storage, tests, gaps. | Repo-wide analysis |
 | [project_documentation_index.md](project_documentation_index.md) | Index of top-level documents and map of merged legacy materials. | Navigation |
 | [project_overview_and_research_context.md](project_overview_and_research_context.md) | Research context, objectives, methodology, proposal-level architecture, and limitations. | Research/proposal |
 | [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md) | DNS/Host dataset strategy with explicit `TRAIN`, `VALIDATION`, and `TEST` separation. | Dataset strategy |
@@ -116,13 +118,14 @@ Last checked against code on 2026-07-06.
 ## Recommended Reading Order
 
 1. [project_documentation_index.md](project_documentation_index.md) - global index and merged-document map.
-2. [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md) - boundary between implemented behavior and proposal.
-3. [analysis-dataset/README.md](analysis-dataset/README.md) - factual DNS/Host data structure.
-4. [code-documentation/README.md](code-documentation/README.md) - code architecture and pipeline.
-5. [normalization/README.md](normalization/README.md) - Stage Two implementation guide.
-6. [normalization/stage_two_commands.md](normalization/stage_two_commands.md) - exact run commands.
-7. [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) - feature engineering and model-ready constraints.
-8. [stage-three/README.md](stage-three/README.md) - practical Stage Three execution and Stage Four readiness.
+2. [repository_analysis.md](repository_analysis.md) - factual analysis of code, CLI, storage, and tests.
+3. [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md) - boundary between implemented behavior and proposal.
+4. [analysis-dataset/README.md](analysis-dataset/README.md) - factual DNS/Host data structure.
+5. [code-documentation/README.md](code-documentation/README.md) - code architecture and pipeline.
+6. [normalization/README.md](normalization/README.md) - Stage Two implementation guide.
+7. [normalization/stage_two_commands.md](normalization/stage_two_commands.md) - exact run commands.
+8. [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) - feature engineering and model-ready constraints.
+9. [stage-three/README.md](stage-three/README.md) - practical Stage Three execution and Stage Four readiness.
 
 ## Core Invariants
 

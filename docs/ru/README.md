@@ -11,12 +11,12 @@
 
 ## Синхронизация с текущим кодом
 
-Последняя сверка с кодом: 2026-07-06.
+Последняя сверка с кодом: 2026-07-08.
 
 - Маршрутизация Stage Two реализована в `scripts/stage_two/cli.py`; этот файл является главным источником истины по поддержанным `stage-two` командам.
-- Fallback-список команд из `config.manage_commands`, который печатается при некоторых ошибках запуска, старше фактического router и не показывает все текущие Stage Two команды, включая `parser-coverage`, `mark-ready`, `normalize-format`, `normalize-all`, `benchmark-normalization` и `split-large-files`.
+- `python manage.py stage-two --help` в текущем состоянии не является надежным help: команда попадает в fallback `config.manage_commands` и может печатать `unknown Stage Two command`. Полный список Stage Two команд нужно сверять с `scripts/stage_two/cli.py` и [normalization/stage_two_commands.md](normalization/stage_two_commands.md).
 - Runtime defaults без resource profile консервативные: `workers=1`, `batch_size=50000`, `max_output_part_rows=50000`. Resource profiles и format policy для `normalize-format` могут изменить итоговые значения перед запуском.
-- Stage Three routing реализован в `scripts/stage_three/cli.py`; он покрывает `validate-inputs`, `build-feature-catalog`, `probe-runtime-backend`, `extract-features`, `align-labels`, `build-sequences`, `build-model-ready`, `run-quality-checks`, `run-leakage-checks`, `trace-artifact` и `final-report`.
+- Stage Three routing реализован в `scripts/stage_three/cli.py`; он покрывает `validate-inputs`, `build-feature-catalog`, `probe-runtime-backend`, `extract-features`, `align-labels`, `build-sequences`, `build-model-ready`, `rebalance-dns-supervised`, `run-quality-checks`, `run-leakage-checks`, `trace-artifact` и `final-report`.
 - Stage Three является preparation layer: он строит feature/model-ready artifacts и проверяет quality/leakage/traceability, но не обучает RF/XGBoost/CNN/LSTM и не выполняет Stage Four evaluation.
 
 ## Быстрый старт
@@ -24,6 +24,7 @@
 | Если нужно | Читать |
 | --- | --- |
 | Понять весь проект и исследовательский контекст | [project_overview_and_research_context.md](project_overview_and_research_context.md) |
+| Увидеть фактический repo-wide анализ кода и CLI | [repository_analysis.md](repository_analysis.md) |
 | Увидеть карту ключевых документов | [project_documentation_index.md](project_documentation_index.md) |
 | Проверить, что реализовано, а что пока proposal | [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md) |
 | Разобраться в структуре кода и CLI | [code-documentation/README.md](code-documentation/README.md) |
@@ -41,6 +42,7 @@
 | [code-documentation/](code-documentation/README.md) | Архитектура кода: CLI/routing, Stage One handlers, Stage Two, PostgreSQL Catalog, SQLAlchemy, schemas, parsers, labels, Parquet/DuckDB, checks, risks. | Техническая документация по коду |
 | [normalization/](normalization/README.md) | Operational guide по Stage Two normalization: storage, catalog ingestion, parser registry, `READY_FOR_PARSING`, normalization commands, DuckDB/leakage checks, traceability. | Фактическая реализация и runbooks |
 | [stage-three/](stage-three/README.md) | Operational guide по Stage Three: readiness gate, feature catalog, extraction, label alignment, preprocessing, model-ready build, checks, final report. | Фактическая реализация и runbooks |
+| [repository_analysis.md](repository_analysis.md) | Сводный анализ текущего репозитория: entrypoints, Stage One/Two/Three, storage, тесты, gaps. | Repo-wide анализ |
 | [project_documentation_index.md](project_documentation_index.md) | Индекс верхнеуровневых документов и карта переноса старых материалов. | Навигация |
 | [project_overview_and_research_context.md](project_overview_and_research_context.md) | Research context, цели, methodology, proposal-level architecture и ограничения. | Research/proposal |
 | [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md) | DNS/Host dataset strategy с явным разделением `TRAIN`, `VALIDATION`, `TEST`. | Dataset strategy |
@@ -116,13 +118,14 @@
 ## Рекомендуемый порядок чтения
 
 1. [project_documentation_index.md](project_documentation_index.md) - общий индекс и карта объединенных документов.
-2. [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md) - граница между реализованным и proposal.
-3. [analysis-dataset/README.md](analysis-dataset/README.md) - фактическая структура DNS/Host данных.
-4. [code-documentation/README.md](code-documentation/README.md) - архитектура кода и pipeline.
-5. [normalization/README.md](normalization/README.md) - Stage Two implementation guide.
-6. [normalization/stage_two_commands.md](normalization/stage_two_commands.md) - точные команды запуска.
-7. [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) - feature engineering и model-ready ограничения.
-8. [stage-three/README.md](stage-three/README.md) - практический запуск Stage Three и готовность к Stage Four.
+2. [repository_analysis.md](repository_analysis.md) - фактический анализ кода, CLI, storage и тестов.
+3. [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md) - граница между реализованным и proposal.
+4. [analysis-dataset/README.md](analysis-dataset/README.md) - фактическая структура DNS/Host данных.
+5. [code-documentation/README.md](code-documentation/README.md) - архитектура кода и pipeline.
+6. [normalization/README.md](normalization/README.md) - Stage Two implementation guide.
+7. [normalization/stage_two_commands.md](normalization/stage_two_commands.md) - точные команды запуска.
+8. [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) - feature engineering и model-ready ограничения.
+9. [stage-three/README.md](stage-three/README.md) - практический запуск Stage Three и готовность к Stage Four.
 
 ## Основные инварианты
 

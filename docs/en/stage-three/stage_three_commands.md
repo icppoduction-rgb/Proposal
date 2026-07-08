@@ -70,6 +70,14 @@ python manage.py stage-three build-model-ready --experiment-id <id> --branch <br
 
 Builds X/y/metadata/traceability, split index, and preprocessing metadata.
 
+## rebalance-dns-supervised
+
+```powershell
+python manage.py stage-three rebalance-dns-supervised [--experiment-id dns_rebalanced_70_30_v1] [--feature-group dns_lexical] [--target label_binary] [--preprocessing-profile tree_unscaled] [--overwrite] [--apply] [--apply-catalog] [--deactivate-existing-experiment <id>] [--dry-run]
+```
+
+Builds a reproducible DNS supervised 70/30 model-ready split. Without `--apply`, the command is an audit/dry-run. Use `--apply-catalog` only when intentionally applying the result to catalog metadata.
+
 ## run-quality-checks
 
 ```powershell

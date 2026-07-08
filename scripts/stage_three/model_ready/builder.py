@@ -56,6 +56,9 @@ class ModelReadyRoleBuildResult:
     feature_count: int
     target_distribution: dict[str, int]
     x_columns: list[str]
+    feature_group: str | None = None
+    dropped_columns: list[dict[str, Any]] = field(default_factory=list)
+    forbidden_x_columns: list[str] = field(default_factory=list)
     sequence_artifact: RegisteredModelReadyArtifact | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -302,6 +305,9 @@ def build_model_ready_artifacts(
                 feature_count=len(separation_plan.x_columns),
                 target_distribution=dict(sorted(target_distribution.items())),
                 x_columns=list(separation_plan.x_columns),
+                feature_group=feature_group,
+                dropped_columns=[asdict(item) for item in separation_plan.dropped_columns],
+                forbidden_x_columns=list(separation_plan.forbidden_x_columns),
                 sequence_artifact=sequence_artifact,
             )
         )

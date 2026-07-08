@@ -4,6 +4,8 @@ This document merges `repository_qa_section_3_8.md`, QA content from `project_pr
 
 ## Analysis scope
 
+Last repo-wide sync: 2026-07-08. The detailed current snapshot of entrypoints, CLI, Stage One/Two/Three, storage, and tests is in [repository_analysis.md](repository_analysis.md).
+
 The original QA document recorded a repository review across `scripts`, `docs`, `report`, `planning`, `temp_data`, `logs`, and project configs. The key conclusion remains:
 
 > The current repository confirms dataset preparation, Stage Two normalization, and Stage Three feature/model-ready preparation. Model training and evaluation remain Stage Four.
@@ -37,12 +39,13 @@ The original QA document recorded a repository review across `scripts`, `docs`, 
 
 ## Current implementation notes
 
-Checked against code on 2026-07-04:
+Checked against code on 2026-07-08:
 
 - Stage Two command routing is in `scripts/stage_two/cli.py`; `config.manage_commands` is an older printed command list and is not complete for current Stage Two commands.
+- `python manage.py stage-two --help` currently falls back to the old command list and should not be used as the source of truth for Stage Two commands.
 - `normalize-format` and `benchmark-normalization` apply resource profiles and format-specific runtime policy before execution. `normalize-all` resolves shared runtime options but does not apply per-format policy in the CLI route.
 - The implemented quality gates are parser reports, post-run validation for `normalize-format`, DuckDB checks, leakage checks, and traceability lookup. They are checks around normalized/features/model-ready artifacts, not a complete ML experiment pipeline.
-- The repository now confirms the Stage Three CLI for feature extraction, model-ready build, checks, and final report. RF/XGBoost/CNN/LSTM training, SHAP analysis, and evaluation reports remain unimplemented Stage Four work.
+- The repository confirms the Stage Three CLI for feature extraction, DNS supervised rebalance, model-ready build, checks, and final report. RF/XGBoost/CNN/LSTM training, SHAP analysis, and evaluation reports remain unimplemented Stage Four work.
 
 ## QA for proposal sections 3.3-3.8
 
@@ -87,6 +90,7 @@ Checked against code on 2026-07-04:
 ## Related documents
 
 - [project_overview_and_research_context.md](project_overview_and_research_context.md)
+- [repository_analysis.md](repository_analysis.md)
 - [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md)
 - [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md)
 - [analysis-dataset/README.md](analysis-dataset/README.md)

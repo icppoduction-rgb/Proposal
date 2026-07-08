@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
+
+import threading
 
 import pyarrow as pa
 import pyarrow.dataset as ds
@@ -34,7 +37,6 @@ from scripts.stage_three.extraction.dns_extractors import (
 from scripts.stage_three.extraction.host_extractors import (
     HOST_FEATURE_GROUPS,
     host_feature_columns,
-    host_missing_ratios,
     extract_host_features_from_table,
     required_host_columns,
     select_existing_required_columns as select_existing_host_columns,
@@ -42,7 +44,6 @@ from scripts.stage_three.extraction.host_extractors import (
 from scripts.stage_three.extraction.network_extractors import (
     NETWORK_FEATURE_GROUPS,
     network_feature_columns,
-    network_missing_ratios,
     extract_network_features_from_table,
     required_network_columns,
     select_existing_required_columns as select_existing_network_columns,
@@ -51,7 +52,10 @@ from scripts.stage_three.feature_catalog.loader import load_feature_catalog
 from scripts.stage_three.feature_catalog.validator import FORBIDDEN_X_COLUMNS
 from scripts.stage_three.runtime.backend import CpuFeatureExtractionBackend
 from scripts.stage_three.runtime.memory_guard import MemoryGuard
-from scripts.stage_three.runtime.resources import resolve_stage_three_runtime_settings
+from scripts.stage_three.runtime.resources import (
+    StageThreeRuntimeSettings,
+    resolve_stage_three_runtime_settings,
+)
 
 
 CORE_FEATURE_GROUPS: tuple[str, ...] = (*DNS_MVP_FEATURE_GROUPS, *HOST_FEATURE_GROUPS, *NETWORK_FEATURE_GROUPS)
@@ -109,11 +113,13 @@ def run_dns_feature_extraction(
     feature_group: str,
     output_root: str | Path | None = None,
     storage_root: str | Path | None = None,
+    runtime_settings: StageThreeRuntimeSettings | None = None,
     batch_rows: int | None = None,
     memory_guard: MemoryGuard | None = None,
     backend: CpuFeatureExtractionBackend | None = None,
     run_id: str | int | None = None,
     schema_version: str = FEATURE_ARTIFACT_SCHEMA_VERSION,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> FeatureExtractionResult:
     """Extract DNS MVP features from normalized Parquet artifacts."""
     if branch != "dns":
@@ -122,7 +128,9 @@ def run_dns_feature_extraction(
         allowed = ", ".join(DNS_MVP_FEATURE_GROUPS)
         raise ValueError(f"unsupported DNS MVP feature_group={feature_group!r}; allowed: {allowed}")
     _validate_catalog_feature_group(feature_group, expected_columns=dns_feature_columns(feature_group))
-    settings = resolve_stage_three_runtime_settings(backend="cpu")
+    settings = runtime_settings or resolve_stage_three_runtime_settings(backend="cpu")
+    if not isinstance(settings, StageThreeRuntimeSettings):
+        raise TypeError("runtime_settings must be StageThreeRuntimeSettings when provided")
     guard = memory_guard or MemoryGuard(
         reserved_ram_gb=settings.resource_profile.reserved_ram_gb,
         soft_ram_limit_gb=settings.resource_profile.soft_ram_limit_gb,
@@ -134,7 +142,7 @@ def run_dns_feature_extraction(
     outputs: list[FeatureExtractionArtifact] = []
     merged_missing_counts: dict[str, float] = defaultdict(float)
     started_at = perf_counter()
-    for artifact in artifacts:
+    for index, artifact in enumerate(artifacts, start=1):
         input_path = _resolve_input_path(artifact.normalized_path, storage_root=storage_root)
         output_dir = _artifact_output_dir(
             output_root=output_root,
@@ -143,8 +151,35 @@ def run_dns_feature_extraction(
             feature_group=feature_group,
             schema_version=schema_version,
         )
+        _emit_progress(
+            on_progress,
+            phase="catalog_lookup",
+            status="start",
+            artifact_index=index,
+            total_artifacts=len(artifacts),
+            artifact_id=artifact.artifact_id,
+            feature_group=feature_group,
+            output_dir=str(output_dir),
+        )
+        input_bytes = _safe_file_size(input_path)
+        _emit_progress(
+            on_progress,
+            phase="parquet_scan",
+            status="start",
+            artifact_id=artifact.artifact_id,
+            input_rows_estimate=artifact.row_count,
+            input_bytes=input_bytes,
+            artifact_path=str(input_path),
+        )
         schema = ds.dataset(input_path, format="parquet").schema
         required_columns = select_existing_required_columns(schema, required_dns_columns(feature_group))
+        _emit_progress(
+            on_progress,
+            phase="feature_compute",
+            status="start",
+            artifact_id=artifact.artifact_id,
+            selected_columns=_safe_list_preview(required_columns),
+        )
 
         def transform(table: pa.Table) -> pa.Table:
             return extract_dns_features_from_table(
@@ -164,6 +199,18 @@ def run_dns_feature_extraction(
             memory_guard=guard,
             transform=transform,
             part_name_prefix=_part_name_prefix(run_id=run_id, artifact_id=artifact.artifact_id),
+        )
+        _emit_progress(
+            on_progress,
+            phase="parquet_write",
+            status="end",
+            artifact_id=artifact.artifact_id,
+            rows_read=run_result.rows_read,
+            rows_written=run_result.rows_written,
+            batch_count=run_result.batch_count,
+            elapsed_seconds=run_result.elapsed_seconds,
+            output_parts=run_result.output_parts,
+            output_bytes=_safe_parts_bytes(run_result.output_parts),
         )
         artifact_missing = _missing_ratios_for_parts(run_result.output_parts, tuple(feature_columns))
         for column, ratio in artifact_missing.items():
@@ -235,11 +282,13 @@ def run_host_network_feature_extraction(
     feature_group: str,
     output_root: str | Path | None = None,
     storage_root: str | Path | None = None,
+    runtime_settings: StageThreeRuntimeSettings | None = None,
     batch_rows: int | None = None,
     memory_guard: MemoryGuard | None = None,
     backend: CpuFeatureExtractionBackend | None = None,
     run_id: str | int | None = None,
     schema_version: str = FEATURE_ARTIFACT_SCHEMA_VERSION,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> FeatureExtractionResult:
     """Extract core Host or Network features from normalized Parquet artifacts."""
     if branch not in {"host", "network"}:
@@ -253,7 +302,9 @@ def run_host_network_feature_extraction(
 
     feature_columns = list(_feature_columns(feature_group))
     _validate_catalog_feature_group(feature_group, expected_columns=tuple(feature_columns))
-    settings = resolve_stage_three_runtime_settings(backend="cpu")
+    settings = runtime_settings or resolve_stage_three_runtime_settings(backend="cpu")
+    if not isinstance(settings, StageThreeRuntimeSettings):
+        raise TypeError("runtime_settings must be StageThreeRuntimeSettings when provided")
     guard = memory_guard or MemoryGuard(
         reserved_ram_gb=settings.resource_profile.reserved_ram_gb,
         soft_ram_limit_gb=settings.resource_profile.soft_ram_limit_gb,
@@ -264,87 +315,76 @@ def run_host_network_feature_extraction(
     outputs: list[FeatureExtractionArtifact] = []
     merged_missing_counts: dict[str, float] = defaultdict(float)
     started_at = perf_counter()
+    worker_count, _ = _throttled_worker_count(settings=settings, guard=guard)
+    if worker_count < 1:
+        worker_count = 1
+    worker_count = min(worker_count, max(1, len(artifacts)))
 
-    for artifact in artifacts:
-        if artifact.branch != branch or artifact.role != role:
-            raise ValueError(
-                "normalized artifact does not match requested branch/role: "
-                f"artifact={artifact.branch}/{artifact.role}, requested={branch}/{role}"
-            )
-        input_path = _resolve_input_path(artifact.normalized_path, storage_root=storage_root)
-        output_dir = _artifact_output_dir(
-            output_root=output_root,
-            branch=branch,
-            role=role,
-            feature_group=feature_group,
-            schema_version=schema_version,
-        )
-        schema = ds.dataset(input_path, format="parquet").schema
-        required_columns = _select_required_columns(branch, schema, feature_group)
-
-        def transform(table: pa.Table) -> pa.Table:
-            if branch == "host":
-                return extract_host_features_from_table(
-                    table,
-                    feature_group=feature_group,
-                    normalized_artifact_id=artifact.artifact_id,
-                    dataset_id=artifact.dataset_id,
-                    role=role,
-                    source_normalized_path=str(input_path),
-                )
-            return extract_network_features_from_table(
-                table,
-                feature_group=feature_group,
-                normalized_artifact_id=artifact.artifact_id,
-                dataset_id=artifact.dataset_id,
+    if worker_count <= 1:
+        outputs = [
+            _extract_single_host_network_feature_artifact(
+                artifact=artifact,
+                branch=branch,
                 role=role,
-                source_normalized_path=str(input_path),
+                feature_group=feature_group,
+                output_root=output_root,
+                storage_root=storage_root,
+                extractor_backend=extractor_backend,
+                schema_version=schema_version,
+                run_id=run_id,
+                resolved_batch_rows=resolved_batch_rows,
+                settings=settings,
+                on_progress=on_progress,
+                artifact_index=idx,
+                total_artifacts=len(artifacts),
+            )
+            for idx, artifact in enumerate(artifacts, start=1)
+        ]
+    else:
+        progress_lock = threading.Lock()
+
+        def _worker(
+            artifact: NormalizedArtifactInput,
+            index: int,
+            total: int,
+        ) -> FeatureExtractionArtifact:
+            return _extract_single_host_network_feature_artifact(
+                artifact=artifact,
+                branch=branch,
+                role=role,
+                feature_group=feature_group,
+                output_root=output_root,
+                storage_root=storage_root,
+                extractor_backend=extractor_backend,
+                resolved_batch_rows=resolved_batch_rows,
+                settings=settings,
+                schema_version=schema_version,
+                run_id=run_id,
+                on_progress=_sync_progress(on_progress, progress_lock),
+                artifact_index=index,
+                total_artifacts=total,
             )
 
-        run_result = extractor_backend.extract_to_parquet_parts(
-            input_path=input_path,
-            output_dir=output_dir,
-            required_columns=required_columns,
-            batch_rows=resolved_batch_rows,
-            memory_guard=guard,
-            transform=transform,
-            part_name_prefix=_part_name_prefix(run_id=run_id, artifact_id=artifact.artifact_id),
-        )
-        artifact_missing = _missing_ratios_for_parts(
-            run_result.output_parts,
-            tuple(feature_columns),
-            missing_fn=host_missing_ratios if branch == "host" else network_missing_ratios,
-        )
-        for column, ratio in artifact_missing.items():
-            merged_missing_counts[column] += ratio * run_result.rows_written
-        outputs.append(
-            FeatureExtractionArtifact(
-                normalized_artifact_id=artifact.artifact_id,
-                feature_group=feature_group,
-                feature_path=str(output_dir),
-                parts=run_result.output_parts,
-                rows_read=run_result.rows_read,
-                rows_written=run_result.rows_written,
-                columns_created=feature_columns,
-                missing_ratios=artifact_missing,
-                runtime_seconds=run_result.elapsed_seconds,
-                peak_rss_gb=run_result.peak_rss_gb,
-                warnings=_artifact_warnings(
-                    schema_names=schema.names,
-                    selected_columns=required_columns,
-                    feature_group=feature_group,
-                ),
-                runtime_stats=_run_stats(
-                    run_result=run_result,
-                    configured_batch_rows=resolved_batch_rows,
-                    settings=settings,
-                    guard=guard,
-                ),
-                feature_schema_version=schema_version,
-                source_artifact_ids=[artifact.artifact_id],
-                column_count=len(feature_columns),
-            )
-        )
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            outputs_by_index: list[FeatureExtractionArtifact | None] = [None] * len(artifacts)
+            futures: dict[Any, int] = {}
+            for index, artifact in enumerate(artifacts):
+                futures[
+                    executor.submit(
+                        _worker,
+                        artifact,
+                        index + 1,
+                        len(artifacts),
+                    )
+                ] = index
+            for future in as_completed(futures):
+                index = futures[future]
+                outputs_by_index[index] = future.result()
+            outputs = [output for output in outputs_by_index if output is not None]
+
+    for output in outputs:
+        for column, ratio in output.missing_ratios.items():
+            merged_missing_counts[column] += ratio * output.rows_written
 
     rows_read = sum(output.rows_read for output in outputs)
     rows_written = sum(output.rows_written for output in outputs)
@@ -405,6 +445,187 @@ def _feature_columns(feature_group: str) -> tuple[str, ...]:
         return network_feature_columns(feature_group)
     allowed = ", ".join(CORE_FEATURE_GROUPS)
     raise ValueError(f"unsupported feature_group={feature_group!r}; allowed: {allowed}")
+
+
+def _safe_file_size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
+def _safe_parts_bytes(parts: list[str]) -> int:
+    return sum(_safe_file_size(Path(part)) for part in parts)
+
+
+def _safe_list_preview(values: list[str], *, limit: int = 12) -> list[str]:
+    if len(values) <= limit:
+        return values
+    return values[:limit]
+
+
+def _sync_progress(
+    callback: Callable[[dict[str, object]], None] | None,
+    lock: threading.Lock,
+) -> Callable[[dict[str, object]], None] | None:
+    if callback is None:
+        return None
+
+    def wrapped(payload: dict[str, object]) -> None:
+        with lock:
+            callback(dict(payload))
+
+    return wrapped
+
+
+def _emit_progress(
+    callback: Callable[[dict[str, object]], None] | None,
+    **payload: object,
+) -> None:
+    if callback is None:
+        return
+    try:
+        callback(dict(payload))
+    except Exception:
+        pass
+
+
+def _extract_single_host_network_feature_artifact(
+    *,
+    artifact: NormalizedArtifactInput,
+    branch: str,
+    role: str,
+    feature_group: str,
+    output_root: str | Path | None,
+    storage_root: str | Path | None,
+    extractor_backend: CpuFeatureExtractionBackend,
+    resolved_batch_rows: int,
+    settings: Any,
+    run_id: str | int | None,
+    schema_version: str,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
+    artifact_index: int | None = None,
+    total_artifacts: int | None = None,
+) -> FeatureExtractionArtifact:
+    if artifact.branch != branch:
+        raise ValueError(
+            "normalized artifact does not match requested branch/role: "
+            f"artifact={artifact.branch}/{artifact.role}, requested={branch}/{role}"
+        )
+    if artifact.role != role:
+        raise ValueError(
+            "normalized artifact does not match requested branch/role: "
+            f"artifact={artifact.branch}/{artifact.role}, requested={branch}/{role}"
+        )
+
+    _emit_progress(
+        on_progress,
+        phase="catalog_lookup",
+        status="start",
+        artifact_id=artifact.artifact_id,
+        artifact_index=artifact_index,
+        total_artifacts=total_artifacts,
+        feature_group=feature_group,
+    )
+    input_path = _resolve_input_path(artifact.normalized_path, storage_root=storage_root)
+    output_dir = _artifact_output_dir(
+        output_root=output_root,
+        branch=branch,
+        role=role,
+        feature_group=feature_group,
+        schema_version=schema_version,
+    )
+    schema = ds.dataset(input_path, format="parquet").schema
+    _emit_progress(
+        on_progress,
+        phase="parquet_scan",
+        status="start",
+        artifact_id=artifact.artifact_id,
+        input_bytes=_safe_file_size(input_path),
+        artifact_path=str(input_path),
+    )
+    required_columns = _select_required_columns(branch=branch, schema=schema, feature_group=feature_group)
+    guard = MemoryGuard(
+        reserved_ram_gb=settings.resource_profile.reserved_ram_gb,
+        soft_ram_limit_gb=settings.resource_profile.soft_ram_limit_gb,
+        hard_ram_limit_gb=settings.resource_profile.hard_ram_limit_gb,
+    )
+    feature_columns = tuple(_feature_columns(feature_group))
+
+    def transform(table: pa.Table) -> pa.Table:
+        if branch == "host":
+            return extract_host_features_from_table(
+                table,
+                feature_group=feature_group,
+                normalized_artifact_id=artifact.artifact_id,
+                dataset_id=artifact.dataset_id,
+                role=role,
+                source_normalized_path=str(input_path),
+            )
+        return extract_network_features_from_table(
+            table,
+            feature_group=feature_group,
+            normalized_artifact_id=artifact.artifact_id,
+            dataset_id=artifact.dataset_id,
+            role=role,
+            source_normalized_path=str(input_path),
+        )
+
+    _emit_progress(
+        on_progress,
+        phase="feature_compute",
+        status="start",
+        artifact_id=artifact.artifact_id,
+        selected_columns=_safe_list_preview(required_columns),
+    )
+    run_result = extractor_backend.extract_to_parquet_parts(
+        input_path=input_path,
+        output_dir=output_dir,
+        required_columns=required_columns,
+        batch_rows=resolved_batch_rows,
+        memory_guard=guard,
+        transform=transform,
+        part_name_prefix=_part_name_prefix(run_id=run_id, artifact_id=artifact.artifact_id),
+    )
+    _emit_progress(
+        on_progress,
+        phase="parquet_write",
+        status="end",
+        artifact_id=artifact.artifact_id,
+        rows_read=run_result.rows_read,
+        rows_written=run_result.rows_written,
+        batch_count=run_result.batch_count,
+        elapsed_seconds=run_result.elapsed_seconds,
+        output_parts=run_result.output_parts,
+        output_bytes=_safe_parts_bytes(run_result.output_parts),
+    )
+    artifact_missing = _missing_ratios_for_parts(run_result.output_parts, feature_columns)
+    return FeatureExtractionArtifact(
+        normalized_artifact_id=artifact.artifact_id,
+        feature_group=feature_group,
+        feature_path=str(output_dir),
+        parts=run_result.output_parts,
+        rows_read=run_result.rows_read,
+        rows_written=run_result.rows_written,
+        columns_created=list(feature_columns),
+        missing_ratios=artifact_missing,
+        runtime_seconds=run_result.elapsed_seconds,
+        peak_rss_gb=run_result.peak_rss_gb,
+        warnings=_artifact_warnings(
+            schema_names=schema.names,
+            selected_columns=required_columns,
+            feature_group=feature_group,
+        ),
+        runtime_stats=_run_stats(
+            run_result=run_result,
+            configured_batch_rows=resolved_batch_rows,
+            settings=settings,
+            guard=guard,
+        ),
+        feature_schema_version=schema_version,
+        source_artifact_ids=[artifact.artifact_id],
+        column_count=len(feature_columns),
+    )
 
 
 def _select_required_columns(branch: str, schema: pa.Schema, feature_group: str) -> list[str]:

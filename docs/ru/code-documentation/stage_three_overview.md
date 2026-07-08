@@ -29,6 +29,7 @@ Stage Three не обучает RF/XGBoost/CNN/LSTM, не подбирает thr
 | `align-labels` | Фиксирует label policy без помещения labels в X. |
 | `build-sequences` | Создает sequence/window artifacts для Stage Four DL branches. |
 | `build-model-ready` | Собирает X/y/metadata/traceability, split index и preprocessing metadata. |
+| `rebalance-dns-supervised` | Строит воспроизводимый DNS supervised 70/30 model-ready split для baseline experiment. |
 | `run-quality-checks` | Проверяет feature/model-ready/preprocessing artifacts. |
 | `run-leakage-checks` | Проверяет forbidden X columns, TEST leakage, fit role и traceability. |
 | `trace-artifact` | Восстанавливает lineage model-ready artifact до raw source. |
@@ -48,7 +49,7 @@ Stage Three не обучает RF/XGBoost/CNN/LSTM, не подбирает thr
 | `scripts/stage_three/preprocessing/` | Type casting, missing values, categorical encoding, scaling profiles, class balance. |
 | `scripts/stage_three/model_ready/` | X/y separation, split index, sequence builder, model-ready registry/builder. |
 | `scripts/stage_three/quality/` | Feature quality, preprocessing quality, model-ready quality, leakage, traceability. |
-| `scripts/stage_three/reports/` | Report path utilities and final Task20 report generation. |
+| `scripts/stage_three/reports/` | Report path utilities, console output helpers and final Task20 report generation. |
 
 ## Artifact lifecycle
 
@@ -57,9 +58,10 @@ Stage Three не обучает RF/XGBoost/CNN/LSTM, не подбирает thr
 3. `extract-features` creates Parquet feature artifacts and registers `feature_artifacts`.
 4. `align-labels` and model-ready separation keep labels outside X.
 5. `build-model-ready` writes `X`, `y`, `metadata`, `traceability`, `split_index`, `preprocessing_metadata`.
-6. `run-quality-checks` registers `data_quality_reports`.
-7. `run-leakage-checks` blocks unsafe artifacts with `BLOCKED_BY_LEAKAGE` or `BLOCKED_BY_QUALITY`.
-8. `final-report` summarizes readiness for Stage Four.
+6. `rebalance-dns-supervised` может создать отдельный DNS supervised baseline experiment без физического удаления raw-файлов.
+7. `run-quality-checks` registers `data_quality_reports`.
+8. `run-leakage-checks` blocks unsafe artifacts with `BLOCKED_BY_LEAKAGE` or `BLOCKED_BY_QUALITY`.
+9. `final-report` summarizes readiness for Stage Four.
 
 ## Readiness policy
 

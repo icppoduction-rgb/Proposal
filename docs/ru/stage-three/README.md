@@ -28,10 +28,11 @@ normalized -> features -> model-ready
 2. Собрать и проверить feature catalog.
 3. Извлечь DNS feature groups: `dns_lexical`, `dns_entropy`, `dns_temporal`.
 4. Собрать `tree_unscaled` model-ready artifacts для `label_binary`.
-5. Запустить quality checks.
-6. Запустить leakage/traceability checks.
-7. Сгенерировать final report.
-8. Переходить к Stage Four только если final report показывает `READY_FOR_STAGE_FOUR`.
+5. При необходимости построить воспроизводимый DNS supervised 70/30 split через `rebalance-dns-supervised`.
+6. Запустить quality checks.
+7. Запустить leakage/traceability checks.
+8. Сгенерировать final report.
+9. Переходить к Stage Four только если final report показывает `READY_FOR_STAGE_FOUR`.
 
 ## Production path
 

@@ -27,7 +27,7 @@ python manage.py stage-three build-feature-catalog [--feature-group <name>]
 ## probe-runtime-backend
 
 ```powershell
-python manage.py stage-three probe-runtime-backend --backend <auto|cpu|gpu> [--profile balanced] [--skip-probe]
+python manage.py stage-three probe-runtime-backend --backend <auto|cpu|gpu> [--profile safe|balanced|fast|aggressive] [--batch-rows <rows>] [--reserved-ram-gb <gb>] [--soft-ram-limit-gb <gb>] [--hard-ram-limit-gb <gb>] [--skip-probe]
 ```
 
 Резолвит runtime backend и memory guard settings.
@@ -35,7 +35,7 @@ python manage.py stage-three probe-runtime-backend --backend <auto|cpu|gpu> [--p
 ## extract-features
 
 ```powershell
-python manage.py stage-three extract-features --branch <branch> --role <role> --feature-group <name> [--experiment-id <id>] [--resume]
+python manage.py stage-three extract-features --branch <branch> --role <role> --feature-group <name> [--experiment-id <id>] [--resume] [--profile safe|balanced|fast|aggressive] [--batch-rows <rows>] [--reserved-ram-gb <gb>] [--soft-ram-limit-gb <gb>] [--hard-ram-limit-gb <gb>] [--workers <count>]
 ```
 
 Читает normalized Parquet, создает feature artifacts и регистрирует их в catalog.
@@ -69,6 +69,14 @@ python manage.py stage-three build-model-ready --experiment-id <id> --branch <br
 ```
 
 Собирает X/y/metadata/traceability, split index и preprocessing metadata.
+
+## rebalance-dns-supervised
+
+```powershell
+python manage.py stage-three rebalance-dns-supervised [--experiment-id dns_rebalanced_70_30_v1] [--feature-group dns_lexical] [--target label_binary] [--preprocessing-profile tree_unscaled] [--overwrite] [--apply] [--apply-catalog] [--deactivate-existing-experiment <id>] [--dry-run]
+```
+
+Готовит воспроизводимый DNS supervised 70/30 model-ready split. Без `--apply` команда работает как audit/dry-run. `--apply-catalog` используется только вместе с осознанным применением результата к catalog metadata.
 
 ## run-quality-checks
 

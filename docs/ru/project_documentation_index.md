@@ -6,6 +6,7 @@
 
 | Документ | Назначение |
 | --- | --- |
+| [repository_analysis.md](repository_analysis.md) | Фактический анализ текущего репозитория: entrypoints, CLI routing, Stage One/Two/Three, storage, тесты и gaps. |
 | [project_overview_and_research_context.md](project_overview_and_research_context.md) | Research context, proposal-level архитектура, вопросы, цели, methodology, scope, план и ограничения. |
 | [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md) | Единая стратегия DNS и Host датасетов с явным разделением `TRAIN` / `VALIDATION` / `TEST`. |
 | [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md) | Карта feature extraction, каталог групп признаков, schema requirements, leakage exclusions и приоритеты реализации. |
@@ -33,11 +34,11 @@
 
 ## Правила чтения
 
-1. Для research proposal читать сначала [project_overview_and_research_context.md](project_overview_and_research_context.md).
-2. Для выбора датасетов читать [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md).
-3. Для реализации feature engineering читать [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md).
-4. Для запуска Stage Three читать [stage-three/usage_guide.md](stage-three/usage_guide.md) и [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md).
-5. Для сверки с текущим кодом читать [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md).
+1. Для сверки с текущим кодом читать [repository_analysis.md](repository_analysis.md), затем [repository_state_qa_and_gaps.md](repository_state_qa_and_gaps.md).
+2. Для research proposal читать [project_overview_and_research_context.md](project_overview_and_research_context.md).
+3. Для выбора датасетов читать [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md).
+4. Для реализации feature engineering читать [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md).
+5. Для запуска Stage Three читать [stage-three/usage_guide.md](stage-three/usage_guide.md) и [stage-three/stage_three_commands.md](stage-three/stage_three_commands.md).
 
 ## Архитектурные инварианты
 

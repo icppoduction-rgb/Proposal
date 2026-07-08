@@ -4,6 +4,8 @@
 
 ## Scope анализа
 
+Последняя repo-wide сверка: 2026-07-08. Подробный текущий срез entrypoints, CLI, Stage One/Two/Three, storage и тестов вынесен в [repository_analysis.md](repository_analysis.md).
+
 Исходный QA документ фиксировал просмотр репозитория (`scripts`, `docs`, `report`, `planning`, `temp_data`, `logs`, конфиги). Ключевой вывод сохраняется:
 
 > В текущем репозитории подтверждены этапы подготовки датасетов, Stage Two normalization и Stage Three feature/model-ready preparation. Обучение и оценка моделей остаются Stage Four.
@@ -37,12 +39,13 @@
 
 ## Текущие замечания по реализации
 
-Сверено с кодом 2026-07-04:
+Сверено с кодом 2026-07-08:
 
 - Stage Two routing находится в `scripts/stage_two/cli.py`; `config.manage_commands` является старым печатным списком команд и не полон для текущего Stage Two.
+- `python manage.py stage-two --help` в текущем состоянии попадает в fallback и не должен использоваться как source of truth по командам.
 - `normalize-format` и `benchmark-normalization` перед запуском применяют resource profiles и format-specific runtime policy. `normalize-all` получает общие runtime options, но не применяет per-format policy на уровне CLI route.
 - Реализованные quality gates: parser reports, post-run validation для `normalize-format`, DuckDB checks, leakage checks и traceability lookup. Это проверки вокруг normalized/features/model-ready artifacts, а не полный ML experiment pipeline.
-- Репозиторий теперь подтверждает Stage Three CLI для feature extraction, model-ready build, checks и final report. RF/XGBoost/CNN/LSTM training, SHAP analysis и evaluation reports остаются не реализованными в Stage Four.
+- Репозиторий подтверждает Stage Three CLI для feature extraction, DNS supervised rebalance, model-ready build, checks и final report. RF/XGBoost/CNN/LSTM training, SHAP analysis и evaluation reports остаются не реализованными в Stage Four.
 
 ## QA по разделам proposal 3.3-3.8
 
@@ -136,6 +139,7 @@ Proposal говорит о **late fusion** через агрегацию вер�
 ## Связанные документы
 
 - [project_overview_and_research_context.md](project_overview_and_research_context.md)
+- [repository_analysis.md](repository_analysis.md)
 - [dataset_strategy_dns_host.md](dataset_strategy_dns_host.md)
 - [feature_extraction_and_catalogue.md](feature_extraction_and_catalogue.md)
 - [analysis-dataset/README.md](analysis-dataset/README.md)
