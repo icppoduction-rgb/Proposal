@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from config import PARQUET_FEATURES_RELATIVE
 from scripts.db.models import FeatureArtifact
 from scripts.db.repositories import ArtifactRepository
 from scripts.stage_three.extraction.artifact_writer import (
@@ -58,6 +59,9 @@ class FeatureArtifactRegistryService:
         feature_group: str,
         schema_version: str = FEATURE_ARTIFACT_SCHEMA_VERSION,
         resume: bool,
+        run_id: str | int | None = None,
+        columns_created: list[str] | tuple[str, ...] | None = None,
+        recover_disk_outputs: bool = False,
     ) -> tuple[list[NormalizedArtifactInput], list[SkippedFeatureArtifact]]:
         """Return artifacts still requiring extraction and already-successful skips."""
         if not resume:
@@ -84,7 +88,32 @@ class FeatureArtifactRegistryService:
                     reason="matching SUCCESS feature artifact already registered",
                 )
             )
-        return pending, skipped
+            continue
+
+        if not recover_disk_outputs:
+            return pending, skipped
+        if run_id is None or not str(run_id).strip():
+            return pending, skipped
+        if not columns_created:
+            return pending, skipped
+
+        recovered_pending: list[NormalizedArtifactInput] = []
+        for artifact in pending:
+            recovered = self._recover_existing_output(
+                repository,
+                artifact,
+                branch=branch,
+                role=role,
+                feature_group=feature_group,
+                schema_version=schema_version,
+                run_id=run_id,
+                columns_created=list(columns_created),
+            )
+            if recovered is None:
+                recovered_pending.append(artifact)
+                continue
+            skipped.append(recovered)
+        return recovered_pending, skipped
 
     def register_result(
         self,
@@ -198,6 +227,78 @@ class FeatureArtifactRegistryService:
             metadata_json=metadata_json,
         )
 
+    def _recover_existing_output(
+        self,
+        repository: ArtifactRepository,
+        artifact: NormalizedArtifactInput,
+        *,
+        branch: str,
+        role: str,
+        feature_group: str,
+        schema_version: str,
+        run_id: str | int,
+        columns_created: list[str],
+    ) -> SkippedFeatureArtifact | None:
+        """Register a complete on-disk output left by a failed post-write run."""
+        if self.storage_root is None or artifact.row_count is None:
+            return None
+
+        output_dir = (
+            self.storage_root
+            / PARQUET_FEATURES_RELATIVE
+            / feature_group
+            / branch
+            / role
+            / f"schema={schema_version}"
+        )
+        parts = _existing_part_paths(
+            output_dir=output_dir,
+            run_id=run_id,
+            normalized_artifact_id=artifact.artifact_id,
+        )
+        if not parts:
+            return None
+
+        part_rows = 0
+        for part in parts:
+            metadata = parquet_part_metadata(part, storage_root=self.storage_root)
+            part_rows += int(metadata["row_count"])
+        if part_rows != artifact.row_count:
+            return None
+
+        output = FeatureExtractionArtifact(
+            normalized_artifact_id=artifact.artifact_id,
+            feature_group=feature_group,
+            feature_path=str(output_dir),
+            parts=[str(part) for part in parts],
+            rows_read=part_rows,
+            rows_written=part_rows,
+            columns_created=columns_created,
+            missing_ratios={},
+            runtime_seconds=0.0,
+            peak_rss_gb=None,
+            warnings=["recovered existing feature parquet output during resume"],
+            runtime_stats={"resume_recovered_from_disk": True},
+            feature_schema_version=schema_version,
+            source_artifact_ids=[artifact.artifact_id],
+            column_count=len(columns_created),
+        )
+        registered = self.register_output(
+            repository,
+            output,
+            source=artifact,
+            branch=branch,
+            role=role,
+            feature_group=feature_group,
+            schema_version=schema_version,
+        )
+        return SkippedFeatureArtifact(
+            normalized_artifact_id=artifact.artifact_id,
+            catalog_artifact_id=int(registered.id),
+            feature_path=_catalog_feature_path(str(output_dir), self.storage_root),
+            reason="existing complete feature parquet output registered during resume",
+        )
+
 
 def _catalog_feature_path(path: str, storage_root: Path | None) -> str:
     resolved = Path(path).expanduser()
@@ -207,3 +308,21 @@ def _catalog_feature_path(path: str, storage_root: Path | None) -> str:
         return resolved.relative_to(storage_root).as_posix()
     except ValueError:
         return resolved.as_posix()
+
+
+def _existing_part_paths(
+    *,
+    output_dir: Path,
+    run_id: str | int,
+    normalized_artifact_id: int,
+) -> list[Path]:
+    safe_run_id = str(run_id).replace("\\", "-").replace("/", "-").replace(":", "-")
+    pattern = f"part-{safe_run_id}-artifact-{normalized_artifact_id}-*.parquet"
+    parts = sorted(path for path in output_dir.glob(pattern) if path.is_file())
+    expected_names = [
+        output_dir / f"part-{safe_run_id}-artifact-{normalized_artifact_id}-{index:05d}.parquet"
+        for index in range(len(parts))
+    ]
+    if parts != expected_names:
+        return []
+    return parts

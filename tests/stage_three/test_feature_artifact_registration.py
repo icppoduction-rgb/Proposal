@@ -156,6 +156,84 @@ class FeatureArtifactRegistrationTest(unittest.TestCase):
         self.assertEqual(skipped[0].catalog_artifact_id, 7001)
         self.assertEqual(skipped[0].normalized_artifact_id, 101)
 
+    def test_resume_registers_complete_existing_disk_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output_dir = root / "parquet" / "features" / "dns_lexical" / "dns" / "TRAIN" / "schema=v1"
+            output_dir.mkdir(parents=True)
+            part_path = output_dir / "part-exp-resume-artifact-101-00000.parquet"
+            pq.write_table(_feature_table(), part_path, compression="zstd")
+            artifacts = [
+                NormalizedArtifactInput(
+                    artifact_id=101,
+                    dataset_id=202,
+                    role="TRAIN",
+                    branch="dns",
+                    normalized_path="a.parquet",
+                    row_count=2,
+                ),
+            ]
+            repository = FakeArtifactRepository()
+
+            pending, skipped = FeatureArtifactRegistryService(storage_root=root).filter_resume_inputs(
+                repository,
+                artifacts,
+                branch="dns",
+                role="TRAIN",
+                feature_group="dns_lexical",
+                schema_version="v1",
+                resume=True,
+                run_id="exp-resume",
+                columns_created=["dns_query_length", "dns_label_length"],
+                recover_disk_outputs=True,
+            )
+
+            self.assertEqual(pending, [])
+            self.assertEqual(len(skipped), 1)
+            self.assertEqual(skipped[0].normalized_artifact_id, 101)
+            self.assertEqual(skipped[0].reason, "existing complete feature parquet output registered during resume")
+            self.assertEqual(len(repository.registered_values), 1)
+            values = repository.registered_values[0]
+            self.assertEqual(values["normalized_artifact_id"], 101)
+            self.assertEqual(values["row_count"], 2)
+            self.assertEqual(values["feature_path"], "parquet/features/dns_lexical/dns/TRAIN/schema=v1")
+
+    def test_resume_does_not_register_incomplete_existing_disk_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output_dir = root / "parquet" / "features" / "dns_lexical" / "dns" / "TRAIN" / "schema=v1"
+            output_dir.mkdir(parents=True)
+            part_path = output_dir / "part-exp-resume-artifact-101-00000.parquet"
+            pq.write_table(_feature_table(), part_path, compression="zstd")
+            artifacts = [
+                NormalizedArtifactInput(
+                    artifact_id=101,
+                    dataset_id=202,
+                    role="TRAIN",
+                    branch="dns",
+                    normalized_path="a.parquet",
+                    row_count=3,
+                ),
+            ]
+            repository = FakeArtifactRepository()
+
+            pending, skipped = FeatureArtifactRegistryService(storage_root=root).filter_resume_inputs(
+                repository,
+                artifacts,
+                branch="dns",
+                role="TRAIN",
+                feature_group="dns_lexical",
+                schema_version="v1",
+                resume=True,
+                run_id="exp-resume",
+                columns_created=["dns_query_length", "dns_label_length"],
+                recover_disk_outputs=True,
+            )
+
+            self.assertEqual([artifact.artifact_id for artifact in pending], [101])
+            self.assertEqual(skipped, [])
+            self.assertEqual(repository.registered_values, [])
+
 
 class FakeArtifactRepository:
     def __init__(self, existing: dict[int, SimpleNamespace] | None = None) -> None:

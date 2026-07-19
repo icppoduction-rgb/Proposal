@@ -50,6 +50,9 @@ from scripts.stage_three.extraction.runner import (
     run_host_network_feature_extraction,
     run_dns_feature_extraction,
 )
+from scripts.stage_three.extraction.dns_extractors import dns_feature_columns
+from scripts.stage_three.extraction.host_extractors import host_feature_columns
+from scripts.stage_three.extraction.network_extractors import network_feature_columns
 from scripts.stage_three.labels.report import save_label_alignment_reports
 from scripts.stage_three.labels.runner import run_label_alignment
 from scripts.stage_three.model_ready.builder import build_model_ready_artifacts
@@ -728,6 +731,9 @@ def _run_extract_features(request: ExtractFeaturesRequest) -> None:
                 feature_group=request.feature_group,
                 schema_version=FEATURE_ARTIFACT_SCHEMA_VERSION,
                 resume=request.resume,
+                run_id=request.experiment_id,
+                columns_created=_extract_feature_columns(request),
+                recover_disk_outputs=True,
             )
             reporter.progress_callback(
                 {
@@ -855,6 +861,17 @@ def _override_extract_workers(
         runtime_settings,
         resource_profile=replace(profile, default_workers=effective_workers),
     )
+
+
+def _extract_feature_columns(request: ExtractFeaturesRequest) -> list[str]:
+    """Return output feature columns for resume recovery metadata."""
+    if request.branch == "dns":
+        return list(dns_feature_columns(request.feature_group))
+    if request.branch == "host":
+        return list(host_feature_columns(request.feature_group))
+    if request.branch == "network":
+        return list(network_feature_columns(request.feature_group))
+    return []
 
 
 def _run_align_labels(request: AlignLabelsRequest) -> None:
